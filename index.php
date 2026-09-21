@@ -10,7 +10,7 @@ $user = current_user();
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#0a090b">
     <title><?= htmlspecialchars(APP_NAME) ?></title>
-    <link rel="stylesheet" href="assets/app.css?v=20260921-header-nav">
+    <link rel="stylesheet" href="assets/app.css?v=20260921-price-popover">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -50,7 +50,7 @@ $user = current_user();
     <div class="workspace">
         <main class="content">
             <section id="workspacePanel" class="panel active">
-                <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><button id="editButton" class="button secondary edit-only" hidden>Edit prices</button><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
+                <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><div class="price-editor-wrap"><button id="editButton" class="button secondary edit-only" aria-expanded="false" aria-controls="adjustmentBar" hidden>Edit prices</button><section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden><div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div><div class="adjustment-control"><label for="percentage">Percentage</label><div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div><button id="previewButton" class="button primary">Preview</button></div></section></div><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
                 <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
 
                 <section id="emptyState" class="empty-state">
@@ -64,11 +64,6 @@ $user = current_user();
                         <article><i aria-hidden="true">⚙</i><div><span>Automatic price fields</span><strong id="priceColumnCount">0</strong></div></article>
                         <article><i aria-hidden="true">▥</i><div><span>Current adjustment</span><strong id="currentAdjustment">0%</strong></div></article>
                     </div>
-
-                    <section id="adjustmentBar" class="adjustment-bar edit-only" aria-labelledby="adjustmentTitle" hidden>
-                        <div class="edit-summary"><strong id="adjustmentTitle">Bulk price adjustment</strong><span>Positive increases, negative decreases.</span></div>
-                        <div class="adjustment-control"><label for="percentage">Percentage</label><div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div><button id="previewButton" class="button primary">Preview change</button></div>
-                    </section>
 
                     <div class="data-panel full-table">
                     <div class="table-tools">
@@ -114,6 +109,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260921-pdf-sections"></script>
+<script src="assets/app.js?v=20260921-price-popover"></script>
 </body>
 </html>

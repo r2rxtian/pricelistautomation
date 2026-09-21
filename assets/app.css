@@ -146,3 +146,19 @@ body{background:radial-gradient(circle at 72% 0%,#151b24 0,#0c0f14 34%,#090a0d 7
 @media(max-width:900px){.topbar{grid-template-columns:auto 1fr auto;gap:10px}.top-nav{justify-self:center}.content{width:100%}}
 @media(max-width:720px){.topbar{padding-inline:10px}.brand b,#roleBadge{display:none}.top-nav{gap:3px}.top-nav .nav-item{min-width:auto;height:40px;min-height:40px;padding:0 10px;font-size:.78rem}.top-nav .nav-item span{font-size:.9rem}.user-menu{gap:2px}.text-button{padding:6px;font-size:.76rem}}
 @media(max-width:430px){.top-nav .nav-item span{display:none}.top-nav .nav-item{padding-inline:9px}.brand span{width:38px;height:38px;font-size:.72rem}}
+
+/* Compact price editor popover */
+.price-editor-wrap{position:relative;flex:0 0 auto}
+.adjustment-bar.price-popover{position:absolute;top:calc(100% + 9px);right:0;z-index:12;width:min(350px,calc(100vw - 40px));min-height:0;margin:0;padding:14px;display:grid;gap:12px;align-items:stretch;border:1px solid #d84591;border-radius:9px;background:rgba(19,22,29,.98);box-shadow:0 20px 55px rgba(2,5,10,.48),inset 0 1px rgba(255,255,255,.045);backdrop-filter:blur(18px)}
+.adjustment-bar.price-popover::after{content:"";position:absolute;top:-6px;right:28px;width:10px;height:10px;border-top:1px solid #d84591;border-left:1px solid #d84591;background:#13161d;transform:rotate(45deg)}
+.price-popover .edit-summary{display:grid;gap:2px}
+.price-popover .edit-summary::before{display:none}
+.price-popover .edit-summary strong{font-size:.9rem}
+.price-popover .edit-summary span{font-size:.72rem;line-height:1.35;color:#aaaebb}
+.price-popover .adjustment-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}
+.price-popover .adjustment-control label{grid-column:1/-1;font-size:.68rem;color:#c6ccd5}
+.price-popover .percentage-input{width:100%;height:38px}
+.price-popover .percentage-input input{width:100%;height:36px;min-width:0}
+.price-popover .adjustment-control .button{min-height:38px;height:38px;padding:6px 13px}
+@media(min-width:901px){.adjustment-bar.price-popover{min-height:0;padding:14px;margin:0}.price-popover .edit-summary strong{font-size:.9rem}.price-popover .edit-summary span{font-size:.72rem}.price-popover .adjustment-control label{font-size:.68rem}.price-popover .percentage-input input{width:100%;height:36px}.price-popover .adjustment-control .button{min-height:38px;height:38px;padding:6px 13px}}
+@media(max-width:560px){.price-editor-wrap{width:100%}.price-editor-wrap>#editButton{width:100%}.adjustment-bar.price-popover{right:auto;left:0;width:min(350px,calc(100vw - 32px))}.adjustment-bar.price-popover::after{right:auto;left:28px}}

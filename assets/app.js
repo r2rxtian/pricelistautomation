@@ -40,6 +40,15 @@
     dom.loginView.hidden = true; dom.appView.hidden = false;
     dom.userName.textContent = state.user.name; dom.roleBadge.textContent = state.user.role; applyPermissions();
   }
+  function setPriceEditor(open) {
+    const button = $('#editButton');
+    const popover = $('#adjustmentBar');
+    if (!button || !popover) return;
+    popover.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? 'Close' : 'Edit prices';
+    if (open) requestAnimationFrame(() => dom.percentage.focus());
+  }
   async function loadState() {
     const data = await api('state');
     Object.assign(state, { user: data.user, csrf: data.csrf, canEdit: data.canEdit, active: data.active, versions: data.versions || [] });
@@ -48,8 +57,8 @@
   }
   function loadActive(active) {
     state.active = active;
-    if (!active) { dom.emptyState.hidden = false; dom.dataView.hidden = true; dom.listTitle.textContent = 'Start with a workbook'; dom.listMeta.textContent = 'Upload an .xlsx or .xls file to map its products and prices.'; dom.savedMeta.textContent = ''; dom.activeBadge.hidden = true; $('#editButton').hidden = true; $('#saveButton').hidden = true; return; }
-    state.headers = active.headers || []; state.rows = active.rows || []; state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || ''))); state.adjustment = Number(active.adjustment || 0); state.page = 1; $('#editButton').hidden = !state.canEdit; $('#adjustmentBar').hidden = true;
+    if (!active) { setPriceEditor(false); dom.emptyState.hidden = false; dom.dataView.hidden = true; dom.listTitle.textContent = 'Start with a workbook'; dom.listMeta.textContent = 'Upload an .xlsx or .xls file to map its products and prices.'; dom.savedMeta.textContent = ''; dom.activeBadge.hidden = true; $('#editButton').hidden = true; $('#saveButton').hidden = true; return; }
+    state.headers = active.headers || []; state.rows = active.rows || []; state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || ''))); state.adjustment = Number(active.adjustment || 0); state.page = 1; $('#editButton').hidden = !state.canEdit; setPriceEditor(false);
     dom.percentage.value = state.adjustment; dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Export price list'; dom.listMeta.textContent = active.name; dom.savedMeta.textContent = active.savedAt ? `Last saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Imported workbook, not saved yet'; dom.activeBadge.hidden = false; $('#saveButton').hidden = !state.canEdit;
     const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
     dom.category.innerHTML = '<option value="">All categories</option>' + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
@@ -346,7 +355,7 @@
   dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
   $('#logoutButton').addEventListener('click', async () => { try { await api('logout', { method: 'POST', body: '{}' }); location.reload(); } catch (error) { toast(error.message); } });
   $('#uploadButton').addEventListener('click', openFilePicker); $('#emptyUploadButton').addEventListener('click', openFilePicker);
-  $('#editButton').addEventListener('click', () => { const bar = $('#adjustmentBar'); bar.hidden = !bar.hidden; $('#editButton').textContent = bar.hidden ? 'Edit prices' : 'Close editor'; if (!bar.hidden) dom.percentage.focus(); });
+  $('#editButton').addEventListener('click', () => setPriceEditor($('#adjustmentBar').hidden));
   dom.fileInput.addEventListener('change', async () => { const file = dom.fileInput.files[0]; if (!file) return; try { await parseWorkbook(file); } catch (error) { toast(error.message); } });
   $('#confirmImport').addEventListener('click', confirmImport);
   $('#previewButton').addEventListener('click', () => { const value = Number(dom.percentage.value); if (!Number.isFinite(value) || value < -100 || value > 10000) return toast('Enter a percentage from -100 to 10,000.'); state.adjustment = value; state.page = 1; updateMetrics(); renderTable(); toast('Adjustment preview updated.'); });
@@ -356,7 +365,9 @@
   $('#previousPage').addEventListener('click', () => { state.page--; renderTable(); }); $('#nextPage').addEventListener('click', () => { state.page++; renderTable(); });
   dom.pageNumbers.addEventListener('click', event => { const button = event.target.closest('[data-page]'); if (!button) return; state.page = Number(button.dataset.page); renderTable(); });
   $('#saveButton').addEventListener('click', () => save().catch(error => toast(error.message))); $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
-  $$('.nav-item').forEach(button => button.addEventListener('click', () => { $$('.nav-item').forEach(item => item.classList.toggle('active', item === button)); $$('.panel').forEach(panel => { panel.hidden = panel.id !== button.dataset.panel; panel.classList.toggle('active', panel.id === button.dataset.panel); }); }));
+  $$('.nav-item').forEach(button => button.addEventListener('click', () => { setPriceEditor(false); $$('.nav-item').forEach(item => item.classList.toggle('active', item === button)); $$('.panel').forEach(panel => { panel.hidden = panel.id !== button.dataset.panel; panel.classList.toggle('active', panel.id === button.dataset.panel); }); }));
+  document.addEventListener('click', event => { if (!$('#adjustmentBar').hidden && !event.target.closest('.price-editor-wrap')) setPriceEditor(false); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('#adjustmentBar').hidden) { setPriceEditor(false); $('#editButton').focus(); } });
   dom.historyList.addEventListener('click', async event => { const openButton = event.target.closest('.open-version'); if (openButton) { try { const data = await api('open', { method: 'POST', body: JSON.stringify({ id: openButton.dataset.id }) }); loadActive(data.active); $$('.nav-item')[0].click(); toast('Saved version opened without changing history.'); } catch (error) { toast(error.message); } return; } const deleteButton = event.target.closest('.delete-version'); if (!deleteButton) return; state.pendingDelete = deleteButton.dataset.id; dom.deleteVersionName.textContent = deleteButton.dataset.name; dom.deleteDialog.showModal(); });
   $('#confirmDelete').addEventListener('click', async event => { event.preventDefault(); if (!state.pendingDelete) return; const button = event.currentTarget; button.disabled = true; try { const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: state.pendingDelete }) }); state.pendingDelete = null; dom.deleteDialog.close(); await loadState(); toast(data.message); } catch (error) { toast(error.message); } finally { button.disabled = false; } });
 
