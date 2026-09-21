@@ -1,0 +1,4 @@
+/storage/app.json
+/storage/*.tmp
+/storage/sessions/
+/config.local.php
