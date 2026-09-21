@@ -390,6 +390,25 @@
     }
   });
   $('#uploadButton').addEventListener('click', openFilePicker); $('#emptyUploadButton').addEventListener('click', openFilePicker);
+  dom.emptyState.addEventListener('dragover', event => {
+    event.preventDefault();
+    dom.emptyState.classList.add('dragover');
+  });
+  dom.emptyState.addEventListener('dragleave', () => {
+    dom.emptyState.classList.remove('dragover');
+  });
+  dom.emptyState.addEventListener('drop', async event => {
+    event.preventDefault();
+    dom.emptyState.classList.remove('dragover');
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    if (!/\.(xlsx|xls)$/i.test(file.name)) return toast('Please drop an Excel file (.xlsx or .xls).');
+    try {
+      await parseWorkbook(file);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
   $('#editButton').addEventListener('click', () => setPriceEditor($('#adjustmentBar').hidden));
   dom.fileInput.addEventListener('change', async () => { const file = dom.fileInput.files[0]; if (!file) return; try { await parseWorkbook(file); } catch (error) { toast(error.message); } });
   $('#confirmImport').addEventListener('click', confirmImport);
@@ -429,7 +448,13 @@
   $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
   $$('.nav-item').forEach(button => button.addEventListener('click', () => { setPriceEditor(false); $$('.nav-item').forEach(item => item.classList.toggle('active', item === button)); $$('.panel').forEach(panel => { panel.hidden = panel.id !== button.dataset.panel; panel.classList.toggle('active', panel.id === button.dataset.panel); }); }));
   document.addEventListener('click', event => { if (!$('#adjustmentBar').hidden && !event.target.closest('.price-editor-wrap')) setPriceEditor(false); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('#adjustmentBar').hidden) { setPriceEditor(false); $('#editButton').focus(); } });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('#adjustmentBar').hidden) { setPriceEditor(false); $('#editButton').focus(); }
+    if (event.key === '/' && document.activeElement !== dom.search && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      event.preventDefault();
+      dom.search.focus();
+    }
+  });
   dom.historyList.addEventListener('click', async event => { const openButton = event.target.closest('.open-version'); if (openButton) { try { const data = await api('open', { method: 'POST', body: JSON.stringify({ id: openButton.dataset.id }) }); loadActive(data.active); $$('.nav-item')[0].click(); toast('Saved version opened without changing history.'); } catch (error) { toast(error.message); } return; } const deleteButton = event.target.closest('.delete-version'); if (!deleteButton) return; state.pendingDelete = deleteButton.dataset.id; dom.deleteVersionName.textContent = deleteButton.dataset.name; dom.deleteDialog.showModal(); });
   $('#confirmDelete').addEventListener('click', async event => { event.preventDefault(); if (!state.pendingDelete) return; const button = event.currentTarget; button.disabled = true; try { const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: state.pendingDelete }) }); state.pendingDelete = null; dom.deleteDialog.close(); await loadState(); toast(data.message); } catch (error) { toast(error.message); } finally { button.disabled = false; } });
 

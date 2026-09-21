@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260921-login-anim">
+    <link rel="stylesheet" href="assets/app.css?v=20260921-uiverse-v1">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -42,7 +42,7 @@ $user = current_user();
 </main>
 
 <div id="appView" class="app-shell" <?= !$user ? 'hidden' : '' ?>>
-    <div id="appLoading" class="app-loading" role="status"><span></span><strong>Loading price workspace</strong></div>
+    <div id="appLoading" class="app-loading" role="status"><div class="loader-orbit"><span class="orbit-ring ring-1"></span><span class="orbit-ring ring-2"></span><span class="orbit-core"></span></div><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <a class="brand" href="#" aria-label="LRN Price List home"><span>LRN</span><b>Price List Automation</b></a>
         <nav class="top-nav" aria-label="Primary">
@@ -55,11 +55,11 @@ $user = current_user();
     <div class="workspace">
         <main class="content">
             <section id="workspacePanel" class="panel active">
-                <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><div class="price-editor-wrap"><button id="editButton" class="button secondary edit-only" aria-expanded="false" aria-controls="adjustmentBar" hidden>Edit prices</button><section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden><div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div><div class="adjustment-control"><label for="percentage">Percentage</label><div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div><button id="previewButton" class="button primary">Preview</button></div></section></div><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
+                <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><div class="price-editor-wrap"><button id="editButton" class="button secondary edit-only" aria-expanded="false" aria-controls="adjustmentBar" hidden>Edit prices</button><section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden><div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div><div class="adjustment-control"><label for="percentage">Percentage</label><div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div><button id="previewButton" class="button primary">Preview</button></div></section></div><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
                 <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
 
                 <section id="emptyState" class="empty-state">
-                    <div class="upload-icon">↗</div><h2>Import your current price list</h2><p>The workbook stays intact until you confirm its header row and price columns.</p><button id="emptyUploadButton" class="button primary edit-only">Choose Excel file</button>
+                    <div class="upload-icon-wrapper"><div class="upload-icon-glow"></div><div class="upload-icon">↗</div></div><h2>Import your current price list</h2><p>Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.</p><button id="emptyUploadButton" class="button primary edit-only">Choose Excel file</button>
                 </section>
 
                 <section id="dataView" hidden>
@@ -73,7 +73,7 @@ $user = current_user();
                     <div class="data-panel full-table">
                     <div class="table-tools">
                         <div class="filter-group">
-                            <label class="search"><span>Search</span><input id="searchInput" type="search" placeholder="Product, code, or price"></label>
+                            <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search products, codes, prices..."><kbd class="search-kbd">/</kbd></label>
                             <label class="select-control"><span>Category</span><select id="categorySelect"><option value="">All categories</option></select></label>
                         </div>
                         <div class="actions"><button id="excelButton" class="button secondary">Export Excel</button><button id="pdfButton" class="button secondary">Export PDF</button></div>
@@ -131,6 +131,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260921-logout-confirm"></script>
+<script src="assets/app.js?v=20260921-uiverse-v1"></script>
 </body>
 </html>
