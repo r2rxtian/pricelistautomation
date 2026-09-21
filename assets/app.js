@@ -5,7 +5,7 @@
   const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, search: '', category: '', page: 1, pageSize: 6, pending: null, pendingDelete: null, versions: [] };
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), pageSize: $('#pageSizeSelect'), table: $('#priceTable'), noResults: $('#noResults'), range: $('#rangeLabel'), pageNumbers: $('#pageNumbers'), importDialog: $('#importDialog'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), importFileName: $('#importFileName'), historyList: $('#historyList'), toast: $('#toast'), fileInput: $('#fileInput')
+    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), pageSize: $('#pageSizeSelect'), table: $('#priceTable'), noResults: $('#noResults'), range: $('#rangeLabel'), pageNumbers: $('#pageNumbers'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyList: $('#historyList'), toast: $('#toast'), fileInput: $('#fileInput')
   };
 
   async function api(action, options = {}) {
@@ -59,7 +59,7 @@
     state.active = active;
     if (!active) { setPriceEditor(false); dom.emptyState.hidden = false; dom.dataView.hidden = true; dom.listTitle.textContent = 'Start with a workbook'; dom.listMeta.textContent = 'Upload an .xlsx or .xls file to map its products and prices.'; dom.savedMeta.textContent = ''; dom.activeBadge.hidden = true; $('#editButton').hidden = true; $('#saveButton').hidden = true; return; }
     state.headers = active.headers || []; state.rows = active.rows || []; state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || ''))); state.adjustment = Number(active.adjustment || 0); state.page = 1; $('#editButton').hidden = !state.canEdit; setPriceEditor(false);
-    dom.percentage.value = state.adjustment; dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Export price list'; dom.listMeta.textContent = active.name; dom.savedMeta.textContent = active.savedAt ? `Last saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Imported workbook, not saved yet'; dom.activeBadge.hidden = false; $('#saveButton').hidden = !state.canEdit;
+    dom.percentage.value = state.adjustment; dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Current file'; dom.listMeta.textContent = active.name; dom.savedMeta.textContent = active.savedAt ? `Last saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Imported workbook, not saved yet'; dom.activeBadge.hidden = false; $('#saveButton').hidden = !state.canEdit;
     const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
     dom.category.innerHTML = '<option value="">All categories</option>' + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
     state.category = ''; dom.category.value = '';
@@ -235,8 +235,9 @@
     const rows = state.pending.matrix.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
     state.active = { id: '', name: state.pending.name, headers, rows, priceColumns, adjustment: 0, savedAt: null, savedBy: state.user.name }; state.adjustment = 0; state.search = ''; dom.search.value = ''; dom.importDialog.close(); loadActive(state.active); toast(`${rows.length.toLocaleString()} products imported. Review, then save.`);
   }
-  async function save() {
-    const data = await api('save', { method: 'POST', body: JSON.stringify({ name: state.active.name, headers: state.headers, rows: state.rows, priceColumns: state.priceColumns, adjustment: state.adjustment }) });
+  async function save(customName) {
+    const name = (customName || '').trim() || state.active?.name || 'Untitled price list';
+    const data = await api('save', { method: 'POST', body: JSON.stringify({ name, headers: state.headers, rows: state.rows, priceColumns: state.priceColumns, adjustment: state.adjustment }) });
     loadActive(data.active); await loadState(); toast(data.message);
   }
   function exportRows() { return state.rows.map(row => state.headers.map((_, column) => state.priceColumns.includes(column) && isNumeric(row[column]) ? Number(adjusted(numeric(row[column])).toFixed(2)) : row[column])); }
@@ -353,7 +354,41 @@
   }
 
   dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
-  $('#logoutButton').addEventListener('click', async () => { try { await api('logout', { method: 'POST', body: '{}' }); location.reload(); } catch (error) { toast(error.message); } });
+  $('#logoutButton').addEventListener('click', () => dom.logoutDialog.showModal());
+  dom.logoutForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (event.submitter && event.submitter.value === 'cancel') {
+      dom.logoutDialog.close();
+      return;
+    }
+    dom.logoutDialog.close();
+
+    // Immediately hide the workspace and reveal the login view smoothly
+    dom.appView.hidden = true;
+    dom.loginView.hidden = false;
+    document.body.dataset.authenticated = 'false';
+    document.body.classList.remove('is-booting');
+    document.body.classList.add('is-ready');
+
+    const csrf = state.csrf;
+    state.user = null;
+    state.csrf = '';
+    state.active = null;
+    state.rows = [];
+    state.headers = [];
+    state.versions = [];
+    window.__BOOT__ = { user: null, csrf: '' };
+
+    try {
+      await fetch('api.php?action=logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf || '' },
+        body: '{}'
+      });
+    } catch {
+      // Session destroyed on server
+    }
+  });
   $('#uploadButton').addEventListener('click', openFilePicker); $('#emptyUploadButton').addEventListener('click', openFilePicker);
   $('#editButton').addEventListener('click', () => setPriceEditor($('#adjustmentBar').hidden));
   dom.fileInput.addEventListener('change', async () => { const file = dom.fileInput.files[0]; if (!file) return; try { await parseWorkbook(file); } catch (error) { toast(error.message); } });
@@ -364,7 +399,34 @@
   dom.pageSize.addEventListener('change', () => { state.pageSize = Number(dom.pageSize.value); state.page = 1; document.body.classList.toggle('expanded-rows', state.pageSize > 6); renderTable(); });
   $('#previousPage').addEventListener('click', () => { state.page--; renderTable(); }); $('#nextPage').addEventListener('click', () => { state.page++; renderTable(); });
   dom.pageNumbers.addEventListener('click', event => { const button = event.target.closest('[data-page]'); if (!button) return; state.page = Number(button.dataset.page); renderTable(); });
-  $('#saveButton').addEventListener('click', () => save().catch(error => toast(error.message))); $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
+  $('#saveButton').addEventListener('click', () => {
+    if (!state.active) return;
+    dom.versionNameInput.value = state.active.name || '';
+    dom.saveDialog.showModal();
+    requestAnimationFrame(() => {
+      dom.versionNameInput.focus();
+      dom.versionNameInput.select();
+    });
+  });
+  dom.saveForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (event.submitter && event.submitter.value === 'cancel') {
+      dom.saveDialog.close();
+      return;
+    }
+    const name = dom.versionNameInput.value.trim();
+    if (!name) {
+      dom.versionNameInput.focus();
+      return toast('Please enter a version name.');
+    }
+    dom.saveDialog.close();
+    try {
+      await save(name);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
   $$('.nav-item').forEach(button => button.addEventListener('click', () => { setPriceEditor(false); $$('.nav-item').forEach(item => item.classList.toggle('active', item === button)); $$('.panel').forEach(panel => { panel.hidden = panel.id !== button.dataset.panel; panel.classList.toggle('active', panel.id === button.dataset.panel); }); }));
   document.addEventListener('click', event => { if (!$('#adjustmentBar').hidden && !event.target.closest('.price-editor-wrap')) setPriceEditor(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('#adjustmentBar').hidden) { setPriceEditor(false); $('#editButton').focus(); } });

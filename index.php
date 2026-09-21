@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib.php';
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 $user = current_user();
 ?>
 <!doctype html>
@@ -10,7 +12,10 @@ $user = current_user();
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#0a090b">
     <title><?= htmlspecialchars(APP_NAME) ?></title>
-    <link rel="stylesheet" href="assets/app.css?v=20260921-price-popover">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/app.css?v=20260921-login-anim">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -96,6 +101,15 @@ $user = current_user();
     </form>
 </dialog>
 
+<dialog id="saveDialog">
+    <form method="dialog" class="dialog-card" id="saveForm">
+        <div class="dialog-heading"><div><p class="kicker">Version control</p><h2>Save price list version</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted">Enter a name for this version to easily identify it in history.</p>
+        <label>Version name<input id="versionNameInput" type="text" maxlength="160" placeholder="e.g. Updated price list file" required></label>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmSave" value="default" class="button primary">Save version</button></div>
+    </form>
+</dialog>
+
 <dialog id="deleteDialog">
     <form method="dialog" class="dialog-card delete-dialog" id="deleteForm">
         <div class="dialog-heading"><div><p class="kicker">Permanent action</p><h2>Delete saved version?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
@@ -104,11 +118,19 @@ $user = current_user();
     </form>
 </dialog>
 
+<dialog id="logoutDialog">
+    <form method="dialog" class="dialog-card" id="logoutForm">
+        <div class="dialog-heading"><div><p class="kicker">Session</p><h2>Sign out?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted">Are you sure you want to sign out? You will need to sign in again to access the workspace.</p>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmLogout" value="default" class="button primary">Sign out</button></div>
+    </form>
+</dialog>
+
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => $_SESSION['csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260921-price-popover"></script>
+<script src="assets/app.js?v=20260921-logout-confirm"></script>
 </body>
 </html>
