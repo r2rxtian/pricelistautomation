@@ -10,7 +10,7 @@ $user = current_user();
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#0a090b">
     <title><?= htmlspecialchars(APP_NAME) ?></title>
-    <link rel="stylesheet" href="assets/app.css?v=20260921-zoom125">
+    <link rel="stylesheet" href="assets/app.css?v=20260921-header-nav">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -40,18 +40,14 @@ $user = current_user();
     <div id="appLoading" class="app-loading" role="status"><span></span><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <a class="brand" href="#" aria-label="LRN Price List home"><span>LRN</span><b>Price List Automation</b></a>
+        <nav class="top-nav" aria-label="Primary">
+            <button class="nav-item active" data-panel="workspacePanel"><span aria-hidden="true">▦</span><strong>Prices</strong></button>
+            <button class="nav-item" data-panel="historyPanel"><span aria-hidden="true">◷</span><strong>History</strong></button>
+        </nav>
         <div class="user-menu"><span id="userName"></span><span id="roleBadge" class="badge"></span><button id="logoutButton" class="text-button">Sign out</button></div>
     </header>
 
     <div class="workspace">
-        <aside class="sidebar">
-            <nav aria-label="Primary">
-                <button class="nav-item active" data-panel="workspacePanel"><span aria-hidden="true">▦</span><small>Prices</small></button>
-                <button class="nav-item" data-panel="historyPanel"><span aria-hidden="true">◷</span><small>History</small></button>
-            </nav>
-            <div class="sidebar-note"><strong>Pricing rule</strong><p>Every preview starts from the imported base price.</p></div>
-        </aside>
-
         <main class="content">
             <section id="workspacePanel" class="panel active">
                 <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><button id="editButton" class="button secondary edit-only" hidden>Edit prices</button><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
@@ -118,6 +114,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=20260921-pdf-sections"></script>
 </body>
 </html>

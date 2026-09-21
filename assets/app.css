@@ -128,3 +128,21 @@ body{background:radial-gradient(circle at 72% 0%,#151b24 0,#0c0f14 34%,#090a0d 7
   .page-button{width:38px;height:40px;font-size:.95rem}
   .pagination .icon-button{width:38px;height:40px;font-size:1.05rem}
 }
+
+/* Full-width workspace with primary navigation in the header. */
+.topbar{display:grid;grid-template-columns:minmax(260px,1fr) auto minmax(260px,1fr);gap:20px}
+.top-nav{height:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.top-nav .nav-item{position:relative;min-width:108px;min-height:44px;height:44px;padding:0 15px;border:1px solid transparent;border-radius:7px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;background:transparent;color:#aeb7c4;font-size:.86rem;font-weight:650;transition:color .2s ease,background-color .2s ease,border-color .2s ease,transform .26s cubic-bezier(.22,1,.36,1),box-shadow .2s ease}
+.top-nav .nav-item span{font:400 1rem var(--mono);color:#8792a2}
+.top-nav .nav-item strong{font:inherit}
+.top-nav .nav-item:hover{border-color:#343e4b;background:#171d26;color:#fff;transform:translateY(-1px)}
+.top-nav .nav-item.active{border-left-color:transparent;border-color:#3b4654;background:#1b222c;color:#fff;box-shadow:inset 0 -2px var(--pink),inset 0 0 22px rgba(255,255,255,.025)}
+.top-nav .nav-item.active span{color:var(--pink)}
+.top-nav .nav-item:active{transform:scale(.97)}
+.user-menu{justify-self:end}
+.workspace{display:block;min-width:0}
+.content{width:100%;max-width:none;margin:0}
+@media(min-width:901px){.content{padding-left:20px;padding-right:20px}.pagination{left:20px;right:20px}}
+@media(max-width:900px){.topbar{grid-template-columns:auto 1fr auto;gap:10px}.top-nav{justify-self:center}.content{width:100%}}
+@media(max-width:720px){.topbar{padding-inline:10px}.brand b,#roleBadge{display:none}.top-nav{gap:3px}.top-nav .nav-item{min-width:auto;height:40px;min-height:40px;padding:0 10px;font-size:.78rem}.top-nav .nav-item span{font-size:.9rem}.user-menu{gap:2px}.text-button{padding:6px;font-size:.76rem}}
+@media(max-width:430px){.top-nav .nav-item span{display:none}.top-nav .nav-item{padding-inline:9px}.brand span{width:38px;height:38px;font-size:.72rem}}

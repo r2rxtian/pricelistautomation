@@ -238,9 +238,108 @@
   }
   function exportPdf() {
     if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
-    const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation: state.headers.length > 5 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
-    doc.setFontSize(16); doc.text(state.active.name, 36, 38); doc.setFontSize(9); doc.setTextColor(100); doc.text(`Adjustment: ${state.adjustment > 0 ? '+' : ''}${state.adjustment}% · Exported ${new Date().toLocaleString()}`, 36, 55);
-    doc.autoTable({ startY: 70, head: [state.headers], body: exportRows(), styles: { fontSize: 6, cellPadding: 3, overflow: 'linebreak' }, headStyles: { fillColor: [255, 79, 163], textColor: [24, 7, 17] }, alternateRowStyles: { fillColor: [245, 242, 244] }, margin: 28 });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    if (typeof doc.autoTable !== 'function') return toast('PDF table tools are unavailable.');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 22;
+    const pdfValue = (row, column) => {
+      const raw = row[column] ?? '';
+      if (state.priceColumns.includes(column) && isNumeric(raw)) return Number(adjusted(numeric(raw))).toFixed(2);
+      return String(raw).replace(/\r?\n/g, '\n');
+    };
+    const sections = [];
+    state.rows.forEach(row => {
+      const worksheet = String(row[0] || 'Products');
+      const group = String(row[18] || worksheet);
+      const key = `${worksheet}|${group}`;
+      let section = sections[sections.length - 1];
+      if (!section || section.key !== key) {
+        section = { key, worksheet, group, rows: [] };
+        sections.push(section);
+      }
+      section.rows.push(row);
+    });
+
+    doc.setTextColor(28, 31, 38);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(state.active.name, margin, 30);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(92, 98, 108);
+    doc.text(`Adjustment: ${state.adjustment > 0 ? '+' : ''}${state.adjustment}% - Exported ${new Date().toLocaleString()}`, margin, 44);
+
+    let startY = 60;
+    sections.forEach(section => {
+      const isPresentation = section.worksheet.toLowerCase() === 'presentation stands';
+      if (startY > pageHeight - 105) {
+        doc.addPage();
+        startY = 30;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(220, 45, 133);
+      doc.text(section.group, margin, startY);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(94, 101, 112);
+      if (section.group !== section.worksheet) doc.text(section.worksheet, pageWidth - margin, startY, { align: 'right' });
+
+      const commonOptions = {
+        startY: startY + 7,
+        theme: 'grid',
+        showHead: 'everyPage',
+        margin: { top: 24, right: margin, bottom: 28, left: margin },
+        styles: { font: 'helvetica', fontSize: 6.5, cellPadding: 3, overflow: 'linebreak', valign: 'middle', textColor: [35, 39, 47], lineColor: [121, 143, 160], lineWidth: 0.35 },
+        headStyles: { fillColor: [16, 22, 30], textColor: [255, 238, 248], fontStyle: 'bold', halign: 'center', valign: 'middle', lineColor: [58, 106, 143], lineWidth: 0.5 },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+      };
+
+      if (isPresentation) {
+        const head = [['Photo', 'LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ']];
+        const body = section.rows.map(row => {
+          const visual = productVisual(row);
+          const itemName = [pdfValue(row, 2), pdfValue(row, 3)].filter(Boolean).join('\n');
+          const moq = [pdfValue(row, 15), pdfValue(row, 16)].filter(Boolean).join('\n');
+          return [visual.initials, pdfValue(row, 1), itemName, pdfValue(row, 6), pdfValue(row, 8), pdfValue(row, 9), pdfValue(row, 13), pdfValue(row, 14), pdfValue(row, 7), moq, pdfValue(row, 17)];
+        });
+        doc.autoTable({ ...commonOptions, head, body, columnStyles: { 0: { cellWidth: 38, halign: 'center' }, 1: { cellWidth: 58 }, 2: { cellWidth: 180 }, 3: { cellWidth: 56, halign: 'center' }, 4: { cellWidth: 55, halign: 'right' }, 5: { cellWidth: 55, halign: 'right' }, 6: { cellWidth: 55, halign: 'center' }, 7: { cellWidth: 55, halign: 'center' }, 8: { cellWidth: 70 }, 9: { cellWidth: 70 }, 10: { cellWidth: 72, halign: 'right' } } });
+      } else {
+        const head = [
+          [
+            { content: '', rowSpan: 3 },
+            { content: 'Code No', rowSpan: 3 },
+            { content: 'Description', rowSpan: 3 },
+            { content: 'Expiry Date', rowSpan: 3 },
+            { content: 'Weight\ngr/pc', rowSpan: 3 },
+            { content: 'Pcs\n/box', rowSpan: 3 },
+            { content: 'Box Size', rowSpan: 3 },
+            { content: 'Price/pc\nUSD', rowSpan: 3 },
+            { content: 'Price/box in\nUSD', rowSpan: 3 },
+            { content: 'PALLET PER CONTAINER', colSpan: 3 },
+          ],
+          [{ content: '40ft Container', colSpan: 2 }, { content: '20ft Container' }],
+          ['Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)'],
+        ];
+        const body = section.rows.map(row => {
+          const visual = productVisual(row);
+          return [visual.initials, pdfValue(row, 1), pdfValue(row, 2), pdfValue(row, 4), pdfValue(row, 5), pdfValue(row, 6), pdfValue(row, 7), pdfValue(row, 8), pdfValue(row, 9), pdfValue(row, 10), pdfValue(row, 11), pdfValue(row, 12)];
+        });
+        doc.autoTable({ ...commonOptions, head, body, columnStyles: { 0: { cellWidth: 42, halign: 'center' }, 1: { cellWidth: 64 }, 2: { cellWidth: 155 }, 3: { cellWidth: 50, halign: 'center' }, 4: { cellWidth: 43, halign: 'center' }, 5: { cellWidth: 42, halign: 'center' }, 6: { cellWidth: 52, halign: 'center' }, 7: { cellWidth: 48, halign: 'right' }, 8: { cellWidth: 55, halign: 'right' }, 9: { cellWidth: 82, halign: 'center' }, 10: { cellWidth: 82, halign: 'center' }, 11: { cellWidth: 82, halign: 'center' } } });
+      }
+      startY = (doc.lastAutoTable?.finalY || startY + 25) + 16;
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page++) {
+      doc.setPage(page);
+      doc.setFontSize(7);
+      doc.setTextColor(112, 118, 128);
+      doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
+    }
     doc.save(`${state.active.name} - updated.pdf`);
   }
 
