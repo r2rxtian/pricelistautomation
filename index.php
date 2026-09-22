@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260921-uiverse-v1">
+    <link rel="stylesheet" href="assets/app.css?v=20260922-ui-v10">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -55,7 +55,35 @@ $user = current_user();
     <div class="workspace">
         <main class="content">
             <section id="workspacePanel" class="panel active">
-                <div class="page-heading"><div><div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span></div><p id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</p><p id="savedMeta" class="saved-meta"></p></div><div class="heading-actions"><div class="price-editor-wrap"><button id="editButton" class="button secondary edit-only" aria-expanded="false" aria-controls="adjustmentBar" hidden>Edit prices</button><section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden><div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div><div class="adjustment-control"><label for="percentage">Percentage</label><div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div><button id="previewButton" class="button primary">Preview</button></div></section></div><button id="uploadButton" class="button secondary edit-only">Upload Excel</button><button id="saveButton" class="button primary edit-only" hidden>Save version</button></div></div>
+                <div class="page-heading">
+                    <div class="heading-left">
+                        <p class="kicker">CURRENT FILE</p>
+                        <div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span></div>
+                        <div class="meta-line"><span id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</span><span id="savedMeta" class="saved-meta"></span></div>
+                    </div>
+                    <div id="metricGroup" class="metric-group" hidden>
+                        <div class="metric-item"><strong id="productCount">0</strong><span>Products</span></div>
+                        <div class="metric-item"><strong id="categoryCount">0</strong><span>Categories</span></div>
+                        <div class="metric-item"><strong id="priceColumnCount">0</strong><span>Auto price fields</span></div>
+                        <div class="metric-item"><strong id="currentAdjustment">0%</strong><span>Adjustment</span></div>
+                    </div>
+                    <div class="heading-actions">
+                        <div class="price-editor-wrap">
+                            <button id="editButton" class="button secondary edit-only" aria-expanded="false" aria-controls="adjustmentBar" hidden>Edit prices</button>
+                            <section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
+                                <div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div>
+                                <div class="adjustment-control">
+                                    <label for="percentage">Percentage</label>
+                                    <div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div>
+                                    <button id="previewButton" class="button primary">Preview</button>
+                                </div>
+                            </section>
+                        </div>
+                        <button id="discardDraftButton" class="button danger edit-only" hidden>Discard draft</button>
+                        <button id="uploadButton" class="button secondary edit-only">Upload Excel</button>
+                        <button id="saveButton" class="button primary edit-only" hidden>Save version</button>
+                    </div>
+                </div>
                 <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
 
                 <section id="emptyState" class="empty-state">
@@ -63,30 +91,82 @@ $user = current_user();
                 </section>
 
                 <section id="dataView" hidden>
-                    <div class="metric-row">
-                        <article><i aria-hidden="true">◇</i><div><span>Products</span><strong id="productCount">0</strong></div></article>
-                        <article><i aria-hidden="true">□</i><div><span>Categories</span><strong id="categoryCount">0</strong></div></article>
-                        <article><i aria-hidden="true">⚙</i><div><span>Automatic price fields</span><strong id="priceColumnCount">0</strong></div></article>
-                        <article><i aria-hidden="true">▥</i><div><span>Current adjustment</span><strong id="currentAdjustment">0%</strong></div></article>
-                    </div>
-
                     <div class="data-panel full-table">
                     <div class="table-tools">
                         <div class="filter-group">
                             <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search products, codes, prices..."><kbd class="search-kbd">/</kbd></label>
-                            <label class="select-control"><span>Category</span><select id="categorySelect"><option value="">All categories</option></select></label>
+                            <label class="select-control"><span>Category</span><select id="categorySelect"></select></label>
                         </div>
                         <div class="actions"><button id="excelButton" class="button secondary">Export Excel</button><button id="pdfButton" class="button secondary">Export PDF</button></div>
                     </div>
                     <div class="table-frame"><table id="priceTable"><colgroup><col class="col-photo"><col class="col-code"><col class="col-description"><col class="col-expiry"><col class="col-weight"><col class="col-pieces"><col class="col-box"><col class="col-unit-price"><col class="col-box-price"><col class="col-pallet"><col class="col-pallet"><col class="col-pallet"></colgroup><thead></thead><tbody></tbody></table><div id="noResults" class="no-results" hidden>No matching items.</div></div>
                     </div>
-                    <div class="pagination"><span id="rangeLabel"></span><div class="pagination-controls"><label class="rows-control">Rows per page<select id="pageSizeSelect"><option selected>6</option><option>10</option><option>20</option><option>40</option><option>80</option></select></label><button id="previousPage" class="icon-button" aria-label="Previous page">‹</button><div id="pageNumbers" class="page-numbers"></div><button id="nextPage" class="icon-button" aria-label="Next page">›</button></div></div>
                 </section>
             </section>
 
             <section id="historyPanel" class="panel" hidden>
-                <div class="page-heading"><div><p class="kicker">Audit trail</p><h1>Saved versions</h1><p class="muted">Review when a list was saved, by whom, and with which adjustment.</p></div></div>
-                <div id="historyList" class="history-list"></div>
+                <div class="page-heading">
+                    <div class="heading-left">
+                        <p class="kicker">AUDIT TRAIL</p>
+                        <h1>Saved versions</h1>
+                        <p class="muted">Review when a price list was saved, by whom, and with which adjustment.</p>
+                    </div>
+                    <div class="heading-actions">
+                        <button id="backToPricesBtn" class="button secondary">← Back to prices</button>
+                    </div>
+                </div>
+
+                <div class="table-tools history-tools">
+                    <div class="filter-group">
+                        <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="historySearchInput" type="search" placeholder="Search saved versions..."></label>
+                        <label class="select-control"><span>Adjustment</span><select id="historyAdjustmentSelect"><option value="">All adjustments</option><option value="positive">Positive (+)</option><option value="zero">Zero (0%)</option><option value="negative">Negative (-)</option></select></label>
+                    </div>
+                    <div class="actions">
+                        <span id="historyCount" class="history-count">0 versions</span>
+                    </div>
+                </div>
+
+                <div class="data-panel history-data-panel">
+                    <div class="table-frame">
+                        <table id="historyTable">
+                            <colgroup>
+                                <col style="width: 12%;">
+                                <col style="width: 32%;">
+                                <col style="width: 16%;">
+                                <col style="width: 16%;">
+                                <col style="width: 12%;">
+                                <col style="width: 12%;">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>File name</th>
+                                    <th>Saved by</th>
+                                    <th>Saved on <span class="sort-arrow">↓</span></th>
+                                    <th>Adjustment</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                            </tbody>
+                        </table>
+                        <div id="historyEmpty" class="history-empty-card" hidden>
+                            <div class="empty-archive-icon">
+                                <svg viewBox="0 0 48 48" width="56" height="56" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <line x1="24" y1="6" x2="24" y2="11" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
+                                    <line x1="14" y1="10" x2="17" y2="13.5" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
+                                    <line x1="34" y1="10" x2="31" y2="13.5" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
+                                    <rect x="9" y="17" width="30" height="7" rx="3.5" stroke="#68778b" stroke-width="2.2"/>
+                                    <path d="M12 24 L14 37 C14.3 39 15.8 40 17.8 40 L30.2 40 C32.2 40 33.7 39 34 37 L36 24" stroke="#68778b" stroke-width="2.2" stroke-linejoin="round"/>
+                                    <line x1="21" y1="30" x2="27" y2="30" stroke="#68778b" stroke-width="2.2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                            <h2>No saved versions yet</h2>
+                            <p>Saved price lists will appear here with their date, editor, and adjustment.</p>
+                            <button id="emptyGoToPricesBtn" class="button primary">Go to prices →</button>
+                        </div>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
@@ -118,6 +198,14 @@ $user = current_user();
     </form>
 </dialog>
 
+<dialog id="discardDraftDialog">
+    <form method="dialog" class="dialog-card delete-dialog" id="discardDraftForm">
+        <div class="dialog-heading"><div><p class="kicker">Unsaved changes</p><h2>Discard unsaved draft?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p>This will discard your unsaved draft and revert to the last saved price list. This action cannot be undone.</p>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDiscardDraft" value="default" class="button danger">Discard draft</button></div>
+    </form>
+</dialog>
+
 <dialog id="logoutDialog">
     <form method="dialog" class="dialog-card" id="logoutForm">
         <div class="dialog-heading"><div><p class="kicker">Session</p><h2>Sign out?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
@@ -131,6 +219,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260921-uiverse-v1"></script>
+<script src="assets/app.js?v=20260922-ui-v10"></script>
 </body>
 </html>
