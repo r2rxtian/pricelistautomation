@@ -305,10 +305,13 @@ p {
   gap: 8px;
   cursor: pointer;
   transition: color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .top-nav .nav-item span {
   font-size: 1rem;
+  transition: color 0.15s ease;
 }
 
 .top-nav .nav-item:hover {
@@ -320,7 +323,7 @@ p {
   font-weight: 700;
 }
 
-.top-nav .nav-item.active::after {
+.top-nav .nav-item::after {
   content: "";
   position: absolute;
   bottom: 0;
@@ -329,10 +332,26 @@ p {
   height: 3px;
   background: var(--pink);
   border-radius: 2px 2px 0 0;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.top-nav .nav-item.active::after {
+  opacity: 1;
 }
 
 .top-nav .nav-item.active span {
   color: var(--pink);
+}
+
+.top-nav .nav-item:focus {
+  outline: none;
+}
+
+.top-nav .nav-item:focus-visible {
+  outline: 2px solid var(--pink);
+  outline-offset: -2px;
 }
 
 .user-menu {
@@ -727,23 +746,23 @@ p {
 }
 
 col.col-photo {
-  width: 4.5%;
+  width: 17%;
 }
 
 col.col-code {
-  width: 8.5%;
+  width: 8%;
 }
 
 col.col-description {
-  width: 23.5%;
+  width: 16%;
 }
 
 col.col-expiry {
-  width: 7.5%;
+  width: 7%;
 }
 
 col.col-weight {
-  width: 6.5%;
+  width: 6%;
 }
 
 col.col-pieces {
@@ -751,19 +770,19 @@ col.col-pieces {
 }
 
 col.col-box {
-  width: 7.5%;
+  width: 6.5%;
 }
 
 col.col-unit-price {
-  width: 7%;
+  width: 6.5%;
 }
 
 col.col-box-price {
-  width: 7%;
+  width: 6.5%;
 }
 
 col.col-pallet {
-  width: 7.5%;
+  width: 7%;
 }
 
 /* Table Headers - Structured Spreadsheet Box Grid (Sticky/Fixed on Scroll) */
@@ -778,7 +797,7 @@ col.col-pallet {
 #historyTable thead th {
   background: var(--surface-th);
   border: 1px solid var(--line-th);
-  color: #e2e8f0;
+  color: #ffccff;
   font-size: 0.72rem;
   font-weight: 600;
   text-align: center;
@@ -794,7 +813,7 @@ col.col-pallet {
 #priceTable thead tr.excel-header-primary th {
   position: sticky;
   top: 0;
-  z-index: 16;
+  z-index: 18;
   background: var(--surface-th);
 }
 
@@ -802,14 +821,24 @@ col.col-pallet {
   text-align: center;
 }
 
+#priceTable thead tr.excel-header-sub th {
+  position: sticky;
+  top: 28px;
+  z-index: 17;
+  background: var(--surface-th-sub);
+  font-size: 0.69rem;
+  color: #ffccff;
+  padding: 5px 4px;
+}
+
 #priceTable thead tr.excel-header-secondary th {
   position: sticky;
-  top: 35px;
-  z-index: 15;
+  top: 52px;
+  z-index: 16;
   background: var(--surface-th-sub);
-  font-size: 0.7rem;
-  color: #cbd5e1;
-  padding: 7px 6px;
+  font-size: 0.68rem;
+  color: #ffccff;
+  padding: 5px 4px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
@@ -821,7 +850,7 @@ col.col-pallet {
 #historyTable thead th {
   position: sticky;
   top: 0;
-  z-index: 16;
+  z-index: 18;
   background: var(--surface-th);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
 }
@@ -829,35 +858,25 @@ col.col-pallet {
 /* Product Group Header Row */
 .full-table .table-frame tbody tr.product-group-row {
   height: 38px;
-  background: var(--surface-th-sub);
+  background: #000000;
 }
 
-.full-table .product-group-row td {
+.full-table .product-group-row td.group-title-cell {
   padding: 8px 16px !important;
   border: 1px solid var(--line-th) !important;
   text-align: left !important;
   vertical-align: middle;
+  background: #000000 !important;
 }
 
-.product-group-row .group-category {
-  color: #94a3b8;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.product-group-row .group-sep {
-  color: #475569;
-  margin: 0 8px;
-  font-size: 0.75rem;
-}
-
-.product-group-row .group-name {
-  color: var(--pink);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+.product-group-row .group-title-text {
+  color: #ffccff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-family: var(--sans);
+  text-shadow: 0 0 12px rgba(255, 204, 255, 0.35);
+  display: inline-block;
 }
 
 /* Data Rows - Visible Grid */
@@ -883,7 +902,7 @@ col.col-pallet {
   padding: 6px 8px;
   border: 1px solid var(--line-td);
   font-size: 0.73rem;
-  color: var(--text-body);
+  color: #ffccff;
   text-align: center;
   vertical-align: middle;
   white-space: normal;
@@ -891,20 +910,59 @@ col.col-pallet {
   box-sizing: border-box;
 }
 
-#priceTable td.full-photo {
-  padding: 4px;
+#priceTable td.group-photo-cell {
+  background: #000000 !important;
+  border: 1px solid var(--line-td) !important;
+  text-align: center;
+  vertical-align: middle;
+  padding: 8px !important;
+  position: relative;
+}
+
+.group-photo-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-photo-img {
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+  margin: auto;
+}
+
+.group-fallback-visual {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-fallback-svg {
+  width: 100px;
+  height: 100px;
 }
 
 #priceTable td.code-cell {
   font-family: var(--mono);
   font-weight: 600;
-  color: #cbd5e1;
+  color: #ffccff;
 }
 
 #priceTable td.full-description {
-  text-align: left;
-  padding-left: 14px;
-  color: #f8fafc;
+  text-align: center;
+  padding: 6px 10px;
+  color: #ffccff;
+  line-height: 1.35;
+  font-size: 0.74rem;
 }
 
 #priceTable td.price-cell {
@@ -915,7 +973,7 @@ col.col-pallet {
 }
 
 #priceTable td.col-pallet {
-  color: var(--text-muted);
+  color: #ffccff;
   font-size: 0.68rem;
 }
 
@@ -1482,7 +1540,7 @@ dialog::backdrop {
   color: #cbd5e1;
   font-weight: 600;
   font-size: 0.82rem;
-  margin: 18px 0 6px;
+  margin: 14px 0 6px;
 }
 
 #saveDialog input {
@@ -1493,6 +1551,145 @@ dialog::backdrop {
   color: #fff;
   padding: 0 12px;
   font-size: 0.84rem;
+}
+
+.save-change-summary {
+  background: #0d1424;
+  border: 1px solid #1f2d44;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0 10px;
+}
+
+.save-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #192336;
+}
+
+.save-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.save-summary-icon {
+  color: var(--pink);
+  font-size: 0.95rem;
+}
+
+.save-summary-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 42, 133, 0.12);
+  border: 1px solid rgba(255, 42, 133, 0.35);
+  color: #ff55aa;
+  white-space: nowrap;
+}
+
+.save-summary-badge.neutral {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+}
+
+.save-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.save-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #111a2e;
+  border: 1px solid #1a273e;
+  border-radius: 6px;
+}
+
+.save-summary-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.save-summary-bullet {
+  font-size: 0.65rem;
+}
+
+.save-summary-bullet.pos {
+  color: var(--pink);
+}
+
+.save-summary-bullet.neg {
+  color: #ff6975;
+}
+
+.save-summary-cat-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.save-summary-cat-count {
+  font-size: 0.72rem;
+  color: #7e8c9f;
+}
+
+.save-summary-row .adjustment-pill {
+  font-size: 0.76rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.save-summary-row .adjustment-pill.pos {
+  background: rgba(255, 42, 133, 0.15);
+  border: 1px solid rgba(255, 42, 133, 0.35);
+  color: #ff3388;
+}
+
+.save-summary-row .adjustment-pill.neg {
+  background: rgba(255, 105, 117, 0.15);
+  border: 1px solid rgba(255, 105, 117, 0.35);
+  color: #ff6975;
+}
+
+.save-summary-unchanged {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #1a273e;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.save-summary-unchanged strong {
+  color: #8391a3;
+}
+
+.save-summary-empty {
+  font-size: 0.78rem;
+  color: #8391a3;
+  padding: 6px 2px;
+  line-height: 1.45;
+}
+
+.save-summary-empty strong {
+  color: #fff;
 }
 
 /* Toast Notifications */
@@ -1774,14 +1971,6 @@ dialog[open]::backdrop {
 }
 
 /* Interactive Elements Motion */
-.nav-item {
-  transition: color .22s ease, transform .25s cubic-bezier(.22, 1, .36, 1);
-}
-
-.nav-item:active {
-  transform: scale(.95);
-}
-
 .product-thumb {
   transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .2s ease;
 }

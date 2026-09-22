@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260922-ui-v10">
+    <link rel="stylesheet" href="assets/app.css?v=20260922-ui-v19">
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -79,7 +79,7 @@ $user = current_user();
                                 </div>
                             </section>
                         </div>
-                        <button id="discardDraftButton" class="button danger edit-only" hidden>Discard draft</button>
+                        <button id="resetPricesButton" class="button secondary edit-only" hidden>Reset prices</button>
                         <button id="uploadButton" class="button secondary edit-only">Upload Excel</button>
                         <button id="saveButton" class="button primary edit-only" hidden>Save version</button>
                     </div>
@@ -182,9 +182,10 @@ $user = current_user();
 </dialog>
 
 <dialog id="saveDialog">
-    <form method="dialog" class="dialog-card" id="saveForm">
+    <form method="dialog" class="dialog-card save-version-dialog" id="saveForm">
         <div class="dialog-heading"><div><p class="kicker">Version control</p><h2>Save price list version</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p class="muted">Enter a name for this version to easily identify it in history.</p>
+        <p class="muted">Review your price adjustments and enter a version name to save to history.</p>
+        <div id="saveChangeSummary" class="save-change-summary" aria-label="Price adjustment summary"></div>
         <label>Version name<input id="versionNameInput" type="text" maxlength="160" placeholder="e.g. Updated price list file" required></label>
         <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmSave" value="default" class="button primary">Save version</button></div>
     </form>
@@ -198,11 +199,11 @@ $user = current_user();
     </form>
 </dialog>
 
-<dialog id="discardDraftDialog">
-    <form method="dialog" class="dialog-card delete-dialog" id="discardDraftForm">
-        <div class="dialog-heading"><div><p class="kicker">Unsaved changes</p><h2>Discard unsaved draft?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p>This will discard your unsaved draft and revert to the last saved price list. This action cannot be undone.</p>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDiscardDraft" value="default" class="button danger">Discard draft</button></div>
+<dialog id="resetPricesDialog">
+    <form method="dialog" class="dialog-card" id="resetPricesForm">
+        <div class="dialog-heading"><div><p class="kicker">Reset adjustments</p><h2>Reset prices to 0%?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted">This will reset all category percentage adjustments back to 0% and restore the original prices from your uploaded file. Your file and products will stay loaded.</p>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmResetPrices" value="default" class="button danger">Reset to original prices</button></div>
     </form>
 </dialog>
 
@@ -219,6 +220,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260922-ui-v10"></script>
+<script src="assets/app.js?v=20260922-ui-v19"></script>
 </body>
 </html>

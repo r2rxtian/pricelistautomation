@@ -39,7 +39,7 @@ try {
             'canEdit' => can_edit($user),
             'active' => $store['active'],
             'versions' => array_map(
-                fn(array $version) => array_intersect_key($version, array_flip(['id', 'name', 'adjustment', 'savedAt', 'savedBy'])),
+                fn(array $version) => array_intersect_key($version, array_flip(['id', 'name', 'adjustment', 'categoryAdjustments', 'summary', 'savedAt', 'savedBy'])),
                 array_slice(array_reverse($store['versions']), 0, 12)
             ),
         ]);
@@ -56,6 +56,42 @@ try {
         $rows = $data['rows'] ?? [];
         $priceColumns = $data['priceColumns'] ?? [];
         $adjustment = filter_var($data['adjustment'] ?? 0, FILTER_VALIDATE_FLOAT);
+        $categoryAdjustments = $data['categoryAdjustments'] ?? [];
+        $cleanCategoryAdjustments = [];
+        if (is_array($categoryAdjustments)) {
+            foreach ($categoryAdjustments as $cat => $val) {
+                $catKey = clean_text((string) $cat, 120);
+                $valNum = filter_var($val, FILTER_VALIDATE_FLOAT);
+                if ($catKey !== '' && $valNum !== false && $valNum >= -100 && $valNum <= 10000) {
+                    $cleanCategoryAdjustments[$catKey] = (float) $valNum;
+                }
+            }
+        }
+        $summary = $data['summary'] ?? null;
+        $cleanSummary = null;
+        if (is_array($summary)) {
+            $cleanSummary = [
+                'totalAdjustedProducts' => intval($summary['totalAdjustedProducts'] ?? 0),
+                'totalProducts' => intval($summary['totalProducts'] ?? count($rows)),
+                'adjustedCategories' => []
+            ];
+            if (is_array($summary['adjustedCategories'] ?? null)) {
+                foreach ($summary['adjustedCategories'] as $item) {
+                    if (is_array($item)) {
+                        $catName = clean_text(strval($item['category'] ?? ''), 120);
+                        $adjVal = filter_var($item['adjustment'] ?? 0, FILTER_VALIDATE_FLOAT);
+                        $prodCount = intval($item['productCount'] ?? 0);
+                        if ($catName !== '' && $adjVal !== false) {
+                            $cleanSummary['adjustedCategories'][] = [
+                                'category' => $catName,
+                                'adjustment' => (float) $adjVal,
+                                'productCount' => $prodCount
+                            ];
+                        }
+                    }
+                }
+            }
+        }
         if (!is_array($headers) || !is_array($rows) || !is_array($priceColumns) || count($rows) > 15000) {
             json_response(['ok' => false, 'message' => 'The imported workbook data is invalid or too large.'], 422);
         }
@@ -86,6 +122,8 @@ try {
             'rows' => $cleanRows,
             'priceColumns' => $priceColumns,
             'adjustment' => (float) $adjustment,
+            'categoryAdjustments' => $cleanCategoryAdjustments,
+            'summary' => $cleanSummary,
             'savedAt' => gmdate('c'),
             'savedBy' => $user['name'],
         ];

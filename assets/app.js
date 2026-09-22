@@ -2,10 +2,10 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, search: '', category: '', pending: null, pendingDelete: null, versions: [] };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', pending: null, pendingDelete: null, versions: [] };
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), discardDraftDialog: $('#discardDraftDialog'), discardDraftForm: $('#discardDraftForm'), confirmDiscardDraft: $('#confirmDiscardDraft'), discardDraftButton: $('#discardDraftButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput')
+    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput')
   };
 
   async function api(action, options = {}) {
@@ -17,7 +17,17 @@
   function toast(message) { dom.toast.textContent = message; dom.toast.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => dom.toast.classList.remove('show'), 2600); }
   function escapeHtml(value) { const node = document.createElement('div'); node.textContent = String(value ?? ''); return node.innerHTML; }
   function displayDate(value) { if (!value) return 'Not saved'; return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
-  function adjusted(value) { const number = Number(value); return Number.isFinite(number) ? number * (1 + state.adjustment / 100) : value; }
+  function getCategoryAdjustment(category) {
+    if (category && state.categoryAdjustments && state.categoryAdjustments[category] !== undefined) {
+      return Number(state.categoryAdjustments[category]);
+    }
+    return Number(state.adjustment || 0);
+  }
+  function adjusted(value, category = state.category) {
+    const number = Number(value);
+    const adj = getCategoryAdjustment(category);
+    return Number.isFinite(number) ? number * (1 + adj / 100) : value;
+  }
   function isNumeric(value) { return value !== '' && value !== null && Number.isFinite(Number(String(value).replace(/,/g, ''))); }
   function numeric(value) { return Number(String(value).replace(/,/g, '')); }
   function productVisual(row) {
@@ -120,7 +130,14 @@
     popover.hidden = !open;
     button.setAttribute('aria-expanded', String(open));
     button.textContent = open ? 'Close' : 'Edit prices';
-    if (open) requestAnimationFrame(() => dom.percentage.focus());
+    if (open) {
+      dom.percentage.value = getCategoryAdjustment(state.category);
+      const title = $('#adjustmentTitle');
+      const subtitle = popover.querySelector('.edit-summary span');
+      if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
+      if (subtitle && state.category) subtitle.textContent = `Applies percentage only to ${state.category}.`;
+      requestAnimationFrame(() => dom.percentage.focus());
+    }
   }
   async function loadState(skipDraftCheck = false) {
     const data = await api('state');
@@ -148,62 +165,101 @@
       dom.listMeta.textContent = 'Upload an .xlsx or .xls file to map its products and prices.';
       dom.savedMeta.textContent = ''; dom.activeBadge.hidden = true;
       $('#editButton').hidden = true; $('#saveButton').hidden = true;
-      if (dom.discardDraftButton) dom.discardDraftButton.hidden = true;
+      if (dom.resetPricesButton) dom.resetPricesButton.hidden = true;
       return;
     }
     if (metricGroup) metricGroup.hidden = false;
-    state.headers = active.headers || []; state.rows = active.rows || []; state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || ''))); state.adjustment = Number(active.adjustment || 0); $('#editButton').hidden = !state.canEdit; setPriceEditor(false);
-    dom.percentage.value = state.adjustment; dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Current file'; dom.listMeta.textContent = active.name;
+    state.headers = active.headers || [];
+    state.rows = active.rows || [];
+    state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || '')));
+    state.adjustment = Number(active.adjustment || 0);
+    state.categoryAdjustments = active.categoryAdjustments ? { ...active.categoryAdjustments } : {};
+    $('#editButton').hidden = !state.canEdit;
+    setPriceEditor(false);
+
+    const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
+    dom.category.innerHTML = categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+    if (!state.category || !categories.includes(state.category)) {
+      state.category = categories[0] || '';
+    }
+    dom.category.value = state.category;
+    dom.percentage.value = getCategoryAdjustment(state.category);
+
+    dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Current file'; dom.listMeta.textContent = active.name;
 
     const isUnsaved = Boolean(active.isDraft || !active.id);
     if (isUnsaved) {
       dom.savedMeta.textContent = 'Imported workbook · Unsaved';
       dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
       dom.activeBadge.classList.add('draft-badge');
-      if (dom.discardDraftButton) dom.discardDraftButton.hidden = !state.canEdit;
     } else {
       dom.savedMeta.textContent = active.savedAt ? `Last saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Imported workbook · Saved';
       dom.activeBadge.innerHTML = '<span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active';
       dom.activeBadge.classList.remove('draft-badge');
-      if (dom.discardDraftButton) dom.discardDraftButton.hidden = true;
     }
 
     dom.activeBadge.hidden = false; $('#saveButton').hidden = !state.canEdit;
-    const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
-    dom.category.innerHTML = categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
-    state.category = categories[0] || '';
-    dom.category.value = state.category;
     updateMetrics(); renderTable();
   }
-  function updateMetrics() { dom.productCount.textContent = state.rows.length.toLocaleString(); dom.categoryCount.textContent = new Set(state.rows.map(row => row[0]).filter(Boolean)).size; dom.priceColumnCount.textContent = state.priceColumns.length; dom.currentAdjustment.textContent = `${state.adjustment > 0 ? '+' : ''}${state.adjustment}%`; }
+  function hasPriceAdjustments() {
+    if (Number(state.adjustment || 0) !== 0) return true;
+    return Object.values(state.categoryAdjustments || {}).some(v => Number(v || 0) !== 0);
+  }
+  function updateMetrics() {
+    dom.productCount.textContent = state.rows.length.toLocaleString();
+    dom.categoryCount.textContent = new Set(state.rows.map(row => row[0]).filter(Boolean)).size;
+    dom.priceColumnCount.textContent = state.priceColumns.length;
+    const catAdj = getCategoryAdjustment(state.category);
+    dom.currentAdjustment.textContent = `${catAdj > 0 ? '+' : ''}${catAdj}%`;
+    const adjLabel = dom.currentAdjustment.nextElementSibling;
+    if (adjLabel) {
+      adjLabel.textContent = state.category ? `${state.category} Adj.` : 'Adjustment';
+    }
+    if (dom.resetPricesButton) {
+      dom.resetPricesButton.hidden = !state.canEdit || !state.active || !hasPriceAdjustments();
+    }
+  }
   function filteredRows() {
     const query = state.search.trim().toLowerCase();
     return state.rows.map((row, index) => ({ row, index })).filter(({ row }) => (!state.category || String(row[0] ?? '') === state.category) && (!query || row.some(value => String(value ?? '').toLowerCase().includes(query))));
   }
+  function groupVisual(category, groupName, items) {
+    const text = `${category} ${groupName}`.toLowerCase();
+    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/breads.jpg" alt="${escapeHtml(groupName || 'Breads')}" loading="lazy">`;
+    }
+    if (/cone/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/cones.jpg" alt="${escapeHtml(groupName || 'Cones')}" loading="lazy">`;
+    }
+    if (/tart|shell/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/tarts.jpg" alt="${escapeHtml(groupName || 'Tart Shells')}" loading="lazy">`;
+    }
+    return `<div class="group-fallback-visual"><svg viewBox="0 0 100 100" class="group-fallback-svg" aria-hidden="true"><rect width="100" height="100" fill="#000"/><circle cx="50" cy="50" r="32" fill="rgba(255,42,133,0.15)" stroke="#ff2a85" stroke-width="2"/><text x="50" y="54" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" font-family="sans-serif">${escapeHtml((groupName || category || 'Product').slice(0, 12))}</text></svg></div>`;
+  }
   function renderTable() {
     const visible = filteredRows();
-    const visualMarkup = row => {
-      const visual = productVisual(row);
-      return `<div class="product-thumb ${visual.kind}" style="--product-tone:${visual.tone}" role="img" aria-label="${escapeHtml(visual.description)}">${visual.svg}</div>`;
-    };
-    const valueMarkup = (row, column) => { const raw = row[column] ?? '', price = state.priceColumns.includes(column) && isNumeric(raw), value = price ? adjusted(numeric(raw)) : raw; return price ? money.format(value) : escapeHtml(raw).replace(/\r?\n/g, '<br>'); };
+    const valueMarkup = (row, column) => { const raw = row[column] ?? '', price = state.priceColumns.includes(column) && isNumeric(raw), value = price ? adjusted(numeric(raw), String(row[0] ?? '')) : raw; return price ? money.format(value) : escapeHtml(raw).replace(/\r?\n/g, '<br>'); };
     const standardHeader = () => `
       <tr class="excel-header excel-header-primary">
-        <th rowspan="2" class="col-product-th">Product</th>
-        <th rowspan="2" class="col-code-th">Code No</th>
-        <th rowspan="2" class="col-desc-th">Description</th>
-        <th rowspan="2">Expiry Date</th>
-        <th rowspan="2">Weight<br>gr/pc</th>
-        <th rowspan="2">Pcs<br>/ box</th>
-        <th rowspan="2">Box Size</th>
-        <th rowspan="2">Price/pc<br>USD</th>
-        <th rowspan="2">Price/box<br>USD</th>
-        <th colspan="3" class="col-pallet-header">Pallet per container</th>
+        <th rowspan="3" class="col-photo-th"></th>
+        <th rowspan="3" class="col-code-th">Code No</th>
+        <th rowspan="3" class="col-desc-th">Description</th>
+        <th rowspan="3">Expiry<br>Date</th>
+        <th rowspan="3">Weight<br>gr/pc</th>
+        <th rowspan="3">Pcs<br>/box</th>
+        <th rowspan="3">Box Size</th>
+        <th rowspan="3">Price/pc<br>USD</th>
+        <th rowspan="3">Price/box<br>In USD</th>
+        <th colspan="3" class="col-pallet-header">PALLET PER CONTAINER</th>
+      </tr>
+      <tr class="excel-header excel-header-sub">
+        <th colspan="2">40ft Container</th>
+        <th>20ft Container</th>
       </tr>
       <tr class="excel-header excel-header-secondary">
-        <th>40ft Large<br>(16 pallets)</th>
-        <th>40ft Small<br>(2 pallets)</th>
-        <th>20ft Large<br>(8 pallets)</th>
+        <th>Large Pallet<br>(16 pallets)</th>
+        <th>Small Pallet<br>(2 pallets)</th>
+        <th>Large Pallet<br>(8 pallets)</th>
       </tr>`;
     const presentationHeader = () => `
       <tr class="excel-header excel-header-primary presentation-header">
@@ -219,15 +275,18 @@
         <th>MOQ</th>
         <th>Total Price Based on MOQ</th>
       </tr>`;
-    const standardRow = (row, visibleIndex) => {
+    const standardRow = (row, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
       const formatPallet = val => {
         const s = String(val ?? '').trim();
         if (!s) return '';
         if (/pallet|box/i.test(s)) return escapeHtml(s);
         return isNumeric(s) ? `${s} Boxes/Pallet` : escapeHtml(s);
       };
+      const photoCell = isFirstInGroup
+        ? `<td class="group-photo-cell" rowspan="${groupLength}"><div class="group-photo-wrap">${groupVisual(category, groupName, groupItems)}</div></td>`
+        : '';
       return `<tr class="excel-data-row" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
-        <td class="full-photo">${visualMarkup(row)}</td>
+        ${photoCell}
         <td class="code-cell">${valueMarkup(row, 1)}</td>
         <td class="full-description">${valueMarkup(row, 2)}</td>
         <td>${valueMarkup(row, 4)}</td>
@@ -241,11 +300,14 @@
         <td class="col-pallet">${formatPallet(row[12])}</td>
       </tr>`;
     };
-    const presentationRow = (row, visibleIndex) => {
+    const presentationRow = (row, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
       const itemName = [row[2], row[3]].filter(value => String(value ?? '').trim()).map(value => escapeHtml(value).replace(/\r?\n/g, '<br>')).join('<br>');
       const moq = [row[15], row[16]].filter(value => String(value ?? '').trim()).map(value => escapeHtml(value).replace(/\r?\n/g, '<br>')).join('<br>');
+      const photoCell = isFirstInGroup
+        ? `<td class="group-photo-cell" rowspan="${groupLength}"><div class="group-photo-wrap">${groupVisual(category, groupName, groupItems)}</div></td>`
+        : '';
       return `<tr class="excel-data-row presentation-row" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
-        <td class="full-photo">${visualMarkup(row)}</td>
+        ${photoCell}
         <td class="code-cell">${valueMarkup(row, 1)}</td>
         <td class="full-description" colspan="2">${itemName}</td>
         <td>${valueMarkup(row, 6)}</td>
@@ -258,25 +320,39 @@
         <td>${valueMarkup(row, 17)}</td>
       </tr>`;
     };
-    let previousGroup = '';
-    let previousIsPresentation = null;
+
+    const groups = [];
+    let curGroup = null;
+    visible.forEach(({ row }, visibleIndex) => {
+      const groupName = String(row[18] || row[0] || 'Other products').trim();
+      const groupKey = `${row[0]}|${groupName}`;
+      if (!curGroup || curGroup.key !== groupKey) {
+        curGroup = {
+          key: groupKey,
+          category: row[0],
+          groupName: groupName,
+          rows: []
+        };
+        groups.push(curGroup);
+      }
+      curGroup.rows.push({ row, visibleIndex });
+    });
+
     const firstIsPresentation = visible.length > 0 && String(visible[0].row[0] || '').toLowerCase() === 'presentation stands';
     $('thead', dom.table).innerHTML = firstIsPresentation ? presentationHeader() : standardHeader();
-    $('tbody', dom.table).innerHTML = visible.map(({ row }, visibleIndex) => {
-      const group = String(row[18] || row[0] || 'Other products');
-      const groupKey = `${row[0]}|${group}`;
-      const isPresentation = String(row[0] || '').toLowerCase() === 'presentation stands';
-      const columnCount = 12;
-      let groupStart = '';
-      if (groupKey !== previousGroup) {
-        groupStart = `<tr class="product-group-row"><td colspan="${columnCount}"><span class="group-category">${escapeHtml(String(row[0] || 'PRODUCTS').toUpperCase())}</span> <span class="group-sep">/</span> <strong class="group-name">${escapeHtml(group)}</strong></td></tr>`;
-        if (previousIsPresentation !== null && isPresentation !== previousIsPresentation) {
-          groupStart += isPresentation ? presentationHeader() : standardHeader();
-        }
-      }
-      previousGroup = groupKey;
-      previousIsPresentation = isPresentation;
-      return `${groupStart}${isPresentation ? presentationRow(row, visibleIndex) : standardRow(row, visibleIndex)}`;
+    $('tbody', dom.table).innerHTML = groups.map(group => {
+      const isPresentation = String(group.category || '').toLowerCase() === 'presentation stands';
+      const columnCount = isPresentation ? 11 : 12;
+      const groupHeader = group.groupName
+        ? `<tr class="product-group-row"><td colspan="${columnCount}" class="group-title-cell"><strong class="group-title-text">${escapeHtml(group.groupName)}</strong></td></tr>`
+        : '';
+      const rowsHtml = group.rows.map(({ row, visibleIndex }, indexInGroup) => {
+        const isFirst = indexInGroup === 0;
+        return isPresentation
+          ? presentationRow(row, visibleIndex, isFirst, group.rows.length, group.category, group.groupName, group.rows)
+          : standardRow(row, visibleIndex, isFirst, group.rows.length, group.category, group.groupName, group.rows);
+      }).join('');
+      return `${groupHeader}${rowsHtml}`;
     }).join('');
     dom.noResults.hidden = visible.length > 0;
   }
@@ -312,9 +388,31 @@
 
     if (dom.historyEmpty) dom.historyEmpty.hidden = true;
     dom.historyTableBody.innerHTML = filtered.map((version, index) => {
-      const adj = Number(version.adjustment || 0);
-      const adjClass = adj > 0 ? 'pos' : adj < 0 ? 'neg' : 'zero';
-      const adjSign = adj > 0 ? '+' : '';
+      const hasSummary = version.summary && Array.isArray(version.summary.adjustedCategories) && version.summary.adjustedCategories.length > 0;
+      const hasCatAdj = version.categoryAdjustments && Object.keys(version.categoryAdjustments).length > 0;
+      let adjMarkup = '';
+      if (hasSummary) {
+        adjMarkup = version.summary.adjustedCategories.map(item => {
+          const num = Number(item.adjustment || 0);
+          const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
+          const sign = num > 0 ? '+' : '';
+          const countTag = item.productCount ? ` <small class="adj-count" style="opacity:0.8; font-size:0.68rem;">(${item.productCount} pcs)</small>` : '';
+          return `<span class="adjustment-pill ${cls}" style="margin: 2px 2px 2px 0; display: inline-block;">${escapeHtml(item.category)}: ${sign}${num}%${countTag}</span>`;
+        }).join('');
+      } else if (hasCatAdj) {
+        adjMarkup = Object.entries(version.categoryAdjustments)
+          .map(([cat, val]) => {
+            const num = Number(val || 0);
+            const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
+            const sign = num > 0 ? '+' : '';
+            return `<span class="adjustment-pill ${cls}" style="margin: 2px 2px 2px 0; display: inline-block;">${escapeHtml(cat)}: ${sign}${num}%</span>`;
+          }).join('');
+      } else {
+        const adj = Number(version.adjustment || 0);
+        const adjClass = adj > 0 ? 'pos' : adj < 0 ? 'neg' : 'zero';
+        const adjSign = adj > 0 ? '+' : '';
+        adjMarkup = `<span class="adjustment-pill ${adjClass}">${adjSign}${adj}%</span>`;
+      }
       const versionLabel = version.id ? escapeHtml(version.id.substring(0, 8)) : `v${filtered.length - index}`;
       return `
         <tr class="history-data-row">
@@ -322,7 +420,7 @@
           <td class="history-name-cell"><strong>${escapeHtml(version.name)}</strong></td>
           <td class="history-by-cell">${escapeHtml(version.savedBy)}</td>
           <td class="history-date-cell">${displayDate(version.savedAt)}</td>
-          <td class="history-adj-cell"><span class="adjustment-pill ${adjClass}">${adjSign}${adj}%</span></td>
+          <td class="history-adj-cell">${adjMarkup}</td>
           <td class="history-actions-cell">
             <button class="button secondary open-version" data-id="${escapeHtml(version.id)}">Open</button>
             ${state.user.role === 'admin' ? `<button class="button danger delete-version" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}">Delete</button>` : ''}
@@ -407,127 +505,456 @@
     const headers = Array.from({ length: width }, (_, index) => String(rawHeaders[index] || `Column ${index + 1}`).trim());
     const priceColumns = state.pending.priceColumns;
     const rows = state.pending.matrix.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
-    state.active = { id: '', name: state.pending.name, headers, rows, priceColumns, adjustment: 0, savedAt: null, savedBy: state.user.name, isDraft: true }; state.adjustment = 0; state.search = ''; dom.search.value = ''; dom.importDialog.close(); loadActive(state.active);
+    state.active = { id: '', name: state.pending.name, headers, rows, priceColumns, adjustment: 0, categoryAdjustments: {}, savedAt: null, savedBy: state.user.name, isDraft: true }; state.adjustment = 0; state.categoryAdjustments = {}; state.search = ''; dom.search.value = ''; dom.importDialog.close(); loadActive(state.active);
     await setDraft(draftKey(), state.active);
     toast(`${rows.length.toLocaleString()} products imported. Autosaved as draft.`);
   }
+  function getChangeSummary() {
+    const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
+    const items = categories.map(category => {
+      const adj = getCategoryAdjustment(category);
+      const count = state.rows.filter(row => String(row[0] ?? '') === category).length;
+      return {
+        category,
+        adjustment: adj,
+        productCount: count,
+        isAdjusted: adj !== 0
+      };
+    });
+
+    const adjustedItems = items.filter(i => i.isAdjusted);
+    const unchangedItems = items.filter(i => !i.isAdjusted);
+    const totalAdjustedProducts = adjustedItems.reduce((sum, i) => sum + i.productCount, 0);
+
+    return {
+      items,
+      adjustedItems,
+      unchangedItems,
+      totalProducts: state.rows.length,
+      totalAdjustedProducts
+    };
+  }
+
+  function renderSaveSummary() {
+    const container = $('#saveChangeSummary');
+    if (!container) return;
+    const summary = getChangeSummary();
+
+    if (summary.adjustedItems.length === 0) {
+      container.innerHTML = `
+        <div class="save-summary-header">
+          <div class="save-summary-title">
+            <span class="save-summary-icon" aria-hidden="true">ℹ</span>
+            <strong>Price Adjustment Summary</strong>
+          </div>
+          <span class="save-summary-badge neutral">No adjustments (0%)</span>
+        </div>
+        <div class="save-summary-empty">
+          All <strong>${summary.totalProducts.toLocaleString()}</strong> products across <strong>${summary.items.length}</strong> categories will be saved with baseline prices (0% adjustment).
+        </div>`;
+      return;
+    }
+
+    const rowsHtml = summary.adjustedItems.map(item => {
+      const sign = item.adjustment > 0 ? '+' : '';
+      const cls = item.adjustment > 0 ? 'pos' : 'neg';
+      return `
+        <div class="save-summary-row">
+          <div class="save-summary-cat-info">
+            <span class="save-summary-bullet ${cls}">●</span>
+            <strong class="save-summary-cat-name">${escapeHtml(item.category)}</strong>
+            <span class="save-summary-cat-count">${item.productCount.toLocaleString()} product${item.productCount === 1 ? '' : 's'}</span>
+          </div>
+          <span class="adjustment-pill ${cls}">${sign}${item.adjustment}%</span>
+        </div>`;
+    }).join('');
+
+    const unchangedHtml = summary.unchangedItems.length > 0
+      ? `<div class="save-summary-unchanged">
+          <strong>Unchanged (0%):</strong> ${summary.unchangedItems.map(i => `${escapeHtml(i.category)} (${i.productCount.toLocaleString()})`).join(', ')}
+        </div>`
+      : '';
+
+    container.innerHTML = `
+      <div class="save-summary-header">
+        <div class="save-summary-title">
+          <span class="save-summary-icon" aria-hidden="true">✎</span>
+          <strong>Price Adjustment Summary</strong>
+        </div>
+        <span class="save-summary-badge">${summary.adjustedItems.length} ${summary.adjustedItems.length === 1 ? 'category' : 'categories'} · ${summary.totalAdjustedProducts.toLocaleString()} products</span>
+      </div>
+      <div class="save-summary-list">
+        ${rowsHtml}
+      </div>
+      ${unchangedHtml}`;
+  }
+
   async function save(customName) {
     const name = (customName || '').trim() || state.active?.name || 'Untitled price list';
-    const data = await api('save', { method: 'POST', body: JSON.stringify({ name, headers: state.headers, rows: state.rows, priceColumns: state.priceColumns, adjustment: state.adjustment }) });
+    const summary = getChangeSummary();
+    const data = await api('save', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        headers: state.headers,
+        rows: state.rows,
+        priceColumns: state.priceColumns,
+        adjustment: state.adjustment,
+        categoryAdjustments: state.categoryAdjustments,
+        summary: {
+          totalAdjustedProducts: summary.totalAdjustedProducts,
+          totalProducts: summary.totalProducts,
+          adjustedCategories: summary.adjustedItems.map(i => ({
+            category: i.category,
+            adjustment: i.adjustment,
+            productCount: i.productCount
+          }))
+        }
+      })
+    });
     await removeDraft(draftKey());
     loadActive(data.active); await loadState(true); toast(data.message);
   }
-  function exportRows() { return state.rows.map(row => state.headers.map((_, column) => state.priceColumns.includes(column) && isNumeric(row[column]) ? Number(adjusted(numeric(row[column])).toFixed(2)) : row[column])); }
+  function exportRows() { return state.rows.map(row => state.headers.map((_, column) => state.priceColumns.includes(column) && isNumeric(row[column]) ? Number(adjusted(numeric(row[column]), String(row[0] ?? '')).toFixed(2)) : row[column])); }
   function exportExcel() {
     if (!window.XLSX) return toast('Excel tools are unavailable.');
     const worksheet = XLSX.utils.aoa_to_sheet([state.headers, ...exportRows()]); worksheet['!freeze'] = { xSplit: 0, ySplit: 1 };
     const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Updated Price List'); XLSX.writeFile(workbook, `${state.active.name} - updated.xlsx`);
   }
-  function exportPdf() {
-    if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-    if (typeof doc.autoTable !== 'function') return toast('PDF table tools are unavailable.');
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 22;
-    const pdfValue = (row, column) => {
-      const raw = row[column] ?? '';
-      if (state.priceColumns.includes(column) && isNumeric(raw)) return Number(adjusted(numeric(raw))).toFixed(2);
-      return String(raw).replace(/\r?\n/g, '\n');
+  const pdfImageCache = {};
+  async function loadPdfImages() {
+    const urls = {
+      breads: 'assets/products/breads.jpg',
+      cones: 'assets/products/cones.jpg',
+      tarts: 'assets/products/tarts.jpg'
     };
-    const sections = [];
-    state.rows.forEach(row => {
-      const worksheet = String(row[0] || 'Products');
-      const group = String(row[18] || worksheet);
-      const key = `${worksheet}|${group}`;
-      let section = sections[sections.length - 1];
-      if (!section || section.key !== key) {
-        section = { key, worksheet, group, rows: [] };
-        sections.push(section);
+    for (const [key, url] of Object.entries(urls)) {
+      if (!pdfImageCache[key]) {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          pdfImageCache[key] = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        } catch {
+          pdfImageCache[key] = null;
+        }
       }
-      section.rows.push(row);
-    });
+    }
+    return pdfImageCache;
+  }
 
-    doc.setTextColor(28, 31, 38);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text(state.active.name, margin, 30);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(92, 98, 108);
-    doc.text(`Adjustment: ${state.adjustment > 0 ? '+' : ''}${state.adjustment}% - Exported ${new Date().toLocaleString()}`, margin, 44);
+  function getPdfGroupImageKey(category, groupName) {
+    const text = `${category} ${groupName}`.toLowerCase();
+    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'breads';
+    if (/cone/i.test(text)) return 'cones';
+    if (/tart|shell/i.test(text)) return 'tarts';
+    return null;
+  }
 
-    let startY = 60;
-    sections.forEach(section => {
-      const isPresentation = section.worksheet.toLowerCase() === 'presentation stands';
-      if (startY > pageHeight - 105) {
-        doc.addPage();
-        startY = 30;
-      }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(220, 45, 133);
-      doc.text(section.group, margin, startY);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(94, 101, 112);
-      if (section.group !== section.worksheet) doc.text(section.worksheet, pageWidth - margin, startY, { align: 'right' });
+  async function exportPdf() {
+    try {
+      if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
+      const { jsPDF } = window.jspdf;
+      toast('Generating PDF...');
+      const pdfImages = await loadPdfImages();
 
-      const commonOptions = {
-        startY: startY + 7,
-        theme: 'grid',
-        showHead: 'everyPage',
-        margin: { top: 24, right: margin, bottom: 28, left: margin },
-        styles: { font: 'helvetica', fontSize: 6.5, cellPadding: 3, overflow: 'linebreak', valign: 'middle', textColor: [35, 39, 47], lineColor: [121, 143, 160], lineWidth: 0.35 },
-        headStyles: { fillColor: [16, 22, 30], textColor: [255, 238, 248], fontStyle: 'bold', halign: 'center', valign: 'middle', lineColor: [58, 106, 143], lineWidth: 0.5 },
-        alternateRowStyles: { fillColor: [244, 247, 250] },
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      if (typeof doc.autoTable !== 'function') return toast('PDF table tools are unavailable.');
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 18;
+
+      const formatPallet = val => {
+        const s = String(val ?? '').trim();
+        if (!s) return '';
+        if (/pallet|box/i.test(s)) return s;
+        return isNumeric(s) ? `${s} Boxes/Pallet` : s;
       };
 
-      if (isPresentation) {
-        const head = [['Photo', 'LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ']];
-        const body = section.rows.map(row => {
-          const visual = productVisual(row);
-          const itemName = [pdfValue(row, 2), pdfValue(row, 3)].filter(Boolean).join('\n');
-          const moq = [pdfValue(row, 15), pdfValue(row, 16)].filter(Boolean).join('\n');
-          return [visual.initials, pdfValue(row, 1), itemName, pdfValue(row, 6), pdfValue(row, 8), pdfValue(row, 9), pdfValue(row, 13), pdfValue(row, 14), pdfValue(row, 7), moq, pdfValue(row, 17)];
-        });
-        doc.autoTable({ ...commonOptions, head, body, columnStyles: { 0: { cellWidth: 38, halign: 'center' }, 1: { cellWidth: 58 }, 2: { cellWidth: 180 }, 3: { cellWidth: 56, halign: 'center' }, 4: { cellWidth: 55, halign: 'right' }, 5: { cellWidth: 55, halign: 'right' }, 6: { cellWidth: 55, halign: 'center' }, 7: { cellWidth: 55, halign: 'center' }, 8: { cellWidth: 70 }, 9: { cellWidth: 70 }, 10: { cellWidth: 72, halign: 'right' } } });
-      } else {
-        const head = [
-          [
-            { content: '', rowSpan: 3 },
-            { content: 'Code No', rowSpan: 3 },
-            { content: 'Description', rowSpan: 3 },
-            { content: 'Expiry Date', rowSpan: 3 },
-            { content: 'Weight\ngr/pc', rowSpan: 3 },
-            { content: 'Pcs\n/box', rowSpan: 3 },
-            { content: 'Box Size', rowSpan: 3 },
-            { content: 'Price/pc\nUSD', rowSpan: 3 },
-            { content: 'Price/box in\nUSD', rowSpan: 3 },
-            { content: 'PALLET PER CONTAINER', colSpan: 3 },
-          ],
-          [{ content: '40ft Container', colSpan: 2 }, { content: '20ft Container' }],
-          ['Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)'],
-        ];
-        const body = section.rows.map(row => {
-          const visual = productVisual(row);
-          return [visual.initials, pdfValue(row, 1), pdfValue(row, 2), pdfValue(row, 4), pdfValue(row, 5), pdfValue(row, 6), pdfValue(row, 7), pdfValue(row, 8), pdfValue(row, 9), pdfValue(row, 10), pdfValue(row, 11), pdfValue(row, 12)];
-        });
-        doc.autoTable({ ...commonOptions, head, body, columnStyles: { 0: { cellWidth: 42, halign: 'center' }, 1: { cellWidth: 64 }, 2: { cellWidth: 155 }, 3: { cellWidth: 50, halign: 'center' }, 4: { cellWidth: 43, halign: 'center' }, 5: { cellWidth: 42, halign: 'center' }, 6: { cellWidth: 52, halign: 'center' }, 7: { cellWidth: 48, halign: 'right' }, 8: { cellWidth: 55, halign: 'right' }, 9: { cellWidth: 82, halign: 'center' }, 10: { cellWidth: 82, halign: 'center' }, 11: { cellWidth: 82, halign: 'center' } } });
-      }
-      startY = (doc.lastAutoTable?.finalY || startY + 25) + 16;
-    });
+      const formatPdfPrice = (raw, cat) => {
+        if (!isNumeric(raw)) return String(raw ?? '');
+        const val = adjusted(numeric(raw), cat);
+        const numStr = String(raw).trim();
+        const decimals = numStr.includes('.') ? numStr.split('.')[1].length : 2;
+        return Number(val).toFixed(Math.max(2, Math.min(4, decimals)));
+      };
 
-    const pageCount = doc.getNumberOfPages();
-    for (let page = 1; page <= pageCount; page++) {
-      doc.setPage(page);
-      doc.setFontSize(7);
-      doc.setTextColor(112, 118, 128);
-      doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
+      // If search query is active, only export the search filtered rows. Otherwise export all rows in the active workbook.
+      const targetRows = state.search ? filteredRows().map(f => f.row) : state.rows;
+      if (!targetRows.length) return toast('No products to export.');
+
+      const categoriesMap = new Map();
+      targetRows.forEach(row => {
+        const category = String(row[0] || 'Products').trim();
+        const groupName = String(row[18] || row[0] || 'Other products').trim();
+        if (!categoriesMap.has(category)) {
+          categoriesMap.set(category, new Map());
+        }
+        const groupsMap = categoriesMap.get(category);
+        if (!groupsMap.has(groupName)) {
+          groupsMap.set(groupName, []);
+        }
+        groupsMap.get(groupName).push(row);
+      });
+
+      let currentY = 46;
+
+      for (const [category, groupsMap] of categoriesMap.entries()) {
+        const isPresentation = category.toLowerCase() === 'presentation stands';
+
+        // 3-Tier Excel Header
+        const standardHead = [
+          [
+            { content: '', rowSpan: 3, styles: { cellWidth: 93 } },
+            { content: 'Code No', rowSpan: 3, styles: { cellWidth: 60 } },
+            { content: 'Description', rowSpan: 3, styles: { cellWidth: 152 } },
+            { content: 'Expiry\nDate', rowSpan: 3, styles: { cellWidth: 48 } },
+            { content: 'Weight\ngr/pc', rowSpan: 3, styles: { cellWidth: 45 } },
+            { content: 'Pcs\n/box', rowSpan: 3, styles: { cellWidth: 38 } },
+            { content: 'Box Size', rowSpan: 3, styles: { cellWidth: 55 } },
+            { content: 'Price/pc\nUSD', rowSpan: 3, styles: { cellWidth: 52 } },
+            { content: 'Price/box\nIn USD', rowSpan: 3, styles: { cellWidth: 55 } },
+            { content: 'PALLET PER CONTAINER', colSpan: 3, styles: { halign: 'center' } }
+          ],
+          [
+            { content: '40ft Container', colSpan: 2, styles: { halign: 'center' } },
+            { content: '20ft Container', colSpan: 1, styles: { halign: 'center' } }
+          ],
+          [
+            { content: 'Large Pallet\n(16 pallets)', styles: { cellWidth: 66, halign: 'center' } },
+            { content: 'Small Pallet\n(2 pallets)', styles: { cellWidth: 66, halign: 'center' } },
+            { content: 'Large Pallet\n(8 pallets)', styles: { cellWidth: 65, halign: 'center' } }
+          ]
+        ];
+
+        const presentationHead = [
+          [
+            { content: 'Photo' },
+            { content: 'LRN code' },
+            { content: 'Item Name', colSpan: 2 },
+            { content: 'PC/Set Per Box' },
+            { content: 'Price/pc in USD' },
+            { content: 'Price/Box USD' },
+            { content: 'NW(KG) / Box' },
+            { content: 'GW(KG) / Box' },
+            { content: 'Box size' },
+            { content: 'MOQ' },
+            { content: 'Total Price Based on MOQ' }
+          ]
+        ];
+
+        // Build body rows with product group titles and rowspan photo cells
+        const body = [];
+        const colCount = 12;
+
+        for (const [groupName, rows] of groupsMap.entries()) {
+          // Product Group Title Row (bold light pink on black)
+          body.push([
+            {
+              content: groupName,
+              colSpan: colCount,
+              styles: {
+                fillColor: [0, 0, 0],
+                textColor: [255, 204, 255],
+                fontStyle: 'bold',
+                fontSize: 8.5,
+                halign: 'left',
+                cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+                lineColor: [38, 69, 110],
+                lineWidth: 0.65
+              }
+            }
+          ]);
+
+          const imageKey = getPdfGroupImageKey(category, groupName);
+          const isAdj = getCategoryAdjustment(category) !== 0;
+
+          rows.forEach((row, rIdx) => {
+            const isFirstInGroup = rIdx === 0;
+
+            if (isPresentation) {
+              const rowCells = [];
+              if (isFirstInGroup) {
+                rowCells.push({
+                  content: '',
+                  rowSpan: rows.length,
+                  imageKey,
+                  styles: { fillColor: [0, 0, 0], cellPadding: 2, lineColor: [38, 69, 110], lineWidth: 0.65 }
+                });
+              }
+              const itemName = [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n');
+              const moq = [row[15], row[16]].filter(v => String(v ?? '').trim()).join('\n');
+              rowCells.push(
+                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.5 } },
+                { content: itemName, colSpan: 2, styles: { halign: 'left', fontSize: 6 } },
+                { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: String(row[13] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[14] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: moq, styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[17] ?? ''), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6 } }
+              );
+              body.push(rowCells);
+            } else {
+              const rowCells = [];
+              if (isFirstInGroup) {
+                rowCells.push({
+                  content: '',
+                  rowSpan: rows.length,
+                  imageKey,
+                  styles: { fillColor: [0, 0, 0], cellPadding: 2, lineColor: [38, 69, 110], lineWidth: 0.65 }
+                });
+              }
+              const desc = String(row[2] ?? '').replace(/\r?\n/g, '\n');
+              rowCells.push(
+                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.5 } },
+                { content: desc, styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[4] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[5] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
+                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPallet(row[10]), styles: { halign: 'center', fontSize: 6 } },
+                { content: formatPallet(row[11]), styles: { halign: 'center', fontSize: 6 } },
+                { content: formatPallet(row[12]), styles: { halign: 'center', fontSize: 6 } }
+              );
+              body.push(rowCells);
+            }
+          });
+        }
+
+        // If switching to a new category and not the first page, start on a new page
+        if (currentY > 46 && doc.getNumberOfPages() > 0) {
+          doc.addPage();
+          currentY = 46;
+        }
+
+        doc.autoTable({
+          head: isPresentation ? presentationHead : standardHead,
+          body,
+          startY: currentY,
+          theme: 'grid',
+          showHead: 'everyPage',
+          margin: { top: 46, right: margin, bottom: 26, left: margin },
+          styles: {
+            font: 'helvetica',
+            fontSize: 6,
+            cellPadding: 2.5,
+            overflow: 'linebreak',
+            valign: 'middle',
+            fillColor: [0, 0, 0],
+            textColor: [255, 204, 255],
+            lineColor: [38, 69, 110],
+            lineWidth: 0.5
+          },
+          headStyles: {
+            fillColor: [0, 0, 0],
+            textColor: [255, 204, 255],
+            fontStyle: 'bold',
+            fontSize: 6.5,
+            halign: 'center',
+            valign: 'middle',
+            lineColor: [38, 69, 110],
+            lineWidth: 0.65
+          },
+          columnStyles: isPresentation ? {
+            0: { cellWidth: 93 },
+            1: { cellWidth: 60 },
+            2: { cellWidth: 95 },
+            3: { cellWidth: 77 },
+            4: { cellWidth: 55 },
+            5: { cellWidth: 55 },
+            6: { cellWidth: 55 },
+            7: { cellWidth: 55 },
+            8: { cellWidth: 55 },
+            9: { cellWidth: 65 },
+            10: { cellWidth: 65 },
+            11: { cellWidth: 65 }
+          } : undefined,
+          alternateRowStyles: {
+            fillColor: [0, 0, 0]
+          },
+          didDrawCell: function(data) {
+            if (data.section === 'body' && data.column.index === 0 && data.cell.raw && data.cell.raw.imageKey && pdfImages[data.cell.raw.imageKey]) {
+              const imgData = pdfImages[data.cell.raw.imageKey];
+              const pad = 2;
+              const cellX = data.cell.x + pad;
+              const cellY = data.cell.y + pad;
+              const cellW = data.cell.width - pad * 2;
+              const cellH = data.cell.height - pad * 2;
+              try {
+                doc.addImage(imgData, 'JPEG', cellX, cellY, cellW, cellH, undefined, 'FAST');
+              } catch {
+                // fallback
+              }
+            }
+          },
+          willDrawPage: function() {
+            doc.setFillColor(0, 0, 0);
+            doc.rect(0, 0, pageWidth, pageHeight, 'F');
+          }
+        });
+
+        currentY = (doc.lastAutoTable?.finalY || currentY) + 20;
+      }
+
+      // Now loop over every generated page to draw the top header and bottom footer
+      const pageCount = doc.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+
+        // Top Header
+        doc.setFillColor(255, 42, 133);
+        doc.roundedRect(margin, 12, 22, 22, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text('LRN', margin + 11, 26, { align: 'center' });
+
+        doc.setFontSize(11);
+        doc.setTextColor(255, 255, 255);
+        doc.text(state.active?.name || 'Price List', margin + 28, 23);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(140, 155, 175);
+        doc.text('LA ROSE NOIRE · FOB Subic Manila–Subic Port · Export Pricing', margin + 28, 32);
+
+        // Right side adjustments
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 51, 136);
+        const adjEntries = Object.entries(state.categoryAdjustments || {}).filter(([_, v]) => Number(v) !== 0);
+        const adjText = adjEntries.length > 0
+          ? adjEntries.map(([c, a]) => `${c}: ${Number(a) > 0 ? '+' : ''}${a}%`).join('  |  ')
+          : 'Baseline prices (0% adjustment)';
+        doc.text(adjText, pageWidth - margin, 23, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(120, 135, 155);
+        doc.text(`Exported ${new Date().toLocaleString()}`, pageWidth - margin, 32, { align: 'right' });
+
+        // Bottom Footer
+        doc.setFontSize(6.5);
+        doc.setTextColor(90, 105, 125);
+        doc.text('LA ROSE NOIRE · Commercial Price List · Strictly Confidential', margin, pageHeight - 12);
+        doc.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
+      }
+
+      const safeName = (state.active?.name || 'Price List').replace(/[\\/:*?"<>|]/g, '_');
+      doc.save(`${safeName} - updated.pdf`);
+      toast('PDF exported successfully.');
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+      toast('Failed to generate PDF: ' + (err.message || 'Unknown error'));
     }
-    doc.save(`${state.active.name} - updated.pdf`);
   }
 
   dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
@@ -606,9 +1033,14 @@
   $('#previewButton').addEventListener('click', async () => {
     const value = Number(dom.percentage.value);
     if (!Number.isFinite(value) || value < -100 || value > 10000) return toast('Enter a percentage from -100 to 10,000.');
-    state.adjustment = value;
+    const cat = state.category;
+    if (cat) {
+      state.categoryAdjustments[cat] = value;
+    } else {
+      state.adjustment = value;
+    }
     if (state.active) {
-      state.active.adjustment = value;
+      state.active.categoryAdjustments = { ...state.categoryAdjustments };
       state.active.isDraft = true;
       await setDraft(draftKey(), state.active);
       loadActive(state.active);
@@ -616,13 +1048,23 @@
       updateMetrics();
       renderTable();
     }
-    toast('Adjustment preview updated & draft saved.');
+    toast(`Adjustment for ${cat || 'products'} updated & draft saved.`);
   });
   dom.search.addEventListener('input', () => { state.search = dom.search.value; renderTable(); });
-  dom.category.addEventListener('change', () => { state.category = dom.category.value; renderTable(); });
+  dom.category.addEventListener('change', () => {
+    state.category = dom.category.value;
+    dom.percentage.value = getCategoryAdjustment(state.category);
+    const title = $('#adjustmentTitle');
+    const subtitle = document.querySelector('#adjustmentBar .edit-summary span');
+    if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
+    if (subtitle && state.category) subtitle.textContent = `Applies percentage only to ${state.category}.`;
+    updateMetrics();
+    renderTable();
+  });
   $('#saveButton').addEventListener('click', () => {
     if (!state.active) return;
     dom.versionNameInput.value = state.active.name || '';
+    renderSaveSummary();
     dom.saveDialog.showModal();
     requestAnimationFrame(() => {
       dom.versionNameInput.focus();
@@ -690,19 +1132,32 @@
     renderHistory();
   });
 
-  dom.discardDraftButton?.addEventListener('click', () => {
-    dom.discardDraftDialog.showModal();
+  dom.resetPricesButton?.addEventListener('click', () => {
+    dom.resetPricesDialog.showModal();
   });
-  dom.discardDraftForm?.addEventListener('submit', async event => {
+  dom.resetPricesForm?.addEventListener('submit', async event => {
     event.preventDefault();
     if (event.submitter && event.submitter.value === 'cancel') {
-      dom.discardDraftDialog.close();
+      dom.resetPricesDialog.close();
       return;
     }
-    dom.discardDraftDialog.close();
-    await removeDraft(draftKey());
-    await loadState(true);
-    toast('Draft discarded. Reverted to last saved price list.');
+    dom.resetPricesDialog.close();
+    state.adjustment = 0;
+    state.categoryAdjustments = {};
+    if (state.active) {
+      state.active.adjustment = 0;
+      state.active.categoryAdjustments = {};
+      state.active.isDraft = true;
+      await setDraft(draftKey(), state.active);
+    }
+    dom.percentage.value = 0;
+    const title = $('#adjustmentTitle');
+    const subtitle = document.querySelector('#adjustmentBar .edit-summary span');
+    if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
+    if (subtitle && state.category) subtitle.textContent = `Applies percentage only to ${state.category}.`;
+    updateMetrics();
+    renderTable();
+    toast('All price adjustments reset to original (0%). Uploaded file retained.');
   });
 
   if (state.user) loadState().catch(error => { setAppLoading(false); toast(error.message); });
