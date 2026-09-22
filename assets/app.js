@@ -225,16 +225,31 @@
   }
   function groupVisual(category, groupName, items) {
     const text = `${category} ${groupName}`.toLowerCase();
+    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/presentation.jpg" alt="${escapeHtml(groupName || 'Presentation Stands')}" loading="lazy">`;
+    }
     if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) {
       return `<img class="group-photo-img" src="assets/products/breads.jpg" alt="${escapeHtml(groupName || 'Breads')}" loading="lazy">`;
     }
     if (/cone/i.test(text)) {
       return `<img class="group-photo-img" src="assets/products/cones.jpg" alt="${escapeHtml(groupName || 'Cones')}" loading="lazy">`;
     }
-    if (/tart|shell/i.test(text)) {
+    if (/tart|shell|pie/i.test(text)) {
       return `<img class="group-photo-img" src="assets/products/tarts.jpg" alt="${escapeHtml(groupName || 'Tart Shells')}" loading="lazy">`;
     }
-    return `<div class="group-fallback-visual"><svg viewBox="0 0 100 100" class="group-fallback-svg" aria-hidden="true"><rect width="100" height="100" fill="#000"/><circle cx="50" cy="50" r="32" fill="rgba(255,42,133,0.15)" stroke="#ff2a85" stroke-width="2"/><text x="50" y="54" fill="#fff" font-size="11" font-weight="600" text-anchor="middle" font-family="sans-serif">${escapeHtml((groupName || category || 'Product').slice(0, 12))}</text></svg></div>`;
+    if (/chocolate|praline|bonbon|truffle/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/chocolates.jpg" alt="${escapeHtml(groupName || 'Chocolates')}" loading="lazy">`;
+    }
+    if (/macaron/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/macarons.jpg" alt="${escapeHtml(groupName || 'Macarons')}" loading="lazy">`;
+    }
+    if (/basket|spoon|savory|canape/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/savory.jpg" alt="${escapeHtml(groupName || 'Savory & Baskets')}" loading="lazy">`;
+    }
+    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) {
+      return `<img class="group-photo-img" src="assets/products/pastries.jpg" alt="${escapeHtml(groupName || 'Pastries')}" loading="lazy">`;
+    }
+    return `<img class="group-photo-img" src="assets/products/gourmet.jpg" alt="${escapeHtml(groupName || category || 'Gourmet Selection')}" loading="lazy">`;
   }
   function renderTable() {
     const visible = filteredRows();
@@ -626,12 +641,22 @@
     const urls = {
       breads: 'assets/products/breads.jpg',
       cones: 'assets/products/cones.jpg',
-      tarts: 'assets/products/tarts.jpg'
+      tarts: 'assets/products/tarts.jpg',
+      presentation: 'assets/products/presentation.jpg',
+      chocolates: 'assets/products/chocolates.jpg',
+      macarons: 'assets/products/macarons.jpg',
+      savory: 'assets/products/savory.jpg',
+      pastries: 'assets/products/pastries.jpg',
+      gourmet: 'assets/products/gourmet.jpg'
     };
     for (const [key, url] of Object.entries(urls)) {
       if (!pdfImageCache[key]) {
         try {
           const res = await fetch(url);
+          if (!res.ok) {
+            pdfImageCache[key] = null;
+            continue;
+          }
           const blob = await res.blob();
           pdfImageCache[key] = await new Promise(resolve => {
             const reader = new FileReader();
@@ -649,10 +674,15 @@
 
   function getPdfGroupImageKey(category, groupName) {
     const text = `${category} ${groupName}`.toLowerCase();
+    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) return 'presentation';
     if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'breads';
     if (/cone/i.test(text)) return 'cones';
-    if (/tart|shell/i.test(text)) return 'tarts';
-    return null;
+    if (/tart|shell|pie/i.test(text)) return 'tarts';
+    if (/chocolate|praline|bonbon|truffle/i.test(text)) return 'chocolates';
+    if (/macaron/i.test(text)) return 'macarons';
+    if (/basket|spoon|savory|canape/i.test(text)) return 'savory';
+    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) return 'pastries';
+    return 'gourmet';
   }
 
   async function exportPdf() {
