@@ -10,12 +10,28 @@ $user = current_user();
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#0a090b">
+    <meta name="theme-color" content="#f7cbd2">
     <title><?= htmlspecialchars(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260922-ui-v20">
+    <link rel="stylesheet" href="assets/app.css?v=20260924-history-ui-v3">
+    <script>
+    (function() {
+        try {
+            var hash = (location.hash || '').replace(/^#/, '').toLowerCase();
+            var panel = '';
+            if (hash === 'history' || hash === 'historypanel') panel = 'historyPanel';
+            else if (hash === 'settings' || hash === 'settingspanel') panel = 'settingsPanel';
+            else if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') panel = 'workspacePanel';
+            else panel = localStorage.getItem('pla_active_panel') || 'workspacePanel';
+
+            if (panel && panel !== 'workspacePanel') {
+                document.documentElement.setAttribute('data-initial-panel', panel);
+            }
+        } catch (e) {}
+    })();
+    </script>
 </head>
 <body class="<?= $user ? 'is-booting' : 'is-ready' ?>" data-authenticated="<?= $user ? 'true' : 'false' ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
@@ -48,6 +64,7 @@ $user = current_user();
         <nav class="top-nav" aria-label="Primary">
             <button class="nav-item active" data-panel="workspacePanel"><span aria-hidden="true">▦</span><strong>Prices</strong></button>
             <button class="nav-item" data-panel="historyPanel"><span aria-hidden="true">◷</span><strong>History</strong></button>
+            <button id="settingsNav" class="nav-item admin-only" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Settings</strong></button>
         </nav>
         <div class="user-menu"><span id="userName"></span><span id="roleBadge" class="badge"></span><button id="logoutButton" class="text-button">Sign out</button></div>
     </header>
@@ -105,37 +122,48 @@ $user = current_user();
             </section>
 
             <section id="historyPanel" class="panel" hidden>
-                <div class="page-heading">
+                <div class="page-heading history-heading">
                     <div class="heading-left">
-                        <p class="kicker">AUDIT TRAIL</p>
-                        <h1>Saved versions</h1>
-                        <p class="muted">Review when a price list was saved, by whom, and with which adjustment.</p>
+                        <p class="kicker history-kicker">AUDIT TRAIL</p>
+                        <h1 class="history-title">Saved versions</h1>
+                        <p class="muted history-subtitle">Review when a price list was saved, by whom, and with which adjustment.</p>
                     </div>
                     <div class="heading-actions">
-                        <button id="backToPricesBtn" class="button secondary">← Back to prices</button>
+                        <button id="backToPricesBtn" class="button secondary history-back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg><span>Back to prices</span></button>
                     </div>
                 </div>
 
-                <div class="table-tools history-tools">
-                    <div class="filter-group">
-                        <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="historySearchInput" type="search" placeholder="Search saved versions..."></label>
-                        <label class="select-control"><span>Adjustment</span><select id="historyAdjustmentSelect"><option value="">All adjustments</option><option value="positive">Positive (+)</option><option value="zero">Zero (0%)</option><option value="negative">Negative (-)</option></select></label>
+                <div class="history-card">
+                    <div class="history-tools">
+                        <div class="history-filter-group">
+                            <div class="history-search-control">
+                                <svg class="history-search-icon" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <input id="historySearchInput" type="search" placeholder="Search saved versions..." autocomplete="off" aria-label="Search saved versions">
+                            </div>
+                            <div class="history-select-control">
+                                <select id="historyAdjustmentSelect" aria-label="Filter by adjustment">
+                                    <option value="">All adjustments</option>
+                                    <option value="positive">Positive (+)</option>
+                                    <option value="zero">Zero (0%)</option>
+                                    <option value="negative">Negative (-)</option>
+                                </select>
+                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                        </div>
+                        <div class="history-tools-meta">
+                            <span id="historyCount" class="history-count">0 versions</span>
+                        </div>
                     </div>
-                    <div class="actions">
-                        <span id="historyCount" class="history-count">0 versions</span>
-                    </div>
-                </div>
 
-                <div class="data-panel history-data-panel">
-                    <div class="table-frame">
+                    <div class="history-table-frame">
                         <table id="historyTable">
                             <colgroup>
-                                <col style="width: 12%;">
-                                <col style="width: 32%;">
-                                <col style="width: 16%;">
-                                <col style="width: 16%;">
-                                <col style="width: 12%;">
-                                <col style="width: 12%;">
+                                <col style="width: 11%;">
+                                <col style="width: 29.5%;">
+                                <col style="width: 12.5%;">
+                                <col style="width: 16.5%;">
+                                <col style="width: 19%;">
+                                <col style="width: 11.5%;">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -153,12 +181,12 @@ $user = current_user();
                         <div id="historyEmpty" class="history-empty-card" hidden>
                             <div class="empty-archive-icon">
                                 <svg viewBox="0 0 48 48" width="56" height="56" fill="none" stroke="currentColor" aria-hidden="true">
-                                    <line x1="24" y1="6" x2="24" y2="11" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
-                                    <line x1="14" y1="10" x2="17" y2="13.5" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
-                                    <line x1="34" y1="10" x2="31" y2="13.5" stroke="#ff2a85" stroke-width="2.2" stroke-linecap="round"/>
-                                    <rect x="9" y="17" width="30" height="7" rx="3.5" stroke="#68778b" stroke-width="2.2"/>
-                                    <path d="M12 24 L14 37 C14.3 39 15.8 40 17.8 40 L30.2 40 C32.2 40 33.7 39 34 37 L36 24" stroke="#68778b" stroke-width="2.2" stroke-linejoin="round"/>
-                                    <line x1="21" y1="30" x2="27" y2="30" stroke="#68778b" stroke-width="2.2" stroke-linecap="round"/>
+                                    <line x1="24" y1="6" x2="24" y2="11" stroke="#dc7e8a" stroke-width="2.2" stroke-linecap="round"/>
+                                    <line x1="14" y1="10" x2="17" y2="13.5" stroke="#dc7e8a" stroke-width="2.2" stroke-linecap="round"/>
+                                    <line x1="34" y1="10" x2="31" y2="13.5" stroke="#dc7e8a" stroke-width="2.2" stroke-linecap="round"/>
+                                    <rect x="9" y="17" width="30" height="7" rx="3.5" stroke="#716267" stroke-width="2.2"/>
+                                    <path d="M12 24 L14 37 C14.3 39 15.8 40 17.8 40 L30.2 40 C32.2 40 33.7 39 34 37 L36 24" stroke="#716267" stroke-width="2.2" stroke-linejoin="round"/>
+                                    <line x1="21" y1="30" x2="27" y2="30" stroke="#716267" stroke-width="2.2" stroke-linecap="round"/>
                                 </svg>
                             </div>
                             <h2>No saved versions yet</h2>
@@ -166,7 +194,54 @@ $user = current_user();
                             <button id="emptyGoToPricesBtn" class="button primary">Go to prices →</button>
                         </div>
                     </div>
+
+                    <div id="historyFooter" class="history-footer">
+                        <span id="historyShowingLabel" class="history-showing-text">Showing 0 of 0 versions</span>
+                        <div class="history-pagination">
+                            <button id="historyPrevBtn" class="history-page-nav-btn" aria-label="Previous page" title="Previous page" disabled><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+                            <span id="historyPageLabel" class="history-page-info">Page 1 of 1</span>
+                            <button id="historyNextBtn" class="history-page-nav-btn" aria-label="Next page" title="Next page" disabled><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+                        </div>
+                    </div>
                 </div>
+
+                <dialog id="historyChangesDialog" class="history-details-dialog">
+                    <form method="dialog" class="dialog-card history-changes-card">
+                        <div class="dialog-heading">
+                            <div>
+                                <p class="kicker">ADJUSTMENT BREAKDOWN</p>
+                                <h2 id="historyChangesTitle">Version adjustments</h2>
+                            </div>
+                            <button value="cancel" class="icon-button" aria-label="Close">×</button>
+                        </div>
+                        <p id="historyChangesMeta" class="muted"></p>
+                        <div id="historyChangesContent" class="history-changes-content"></div>
+                        <div class="dialog-actions">
+                            <button value="cancel" class="button secondary">Close</button>
+                        </div>
+                    </form>
+                </dialog>
+            </section>
+
+            <section id="settingsPanel" class="panel" hidden>
+                <div class="page-heading settings-heading">
+                    <div class="heading-left">
+                        <p class="kicker">Admin settings</p>
+                        <h1>Product type images</h1>
+                        <p class="muted">Choose the image shown for each product type inside a category. Changes apply to the table and PDF exports.</p>
+                    </div>
+                    <div class="heading-actions"><button id="settingsBackButton" class="button secondary">Back to prices</button></div>
+                </div>
+                <div class="image-settings-card">
+                    <div class="image-settings-toolbar">
+                        <label class="select-control settings-category-control"><span>Category</span><select id="imageCategoryFilter" aria-label="Filter image settings by category"></select></label>
+                        <label class="search settings-search"><span>Search product types</span><input id="imageSearchInput" type="search" placeholder="Search product types..."></label>
+                        <span id="imageSettingsCount" class="history-count"></span>
+                    </div>
+                    <div id="imageSettingsList" class="image-settings-list" aria-live="polite"></div>
+                    <div id="imageSettingsEmpty" class="settings-empty" hidden><h2>No product types available</h2><p>Upload a workbook first. Its categories and product groups will appear here.</p></div>
+                </div>
+                <input id="groupImageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
             </section>
         </main>
     </div>
@@ -215,11 +290,19 @@ $user = current_user();
     </form>
 </dialog>
 
+<dialog id="deleteImageDialog">
+    <form method="dialog" class="dialog-card" id="deleteImageForm">
+        <div class="dialog-heading"><div><p class="kicker">Restore default</p><h2>Remove custom image?</h2></div><button value="cancel" class="icon-button" aria-label="Close">&times;</button></div>
+        <p>The custom image for <strong id="deleteImageName"></strong> will be removed and the built-in category image will be used again.</p>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDeleteImage" value="default" class="button danger">Restore default</button></div>
+    </form>
+</dialog>
+
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => $_SESSION['csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260922-ui-v20"></script>
+<script src="assets/app.js?v=20260924-history-ui-v3"></script>
 </body>
 </html>

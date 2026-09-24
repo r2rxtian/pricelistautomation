@@ -15,7 +15,7 @@ The first visit creates `storage/app.json`. Imported workbook data is parsed in 
 
 ## SQL Server
 
-Production persistence supports Microsoft SQL Server through `pdo_sqlsrv`. Copy `config.local.example.php` to `config.local.php`, enter the local credentials, and reload the application. The ignored local file prevents passwords from being committed. The app creates the idempotent `dbo.PLA_ACD_Versions`, `dbo.PLA_ACD_ProductImages`, and `dbo.PLA_ACD_AuditLog` tables automatically. The same DDL is available in `database/schema.sql` for review or manual deployment. Without local database configuration, the development JSON store remains active.
+Production persistence supports Microsoft SQL Server through `pdo_sqlsrv`. Copy `config.local.example.php` to `config.local.php`, enter the local credentials, and reload the application. The ignored local file prevents passwords from being committed. The app creates the idempotent `dbo.PLA_ACD_Versions`, `dbo.PLA_ACD_ProductImages`, `dbo.PLA_ACD_GroupImages`, and `dbo.PLA_ACD_AuditLog` tables automatically. The same DDL is available in `database/schema.sql` for review or manual deployment. Without local database configuration, the development JSON store remains active.
 
 ## Workbook behavior
 
@@ -24,7 +24,7 @@ Production persistence supports Microsoft SQL Server through `pdo_sqlsrv`. Copy 
 - It consolidates worksheet, code, description, packing details, price per piece, price per box, and MOQ total.
 - Price per piece and price per box are selected automatically; derived totals and non-price product details are never adjusted.
 - The workspace can be filtered by worksheet category and shown in 20, 40, 80, or 160 rows per page.
-- Each product has a compact image placeholder keyed to its description; these slots can be replaced by final product photography later.
+- Each product group uses category-aware artwork, and administrators can replace it with final photography from Settings.
 - Category tables retain all workbook fields, including expiry, weight, pieces per box, box size, container pallet quantities, presentation-stand weights, MOQ, and total MOQ price.
 - Workbook subsection titles such as `Mini Cones With Coating` and `Vegan Mini Cones` are preserved as product-group dividers in the table.
 - A `Full table` view combines every applicable workbook column in one horizontally scrollable grid, while the sidebar remains fixed during expanded vertical scrolling.
@@ -34,4 +34,8 @@ Production persistence supports Microsoft SQL Server through `pdo_sqlsrv`. Copy 
 
 ## Design brief
 
-Focused dark operations interface using the requested black, pink, and white theme. Visual variance 4/10, motion 2/10, density 7/10. Native CSS is used for a fast, accessible data-table workflow.
+Focused operations interface using a soft blush canvas, warm ivory panels, near-black actions, rose-tinted table surfaces, and dark typography. Playfair Display is reserved for important headings while Inter keeps dense controls and data readable. The production palette is documented and can be explored in `scratch.html`. Visual variance 4/10, motion 2/10, density 7/10. Native CSS is used for a fast data-table workflow.
+
+## Product type images
+
+Administrators can open **Settings** in the main navigation and assign a JPG, PNG, or WebP image (up to 6 MB) to each product type within a category. An override is shared by the live price table and PDF exports. Restoring the default removes only the custom image and returns that product type to its built-in category artwork.

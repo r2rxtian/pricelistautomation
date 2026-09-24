@@ -70,7 +70,7 @@ function can_edit(array $user): bool
 
 function default_store(): array
 {
-    return ['active' => null, 'versions' => []];
+    return ['active' => null, 'versions' => [], 'productImages' => []];
 }
 
 function read_store(): array

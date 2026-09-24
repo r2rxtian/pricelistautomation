@@ -48,6 +48,16 @@ function ensure_database_schema(PDO $connection): void
             updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_ImageUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
+        "IF OBJECT_ID(N'dbo.PLA_ACD_GroupImages', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ACD_GroupImages (
+            image_key varchar(64) NOT NULL PRIMARY KEY,
+            category_name nvarchar(120) NOT NULL,
+            group_name nvarchar(300) NOT NULL,
+            image_path nvarchar(500) NOT NULL,
+            alt_text nvarchar(250) NULL,
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_GroupImageUpdated DEFAULT SYSUTCDATETIME(),
+            updated_by nvarchar(180) NOT NULL
+         )",
         "IF OBJECT_ID(N'dbo.PLA_ACD_AuditLog', N'U') IS NULL
          CREATE TABLE dbo.PLA_ACD_AuditLog (
             audit_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
@@ -71,7 +81,87 @@ function database_read_store(): array
         $version = json_decode($record['data_json'], true);
         if (is_array($version)) $versions[] = $version;
     }
-    return ['active' => $versions ? $versions[array_key_last($versions)] : null, 'versions' => $versions];
+    return [
+        'active' => $versions ? $versions[array_key_last($versions)] : null,
+        'versions' => $versions,
+        'productImages' => database_read_group_images(),
+    ];
+}
+
+function database_read_group_images(): array
+{
+    $query = database_connection()->query(
+        'SELECT image_key, category_name, group_name, image_path, alt_text, updated_at, updated_by
+         FROM dbo.PLA_ACD_GroupImages
+         ORDER BY category_name, group_name'
+    );
+    return array_map(
+        static fn(array $record): array => [
+            'key' => (string) $record['image_key'],
+            'category' => (string) $record['category_name'],
+            'groupName' => (string) $record['group_name'],
+            'imagePath' => (string) $record['image_path'],
+            'altText' => (string) ($record['alt_text'] ?? ''),
+            'updatedAt' => $record['updated_at'] instanceof DateTimeInterface
+                ? $record['updated_at']->format(DateTimeInterface::ATOM)
+                : (string) $record['updated_at'],
+            'updatedBy' => (string) $record['updated_by'],
+        ],
+        $query->fetchAll()
+    );
+}
+
+function database_upsert_group_image(array $image): ?array
+{
+    $connection = database_connection();
+    $existing = $connection->prepare(
+        'SELECT image_key, category_name, group_name, image_path, alt_text, updated_at, updated_by
+         FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?'
+    );
+    $existing->execute([$image['key']]);
+    $previous = $existing->fetch() ?: null;
+
+    $statement = $connection->prepare(
+        'MERGE dbo.PLA_ACD_GroupImages AS target
+         USING (SELECT ? AS image_key) AS source
+         ON target.image_key = source.image_key
+         WHEN MATCHED THEN UPDATE SET
+            category_name = ?, group_name = ?, image_path = ?, alt_text = ?,
+            updated_at = SYSUTCDATETIME(), updated_by = ?
+         WHEN NOT MATCHED THEN INSERT
+            (image_key, category_name, group_name, image_path, alt_text, updated_at, updated_by)
+            VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?);'
+    );
+    $statement->execute([
+        $image['key'],
+        $image['category'], $image['groupName'], $image['imagePath'], $image['altText'], $image['updatedBy'],
+        $image['key'], $image['category'], $image['groupName'], $image['imagePath'], $image['altText'], $image['updatedBy'],
+    ]);
+    $audit = $connection->prepare(
+        'INSERT INTO dbo.PLA_ACD_AuditLog (action_name, version_id, actor, details) VALUES (?, NULL, ?, ?)'
+    );
+    $audit->execute(['group_image_saved', $image['updatedBy'], $image['category'] . ' / ' . $image['groupName']]);
+    return $previous;
+}
+
+function database_delete_group_image(string $key, string $actor): ?array
+{
+    $connection = database_connection();
+    $select = $connection->prepare(
+        'SELECT image_key, category_name, group_name, image_path, alt_text, updated_at, updated_by
+         FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?'
+    );
+    $select->execute([$key]);
+    $record = $select->fetch() ?: null;
+    if (!$record) return null;
+
+    $delete = $connection->prepare('DELETE FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?');
+    $delete->execute([$key]);
+    $audit = $connection->prepare(
+        'INSERT INTO dbo.PLA_ACD_AuditLog (action_name, version_id, actor, details) VALUES (?, NULL, ?, ?)'
+    );
+    $audit->execute(['group_image_deleted', $actor, $record['category_name'] . ' / ' . $record['group_name']]);
+    return $record;
 }
 
 function database_write_store(array $store): void

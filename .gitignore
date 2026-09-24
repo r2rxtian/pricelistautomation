@@ -1,4 +1,5 @@
 /storage/app.json
 /storage/*.tmp
 /storage/sessions/
+/storage/product-images/
 /config.local.php

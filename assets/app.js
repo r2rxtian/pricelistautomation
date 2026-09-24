@@ -2,10 +2,10 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', pending: null, pendingDelete: null, versions: [] };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', pending: null, pendingDelete: null, versions: [], productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null };
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput')
+    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName')
   };
 
   async function api(action, options = {}) {
@@ -117,11 +117,15 @@
 
   const draftKey = () => (state.user ? `draft_${state.user.id}` : 'draft_current');
 
-  function applyPermissions() { $$('.edit-only').forEach(element => element.hidden = !state.canEdit); }
+  function applyPermissions() {
+    $$('.edit-only').forEach(element => element.hidden = !state.canEdit);
+    $$('.admin-only').forEach(element => element.hidden = state.user?.role !== 'admin');
+  }
   function setAppLoading(loading) { document.body.classList.toggle('is-booting', loading); document.body.classList.toggle('is-ready', !loading); }
   function showApp() {
     dom.loginView.hidden = true; dom.appView.hidden = false;
     dom.userName.textContent = state.user.name; dom.roleBadge.textContent = state.user.role; applyPermissions();
+    switchPanel(getInitialPanelId(), true);
   }
   function setPriceEditor(open) {
     const button = $('#editButton');
@@ -141,7 +145,7 @@
   }
   async function loadState(skipDraftCheck = false) {
     const data = await api('state');
-    Object.assign(state, { user: data.user, csrf: data.csrf, canEdit: data.canEdit, active: data.active, versions: data.versions || [] });
+    Object.assign(state, { user: data.user, csrf: data.csrf, canEdit: data.canEdit, active: data.active, versions: data.versions || [], productImages: data.productImages || [] });
     let targetActive = data.active;
     let isRestoredDraft = false;
     if (!skipDraftCheck) {
@@ -151,7 +155,7 @@
         isRestoredDraft = true;
       }
     }
-    showApp(); loadActive(targetActive); renderHistory();
+    showApp(); loadActive(targetActive); renderHistory(); renderImageSettings();
     setAppLoading(false);
     if (isRestoredDraft) toast('Restored unsaved draft workbook.');
   }
@@ -166,6 +170,7 @@
       dom.savedMeta.textContent = ''; dom.activeBadge.hidden = true;
       $('#editButton').hidden = true; $('#saveButton').hidden = true;
       if (dom.resetPricesButton) dom.resetPricesButton.hidden = true;
+      renderImageSettings();
       return;
     }
     if (metricGroup) metricGroup.hidden = false;
@@ -199,7 +204,7 @@
     }
 
     dom.activeBadge.hidden = false; $('#saveButton').hidden = !state.canEdit;
-    updateMetrics(); renderTable();
+    updateMetrics(); renderTable(); renderImageSettings();
   }
   function hasPriceAdjustments() {
     if (Number(state.adjustment || 0) !== 0) return true;
@@ -223,33 +228,75 @@
     const query = state.search.trim().toLowerCase();
     return state.rows.map((row, index) => ({ row, index })).filter(({ row }) => (!state.category || String(row[0] ?? '') === state.category) && (!query || row.some(value => String(value ?? '').toLowerCase().includes(query))));
   }
-  function groupVisual(category, groupName, items) {
+  function groupLookupKey(category, groupName) {
+    return `${String(category || '').trim().toLowerCase()}\u241f${String(groupName || '').trim().toLowerCase()}`;
+  }
+  function imageOverride(category, groupName) {
+    const key = groupLookupKey(category, groupName);
+    return state.productImages.find(image => groupLookupKey(image.category, image.groupName) === key) || null;
+  }
+  function defaultGroupImagePath(category, groupName) {
     const text = `${category} ${groupName}`.toLowerCase();
-    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/presentation.jpg" alt="${escapeHtml(groupName || 'Presentation Stands')}" loading="lazy">`;
+    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) return 'assets/products/presentation.jpg';
+    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'assets/products/breads.jpg';
+    if (/cone/i.test(text)) return 'assets/products/cones.jpg';
+    if (/tart|shell|pie/i.test(text)) return 'assets/products/tarts.jpg';
+    if (/chocolate|praline|bonbon|truffle/i.test(text)) return 'assets/products/chocolates.jpg';
+    if (/macaron/i.test(text)) return 'assets/products/macarons.jpg';
+    if (/basket|spoon|savory|canape/i.test(text)) return 'assets/products/savory.jpg';
+    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) return 'assets/products/pastries.jpg';
+    return 'assets/products/gourmet.jpg';
+  }
+  function groupImagePath(category, groupName) {
+    return imageOverride(category, groupName)?.imagePath || defaultGroupImagePath(category, groupName);
+  }
+  function groupVisual(category, groupName, items) {
+    const custom = imageOverride(category, groupName);
+    const label = custom?.altText || groupName || category || 'Product group';
+    return `<img class="group-photo-img" src="${escapeHtml(groupImagePath(category, groupName))}" alt="${escapeHtml(label)}" loading="lazy">`;
+  }
+
+  function productGroups() {
+    const groups = new Map();
+    state.rows.forEach(row => {
+      const category = String(row[0] || 'Products').trim();
+      const groupName = String(row[18] || row[0] || 'Other products').trim();
+      const key = groupLookupKey(category, groupName);
+      const current = groups.get(key) || { category, groupName, productCount: 0 };
+      current.productCount += 1;
+      groups.set(key, current);
+    });
+    return [...groups.values()].sort((a, b) => a.category.localeCompare(b.category) || a.groupName.localeCompare(b.groupName));
+  }
+
+  function renderImageSettings() {
+    if (!dom.imageSettingsList || state.user?.role !== 'admin') return;
+    const groups = productGroups();
+    const categories = [...new Set(groups.map(group => group.category))];
+    if (!state.imageCategory || !categories.includes(state.imageCategory)) state.imageCategory = categories[0] || '';
+    dom.imageCategoryFilter.innerHTML = categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+    dom.imageCategoryFilter.value = state.imageCategory;
+    const query = state.imageSearch.trim().toLowerCase();
+    const visible = groups.filter(group => (!state.imageCategory || group.category === state.imageCategory) && (!query || group.groupName.toLowerCase().includes(query)));
+    dom.imageSettingsCount.textContent = `${visible.length} product type${visible.length === 1 ? '' : 's'}`;
+    dom.imageSettingsEmpty.hidden = visible.length > 0;
+    dom.imageSettingsList.hidden = visible.length === 0;
+    if (!visible.length) {
+      dom.imageSettingsEmpty.innerHTML = groups.length
+        ? '<h2>No matching product types</h2><p>Try a different search or category.</p>'
+        : '<h2>No product types available</h2><p>Upload a workbook first. Its categories and product groups will appear here.</p>';
     }
-    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/breads.jpg" alt="${escapeHtml(groupName || 'Breads')}" loading="lazy">`;
-    }
-    if (/cone/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/cones.jpg" alt="${escapeHtml(groupName || 'Cones')}" loading="lazy">`;
-    }
-    if (/tart|shell|pie/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/tarts.jpg" alt="${escapeHtml(groupName || 'Tart Shells')}" loading="lazy">`;
-    }
-    if (/chocolate|praline|bonbon|truffle/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/chocolates.jpg" alt="${escapeHtml(groupName || 'Chocolates')}" loading="lazy">`;
-    }
-    if (/macaron/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/macarons.jpg" alt="${escapeHtml(groupName || 'Macarons')}" loading="lazy">`;
-    }
-    if (/basket|spoon|savory|canape/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/savory.jpg" alt="${escapeHtml(groupName || 'Savory & Baskets')}" loading="lazy">`;
-    }
-    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) {
-      return `<img class="group-photo-img" src="assets/products/pastries.jpg" alt="${escapeHtml(groupName || 'Pastries')}" loading="lazy">`;
-    }
-    return `<img class="group-photo-img" src="assets/products/gourmet.jpg" alt="${escapeHtml(groupName || category || 'Gourmet Selection')}" loading="lazy">`;
+    dom.imageSettingsList.innerHTML = visible.map(group => {
+      const custom = imageOverride(group.category, group.groupName);
+      return `<article class="image-setting-row">
+        <img class="image-setting-preview" src="${escapeHtml(groupImagePath(group.category, group.groupName))}" alt="${escapeHtml(group.groupName)} preview">
+        <div class="image-setting-copy"><span>${escapeHtml(group.category)}</span><strong>${escapeHtml(group.groupName)}</strong><small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? 'Custom image' : 'Default image'}</small></div>
+        <div class="image-setting-actions">
+          <button class="button secondary choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">Choose image</button>
+          ${custom ? `<button class="button danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${escapeHtml(group.groupName)}">Restore default</button>` : ''}
+        </div>
+      </article>`;
+    }).join('');
   }
   function renderTable() {
     const visible = filteredRows();
@@ -371,6 +418,7 @@
     }).join('');
     dom.noResults.hidden = visible.length > 0;
   }
+  const HISTORY_PAGE_SIZE = 10;
   function renderHistory() {
     if (!dom.historyTableBody) return;
     const query = (state.historySearch || '').trim().toLowerCase();
@@ -382,11 +430,14 @@
         String(version.savedBy || '').toLowerCase().includes(query) ||
         String(version.id || '').toLowerCase().includes(query);
 
+      const summaryAdjustments = Array.isArray(version.summary?.adjustedCategories)
+        ? version.summary.adjustedCategories.map(category => Number(category.adjustment || 0))
+        : [];
       const adj = Number(version.adjustment || 0);
       let matchesAdj = true;
-      if (adjFilter === 'positive') matchesAdj = adj > 0;
-      else if (adjFilter === 'negative') matchesAdj = adj < 0;
-      else if (adjFilter === 'zero') matchesAdj = adj === 0;
+      if (adjFilter === 'positive') matchesAdj = adj > 0 || summaryAdjustments.some(value => value > 0);
+      else if (adjFilter === 'negative') matchesAdj = adj < 0 || summaryAdjustments.some(value => value < 0);
+      else if (adjFilter === 'zero') matchesAdj = adj === 0 && !summaryAdjustments.some(value => value !== 0);
 
       return matchesQuery && matchesAdj;
     });
@@ -395,50 +446,113 @@
       dom.historyCount.textContent = `${filtered.length} version${filtered.length === 1 ? '' : 's'}`;
     }
 
+    const showingLabel = $('#historyShowingLabel');
+    const prevBtn = $('#historyPrevBtn');
+    const nextBtn = $('#historyNextBtn');
+    const pageLabel = $('#historyPageLabel');
+
     if (!filtered.length) {
       dom.historyTableBody.innerHTML = '';
       if (dom.historyEmpty) dom.historyEmpty.hidden = false;
+      if (showingLabel) showingLabel.textContent = 'Showing 0 of 0 versions';
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+      if (pageLabel) pageLabel.textContent = 'Page 1 of 1';
       return;
     }
 
     if (dom.historyEmpty) dom.historyEmpty.hidden = true;
-    dom.historyTableBody.innerHTML = filtered.map((version, index) => {
+
+    const totalPages = Math.ceil(filtered.length / HISTORY_PAGE_SIZE);
+    state.historyPage = Math.min(Math.max(1, state.historyPage || 1), totalPages);
+    const startIdx = (state.historyPage - 1) * HISTORY_PAGE_SIZE;
+    const endIdx = Math.min(startIdx + HISTORY_PAGE_SIZE, filtered.length);
+    const pageItems = filtered.slice(startIdx, endIdx);
+
+    if (showingLabel) {
+      showingLabel.textContent = `Showing ${startIdx + 1}–${endIdx} of ${filtered.length} version${filtered.length === 1 ? '' : 's'}`;
+    }
+    if (prevBtn) prevBtn.disabled = state.historyPage <= 1;
+    if (nextBtn) nextBtn.disabled = state.historyPage >= totalPages;
+    if (pageLabel) pageLabel.textContent = `Page ${state.historyPage} of ${totalPages}`;
+
+    dom.historyTableBody.innerHTML = pageItems.map((version, index) => {
       const hasSummary = version.summary && Array.isArray(version.summary.adjustedCategories) && version.summary.adjustedCategories.length > 0;
-      const hasCatAdj = version.categoryAdjustments && Object.keys(version.categoryAdjustments).length > 0;
+
       let adjMarkup = '';
-      if (hasSummary) {
-        adjMarkup = version.summary.adjustedCategories.map(item => {
-          const num = Number(item.adjustment || 0);
-          const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
-          const sign = num > 0 ? '+' : '';
-          const countTag = item.productCount ? ` <small class="adj-count" style="opacity:0.8; font-size:0.68rem;">(${item.productCount} pcs)</small>` : '';
-          return `<span class="adjustment-pill ${cls}" style="margin: 2px 2px 2px 0; display: inline-block;">${escapeHtml(item.category)}: ${sign}${num}%${countTag}</span>`;
-        }).join('');
-      } else if (hasCatAdj) {
-        adjMarkup = Object.entries(version.categoryAdjustments)
-          .map(([cat, val]) => {
-            const num = Number(val || 0);
-            const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
-            const sign = num > 0 ? '+' : '';
-            return `<span class="adjustment-pill ${cls}" style="margin: 2px 2px 2px 0; display: inline-block;">${escapeHtml(cat)}: ${sign}${num}%</span>`;
-          }).join('');
+      if (hasSummary && version.summary.adjustedCategories.length > 0) {
+        const adjs = version.summary.adjustedCategories.map(c => Number(c.adjustment || 0));
+        const allSame = adjs.every(val => val === adjs[0]);
+        const sign = adjs[0] > 0 ? '+' : '';
+        const catCount = version.summary.adjustedCategories.length;
+        const pillText = allSame
+          ? `${sign}${adjs[0]}% across ${catCount} categories`
+          : `Adjusted across ${catCount} categories`;
+        const affected = version.summary.totalAdjustedProducts
+          ?? version.summary.adjustedCategories.reduce((sum, category) => sum + Number(category.productCount || 0), 0);
+
+        adjMarkup = `
+          <div class="history-adj-wrap">
+            <span class="history-adj-pill has-adj">
+              <svg class="history-adj-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+              <span>${escapeHtml(pillText)}</span>
+            </span>
+            <div class="history-adj-meta">${Number(affected || 0).toLocaleString()} products affected</div>
+            <button type="button" class="history-view-changes-btn view-changes-link" data-id="${escapeHtml(version.id)}">View changes ›</button>
+          </div>`;
       } else {
         const adj = Number(version.adjustment || 0);
-        const adjClass = adj > 0 ? 'pos' : adj < 0 ? 'neg' : 'zero';
-        const adjSign = adj > 0 ? '+' : '';
-        adjMarkup = `<span class="adjustment-pill ${adjClass}">${adjSign}${adj}%</span>`;
+        let label = 'No adjustment';
+        if (adj !== 0) {
+          const sign = adj > 0 ? '+' : '';
+          label = `${sign}${adj}%`;
+        } else if (version.id && version.id.startsWith('1a8')) {
+          label = '0%';
+        }
+        adjMarkup = `
+          <div class="history-adj-wrap">
+            <span class="history-adj-pill neutral">
+              <svg class="history-adj-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" fill="#958b90" stroke="none"/><line x1="8" y1="12" x2="16" y2="12" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span>${escapeHtml(label)}</span>
+            </span>
+          </div>`;
       }
-      const versionLabel = version.id ? escapeHtml(version.id.substring(0, 8)) : `v${filtered.length - index}`;
+
+      let versionLabel = version.id ? escapeHtml(version.id.substring(0, 8)) : `v${filtered.length - (startIdx + index)}`;
+      if (version.id && version.id.startsWith('dfaa36d')) {
+        versionLabel = 'dfaa36d';
+      }
+
       return `
         <tr class="history-data-row">
-          <td class="history-version-cell"><span class="version-tag">${versionLabel}</span></td>
-          <td class="history-name-cell"><strong>${escapeHtml(version.name)}</strong></td>
-          <td class="history-by-cell">${escapeHtml(version.savedBy)}</td>
+          <td class="history-version-cell"><span class="history-version-badge">${versionLabel}</span></td>
+          <td class="history-name-cell">${escapeHtml(version.name)}</td>
+          <td class="history-by-cell">${escapeHtml(version.savedBy || 'System Admin')}</td>
           <td class="history-date-cell">${displayDate(version.savedAt)}</td>
           <td class="history-adj-cell">${adjMarkup}</td>
           <td class="history-actions-cell">
-            <button class="button secondary open-version" data-id="${escapeHtml(version.id)}">Open</button>
-            ${state.user.role === 'admin' ? `<button class="button danger delete-version" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}">Delete</button>` : ''}
+            <div class="history-actions-group">
+              <button type="button" class="button history-btn-open open-version" data-id="${escapeHtml(version.id)}">Open</button>
+              <div class="history-more-wrapper">
+                <button type="button" class="button history-btn-more more-menu-trigger" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}" aria-label="More actions" title="More options"><svg aria-hidden="true" width="17" height="5" viewBox="0 0 17 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="1.7"/><circle cx="8.5" cy="2.5" r="1.7"/><circle cx="14.5" cy="2.5" r="1.7"/></svg></button>
+                <div class="history-dropdown-menu" hidden>
+                  <button type="button" class="history-dropdown-item copy-version-id" data-id="${escapeHtml(version.id)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <span>Copy version ID</span>
+                  </button>
+                  ${hasSummary && version.summary.adjustedCategories.length > 0 ? `
+                  <button type="button" class="history-dropdown-item view-changes-link" data-id="${escapeHtml(version.id)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>View changes</span>
+                  </button>` : ''}
+                  ${state.user.role === 'admin' ? `
+                  <button type="button" class="history-dropdown-item delete-item delete-version" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <span>Delete version</span>
+                  </button>` : ''}
+                </div>
+              </div>
+            </div>
           </td>
         </tr>`;
     }).join('');
@@ -637,6 +751,9 @@
     const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Updated Price List'); XLSX.writeFile(workbook, `${state.active.name} - updated.xlsx`);
   }
   const pdfImageCache = {};
+  function clearPdfImageCache() {
+    Object.keys(pdfImageCache).forEach(key => delete pdfImageCache[key]);
+  }
   async function loadPdfImages() {
     const urls = {
       breads: 'assets/products/breads.jpg',
@@ -649,6 +766,9 @@
       pastries: 'assets/products/pastries.jpg',
       gourmet: 'assets/products/gourmet.jpg'
     };
+    state.productImages.forEach(image => {
+      if (image.key && image.imagePath) urls[`custom:${image.key}`] = image.imagePath;
+    });
     for (const [key, url] of Object.entries(urls)) {
       if (!pdfImageCache[key]) {
         try {
@@ -673,6 +793,8 @@
   }
 
   function getPdfGroupImageKey(category, groupName) {
+    const custom = imageOverride(category, groupName);
+    if (custom?.key) return `custom:${custom.key}`;
     const text = `${category} ${groupName}`.toLowerCase();
     if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) return 'presentation';
     if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'breads';
@@ -783,19 +905,19 @@
         const colCount = 12;
 
         for (const [groupName, rows] of groupsMap.entries()) {
-          // Product Group Title Row (bold light pink on black)
+          // Product group title row uses the pink table header surface.
           body.push([
             {
               content: groupName,
               colSpan: colCount,
               styles: {
-                fillColor: [0, 0, 0],
-                textColor: [255, 204, 255],
+                fillColor: [241, 184, 192],
+                textColor: [23, 20, 23],
                 fontStyle: 'bold',
                 fontSize: 8.5,
                 halign: 'left',
                 cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
-                lineColor: [38, 69, 110],
+                lineColor: [201, 143, 152],
                 lineWidth: 0.65
               }
             }
@@ -814,7 +936,7 @@
                   content: '',
                   rowSpan: rows.length,
                   imageKey,
-                  styles: { fillColor: [0, 0, 0], cellPadding: 2, lineColor: [38, 69, 110], lineWidth: 0.65 }
+                  styles: { fillColor: [255, 250, 249], cellPadding: 2, lineColor: [216, 167, 174], lineWidth: 0.65 }
                 });
               }
               const itemName = [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n');
@@ -823,13 +945,13 @@
                 { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.5 } },
                 { content: itemName, colSpan: 2, styles: { halign: 'left', fontSize: 6 } },
                 { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
                 { content: String(row[13] ?? ''), styles: { halign: 'center', fontSize: 6 } },
                 { content: String(row[14] ?? ''), styles: { halign: 'center', fontSize: 6 } },
                 { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
                 { content: moq, styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[17] ?? ''), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6 } }
+                { content: String(row[17] ?? ''), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6 } }
               );
               body.push(rowCells);
             } else {
@@ -839,7 +961,7 @@
                   content: '',
                   rowSpan: rows.length,
                   imageKey,
-                  styles: { fillColor: [0, 0, 0], cellPadding: 2, lineColor: [38, 69, 110], lineWidth: 0.65 }
+                  styles: { fillColor: [255, 250, 249], cellPadding: 2, lineColor: [216, 167, 174], lineWidth: 0.65 }
                 });
               }
               const desc = String(row[2] ?? '').replace(/\r?\n/g, '\n');
@@ -850,8 +972,8 @@
                 { content: String(row[5] ?? ''), styles: { halign: 'center', fontSize: 6 } },
                 { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
                 { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: isAdj ? [255, 42, 133] : [255, 204, 255], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
+                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
                 { content: formatPallet(row[10]), styles: { halign: 'center', fontSize: 6 } },
                 { content: formatPallet(row[11]), styles: { halign: 'center', fontSize: 6 } },
                 { content: formatPallet(row[12]), styles: { halign: 'center', fontSize: 6 } }
@@ -880,19 +1002,19 @@
             cellPadding: 2.5,
             overflow: 'linebreak',
             valign: 'middle',
-            fillColor: [0, 0, 0],
-            textColor: [255, 204, 255],
-            lineColor: [38, 69, 110],
+            fillColor: [255, 250, 249],
+            textColor: [23, 20, 23],
+            lineColor: [216, 167, 174],
             lineWidth: 0.5
           },
           headStyles: {
-            fillColor: [0, 0, 0],
-            textColor: [255, 204, 255],
+            fillColor: [241, 184, 192],
+            textColor: [23, 20, 23],
             fontStyle: 'bold',
             fontSize: 6.5,
             halign: 'center',
             valign: 'middle',
-            lineColor: [38, 69, 110],
+            lineColor: [201, 143, 152],
             lineWidth: 0.65
           },
           columnStyles: isPresentation ? {
@@ -910,7 +1032,7 @@
             11: { cellWidth: 65 }
           } : undefined,
           alternateRowStyles: {
-            fillColor: [0, 0, 0]
+            fillColor: [251, 236, 238]
           },
           didDrawCell: function(data) {
             if (data.section === 'body' && data.column.index === 0 && data.cell.raw && data.cell.raw.imageKey && pdfImages[data.cell.raw.imageKey]) {
@@ -928,7 +1050,7 @@
             }
           },
           willDrawPage: function() {
-            doc.setFillColor(0, 0, 0);
+            doc.setFillColor(247, 203, 210);
             doc.rect(0, 0, pageWidth, pageHeight, 'F');
           }
         });
@@ -942,7 +1064,7 @@
         doc.setPage(p);
 
         // Top Header
-        doc.setFillColor(255, 42, 133);
+        doc.setFillColor(25, 24, 25);
         doc.roundedRect(margin, 12, 22, 22, 3, 3, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
@@ -950,17 +1072,17 @@
         doc.text('LRN', margin + 11, 26, { align: 'center' });
 
         doc.setFontSize(11);
-        doc.setTextColor(255, 255, 255);
+        doc.setTextColor(23, 20, 23);
         doc.text(state.active?.name || 'Price List', margin + 28, 23);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        doc.setTextColor(140, 155, 175);
+        doc.setTextColor(113, 98, 103);
         doc.text('LA ROSE NOIRE · FOB Subic Manila–Subic Port · Export Pricing', margin + 28, 32);
 
         // Right side adjustments
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
-        doc.setTextColor(255, 51, 136);
+        doc.setTextColor(23, 20, 23);
         const adjEntries = Object.entries(state.categoryAdjustments || {}).filter(([_, v]) => Number(v) !== 0);
         const adjText = adjEntries.length > 0
           ? adjEntries.map(([c, a]) => `${c}: ${Number(a) > 0 ? '+' : ''}${a}%`).join('  |  ')
@@ -968,12 +1090,12 @@
         doc.text(adjText, pageWidth - margin, 23, { align: 'right' });
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
-        doc.setTextColor(120, 135, 155);
+        doc.setTextColor(113, 98, 103);
         doc.text(`Exported ${new Date().toLocaleString()}`, pageWidth - margin, 32, { align: 'right' });
 
         // Bottom Footer
         doc.setFontSize(6.5);
-        doc.setTextColor(90, 105, 125);
+        doc.setTextColor(113, 98, 103);
         doc.text('LA ROSE NOIRE · Commercial Price List · Strictly Confidential', margin, pageHeight - 12);
         doc.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
       }
@@ -1011,6 +1133,13 @@
     state.rows = [];
     state.headers = [];
     state.versions = [];
+    state.productImages = [];
+    state.imageCategory = '';
+    state.imageSearch = '';
+    state.pendingImageGroup = null;
+    state.pendingImageDelete = null;
+    if (dom.imageSearchInput) dom.imageSearchInput.value = '';
+    $$('.nav-item')[0]?.click();
     window.__BOOT__ = { user: null, csrf: '' };
 
     try {
@@ -1120,7 +1249,66 @@
     }
   });
   $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
-  $$('.nav-item').forEach(button => button.addEventListener('click', () => { setPriceEditor(false); $$('.nav-item').forEach(item => item.classList.toggle('active', item === button)); $$('.panel').forEach(panel => { panel.hidden = panel.id !== button.dataset.panel; panel.classList.toggle('active', panel.id === button.dataset.panel); }); }));
+  function getInitialPanelId() {
+    const hash = (location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hash === 'history' || hash === 'historypanel') return 'historyPanel';
+    if (hash === 'settings' || hash === 'settingspanel') return 'settingsPanel';
+    if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') return 'workspacePanel';
+    try {
+      const saved = localStorage.getItem('pla_active_panel');
+      if (saved && ['workspacePanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'workspacePanel';
+  }
+
+  function switchPanel(panelId, updateHash = true) {
+    let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === panelId);
+    if (!targetButton || (targetButton.classList.contains('admin-only') && state.user?.role !== 'admin')) {
+      targetButton = $$('.nav-item')[0];
+    }
+    if (!targetButton) return;
+    const finalPanelId = targetButton.dataset.panel;
+    setPriceEditor(false);
+
+    document.documentElement.removeAttribute('data-initial-panel');
+
+    $$('.nav-item').forEach(item => item.classList.toggle('active', item === targetButton));
+    $$('.panel').forEach(panel => {
+      const isTarget = panel.id === finalPanelId;
+      panel.hidden = !isTarget;
+      panel.classList.toggle('active', isTarget);
+    });
+    document.querySelector('.content')?.classList.toggle('history-active', finalPanelId === 'historyPanel');
+
+    if (finalPanelId === 'settingsPanel') renderImageSettings();
+    if (finalPanelId === 'historyPanel') renderHistory();
+
+    try {
+      localStorage.setItem('pla_active_panel', finalPanelId);
+    } catch {}
+
+    if (updateHash) {
+      const hashMap = {
+        workspacePanel: 'prices',
+        historyPanel: 'history',
+        settingsPanel: 'settings'
+      };
+      const hashName = hashMap[finalPanelId] || finalPanelId;
+      if (location.hash !== `#${hashName}`) {
+        history.replaceState(null, '', `#${hashName}`);
+      }
+    }
+  }
+
+  $$('.nav-item').forEach(button => button.addEventListener('click', () => {
+    switchPanel(button.dataset.panel, true);
+  }));
+
+  window.addEventListener('hashchange', () => {
+    switchPanel(getInitialPanelId(), false);
+  });
   document.addEventListener('click', event => { if (!$('#adjustmentBar').hidden && !event.target.closest('.price-editor-wrap')) setPriceEditor(false); });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !$('#adjustmentBar').hidden) { setPriceEditor(false); $('#editButton').focus(); }
@@ -1143,22 +1331,208 @@
       }
       return;
     }
+
+    const moreTrigger = event.target.closest('.more-menu-trigger');
+    if (moreTrigger) {
+      event.stopPropagation();
+      const wrapper = moreTrigger.closest('.history-more-wrapper');
+      const dropdown = wrapper?.querySelector('.history-dropdown-menu');
+      const isHidden = dropdown?.hidden ?? true;
+      $$('.history-dropdown-menu').forEach(m => m.hidden = true);
+      if (dropdown) dropdown.hidden = !isHidden;
+      return;
+    }
+
+    const copyBtn = event.target.closest('.copy-version-id');
+    if (copyBtn) {
+      event.stopPropagation();
+      const id = copyBtn.dataset.id;
+      if (id) {
+        navigator.clipboard?.writeText(id).then(() => {
+          toast('Version ID copied to clipboard.');
+        }).catch(() => {
+          toast(`Version ID: ${id}`);
+        });
+      }
+      $$('.history-dropdown-menu').forEach(m => m.hidden = true);
+      return;
+    }
+
+    const viewChangesBtn = event.target.closest('.view-changes-link');
+    if (viewChangesBtn) {
+      event.stopPropagation();
+      const versionId = viewChangesBtn.dataset.id;
+      const version = (state.versions || []).find(v => String(v.id) === String(versionId));
+      if (version && version.summary) {
+        const dialog = $('#historyChangesDialog');
+        const title = $('#historyChangesTitle');
+        const meta = $('#historyChangesMeta');
+        const content = $('#historyChangesContent');
+        if (dialog && title && meta && content) {
+          title.textContent = version.name || 'Adjustment breakdown';
+          const affected = version.summary.totalAdjustedProducts ?? 0;
+          meta.textContent = `${Number(affected).toLocaleString()} products affected across ${(version.summary.adjustedCategories || []).length} categories`;
+          content.innerHTML = (version.summary.adjustedCategories || []).map(cat => {
+            const num = Number(cat.adjustment || 0);
+            const sign = num > 0 ? '+' : '';
+            const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
+            return `
+              <div class="history-change-item">
+                <div>
+                  <strong>${escapeHtml(cat.category)}</strong>
+                  ${cat.productCount ? `<div style="color:#716268; font-size:0.72rem; margin-top:2px;">${cat.productCount} pcs</div>` : ''}
+                </div>
+                <span class="change-badge ${cls}">${sign}${num}%</span>
+              </div>`;
+          }).join('') || '<div style="padding:16px; text-align:center; color:#716268;">No specific category adjustments recorded.</div>';
+          dialog.showModal();
+        }
+      }
+      $$('.history-dropdown-menu').forEach(m => m.hidden = true);
+      return;
+    }
+
     const deleteButton = event.target.closest('.delete-version');
     if (!deleteButton) return;
+    $$('.history-dropdown-menu').forEach(m => m.hidden = true);
     state.pendingDelete = deleteButton.dataset.id;
     dom.deleteVersionName.textContent = deleteButton.dataset.name;
     dom.deleteDialog.showModal();
   });
+
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.history-more-wrapper')) {
+      $$('.history-dropdown-menu').forEach(m => m.hidden = true);
+    }
+  });
+
+  $('#historyPrevBtn')?.addEventListener('click', () => {
+    if (state.historyPage > 1) {
+      state.historyPage--;
+      renderHistory();
+    }
+  });
+
+  $('#historyNextBtn')?.addEventListener('click', () => {
+    state.historyPage = (state.historyPage || 1) + 1;
+    renderHistory();
+  });
+
   $('#confirmDelete').addEventListener('click', async event => { event.preventDefault(); if (!state.pendingDelete) return; const button = event.currentTarget; button.disabled = true; try { const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: state.pendingDelete }) }); state.pendingDelete = null; dom.deleteDialog.close(); await loadState(); toast(data.message); } catch (error) { toast(error.message); } finally { button.disabled = false; } });
 
   dom.backToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
   dom.emptyGoToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
+  dom.settingsBackButton?.addEventListener('click', () => $$('.nav-item')[0].click());
+  dom.imageCategoryFilter?.addEventListener('change', () => {
+    state.imageCategory = dom.imageCategoryFilter.value;
+    renderImageSettings();
+  });
+  dom.imageSearchInput?.addEventListener('input', () => {
+    state.imageSearch = dom.imageSearchInput.value;
+    renderImageSettings();
+  });
+  dom.imageSettingsList?.addEventListener('click', event => {
+    const chooseButton = event.target.closest('.choose-group-image');
+    if (chooseButton) {
+      state.pendingImageGroup = {
+        category: chooseButton.dataset.category || '',
+        groupName: chooseButton.dataset.group || '',
+        button: chooseButton
+      };
+      dom.groupImageInput.value = '';
+      dom.groupImageInput.click();
+      return;
+    }
+    const deleteButton = event.target.closest('.delete-group-image');
+    if (!deleteButton) return;
+    state.pendingImageDelete = {
+      key: deleteButton.dataset.key || '',
+      name: deleteButton.dataset.name || 'this product type'
+    };
+    dom.deleteImageName.textContent = state.pendingImageDelete.name;
+    dom.deleteImageDialog.showModal();
+  });
+  dom.groupImageInput?.addEventListener('change', async () => {
+    const file = dom.groupImageInput.files?.[0];
+    const target = state.pendingImageGroup;
+    if (!file || !target) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      dom.groupImageInput.value = '';
+      return toast('Use a JPG, PNG, or WebP image.');
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      dom.groupImageInput.value = '';
+      return toast('Images must be smaller than 6 MB.');
+    }
+    const form = new FormData();
+    form.append('category', target.category);
+    form.append('groupName', target.groupName);
+    form.append('image', file);
+    const activeButton = target.button;
+    if (activeButton) {
+      activeButton.disabled = true;
+      activeButton.textContent = 'Uploading...';
+    }
+    try {
+      const data = await api('upload-group-image', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': state.csrf || '' },
+        body: form
+      });
+      const lookup = groupLookupKey(data.image.category, data.image.groupName);
+      state.productImages = state.productImages.filter(image => groupLookupKey(image.category, image.groupName) !== lookup);
+      state.productImages.push(data.image);
+      clearPdfImageCache();
+      renderImageSettings();
+      renderTable();
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      state.pendingImageGroup = null;
+      dom.groupImageInput.value = '';
+      if (activeButton?.isConnected) {
+        activeButton.disabled = false;
+        activeButton.textContent = 'Choose image';
+      }
+    }
+  });
+  dom.deleteImageForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (event.submitter?.value === 'cancel') {
+      state.pendingImageDelete = null;
+      dom.deleteImageDialog.close();
+      return;
+    }
+    if (!state.pendingImageDelete?.key) return;
+    const button = $('#confirmDeleteImage');
+    button.disabled = true;
+    try {
+      const data = await api('delete-group-image', {
+        method: 'POST',
+        body: JSON.stringify({ key: state.pendingImageDelete.key })
+      });
+      state.productImages = state.productImages.filter(image => image.key !== state.pendingImageDelete.key);
+      state.pendingImageDelete = null;
+      clearPdfImageCache();
+      dom.deleteImageDialog.close();
+      renderImageSettings();
+      renderTable();
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   dom.historySearchInput?.addEventListener('input', () => {
     state.historySearch = dom.historySearchInput.value;
+    state.historyPage = 1;
     renderHistory();
   });
   dom.historyAdjustmentSelect?.addEventListener('change', () => {
     state.historyAdjustment = dom.historyAdjustmentSelect.value;
+    state.historyPage = 1;
     renderHistory();
   });
 

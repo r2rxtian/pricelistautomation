@@ -22,6 +22,19 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID(N'dbo.PLA_ACD_GroupImages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PLA_ACD_GroupImages (
+        image_key varchar(64) NOT NULL PRIMARY KEY,
+        category_name nvarchar(120) NOT NULL,
+        group_name nvarchar(300) NOT NULL,
+        image_path nvarchar(500) NOT NULL,
+        alt_text nvarchar(250) NULL,
+        updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_GroupImageUpdated DEFAULT SYSUTCDATETIME(),
+        updated_by nvarchar(180) NOT NULL
+    );
+END;
+
 IF OBJECT_ID(N'dbo.PLA_ACD_AuditLog', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PLA_ACD_AuditLog (
@@ -33,4 +46,3 @@ BEGIN
         created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_AuditCreated DEFAULT SYSUTCDATETIME()
     );
 END;
-

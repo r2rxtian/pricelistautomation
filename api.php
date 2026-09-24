@@ -5,6 +5,15 @@ require_once __DIR__ . '/lib.php';
 
 $action = $_GET['action'] ?? '';
 
+function delete_managed_group_image(string $relativePath): void
+{
+    if (!str_starts_with(str_replace('\\', '/', $relativePath), 'storage/product-images/')) return;
+    $root = realpath(__DIR__ . '/storage/product-images');
+    $target = realpath(__DIR__ . '/' . ltrim(str_replace('\\', '/', $relativePath), '/'));
+    if (!$root || !$target || !str_starts_with($target, $root . DIRECTORY_SEPARATOR)) return;
+    if (is_file($target)) @unlink($target);
+}
+
 try {
     if ($action === 'login') {
         $data = request_json();
@@ -42,7 +51,116 @@ try {
                 fn(array $version) => array_intersect_key($version, array_flip(['id', 'name', 'adjustment', 'categoryAdjustments', 'summary', 'savedAt', 'savedBy'])),
                 array_slice(array_reverse($store['versions']), 0, 12)
             ),
+            'productImages' => array_values(is_array($store['productImages'] ?? null) ? $store['productImages'] : []),
         ]);
+    }
+
+    if ($action === 'upload-group-image') {
+        require_csrf();
+        if (($user['role'] ?? '') !== 'admin') {
+            json_response(['ok' => false, 'message' => 'Only an administrator can manage product images.'], 403);
+        }
+        $category = clean_text($_POST['category'] ?? '', 120);
+        $groupName = clean_text($_POST['groupName'] ?? '', 300);
+        $file = $_FILES['image'] ?? null;
+        if ($category === '' || $groupName === '') {
+            json_response(['ok' => false, 'message' => 'Choose a category and product type.'], 422);
+        }
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            json_response(['ok' => false, 'message' => 'Choose a valid image file.'], 422);
+        }
+        $size = (int) ($file['size'] ?? 0);
+        if ($size < 1 || $size > 6 * 1024 * 1024) {
+            json_response(['ok' => false, 'message' => 'Images must be smaller than 6 MB.'], 422);
+        }
+        $temporaryPath = (string) ($file['tmp_name'] ?? '');
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($temporaryPath) ?: '';
+        $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        if (!isset($extensions[$mime])) {
+            json_response(['ok' => false, 'message' => 'Use a JPG, PNG, or WebP image.'], 422);
+        }
+        $dimensions = @getimagesize($temporaryPath);
+        if (!$dimensions || $dimensions[0] < 120 || $dimensions[1] < 120 || $dimensions[0] > 6000 || $dimensions[1] > 6000) {
+            json_response(['ok' => false, 'message' => 'Images must be between 120 and 6,000 pixels in each direction.'], 422);
+        }
+
+        $key = hash('sha256', mb_strtolower($category) . "\0" . mb_strtolower($groupName));
+        $uploadDirectory = __DIR__ . '/storage/product-images';
+        if (!is_dir($uploadDirectory) && !mkdir($uploadDirectory, 0775, true) && !is_dir($uploadDirectory)) {
+            throw new RuntimeException('Unable to create the product image directory.');
+        }
+        $filename = $key . '-' . bin2hex(random_bytes(4)) . '.' . $extensions[$mime];
+        $relativePath = 'storage/product-images/' . $filename;
+        $targetPath = $uploadDirectory . DIRECTORY_SEPARATOR . $filename;
+        if (!move_uploaded_file($temporaryPath, $targetPath)) {
+            throw new RuntimeException('Unable to store the uploaded image.');
+        }
+
+        $record = [
+            'key' => $key,
+            'category' => $category,
+            'groupName' => $groupName,
+            'imagePath' => $relativePath,
+            'altText' => $groupName . ' product image',
+            'updatedAt' => gmdate('c'),
+            'updatedBy' => $user['name'],
+        ];
+        $oldPath = null;
+        try {
+            if (database_enabled()) {
+                $previous = database_upsert_group_image($record);
+                $oldPath = is_array($previous) ? (string) ($previous['image_path'] ?? '') : null;
+            } else {
+                $store = read_store();
+                $images = array_values(is_array($store['productImages'] ?? null) ? $store['productImages'] : []);
+                foreach ($images as $index => $image) {
+                    if (($image['key'] ?? '') === $key) {
+                        $oldPath = (string) ($image['imagePath'] ?? '');
+                        unset($images[$index]);
+                    }
+                }
+                $images[] = $record;
+                $store['productImages'] = array_values($images);
+                write_store($store);
+            }
+        } catch (Throwable $error) {
+            @unlink($targetPath);
+            throw $error;
+        }
+        if ($oldPath && $oldPath !== $relativePath) delete_managed_group_image($oldPath);
+        json_response(['ok' => true, 'image' => $record, 'message' => 'Product type image updated.']);
+    }
+
+    if ($action === 'delete-group-image') {
+        require_csrf();
+        if (($user['role'] ?? '') !== 'admin') {
+            json_response(['ok' => false, 'message' => 'Only an administrator can manage product images.'], 403);
+        }
+        $key = clean_text(request_json()['key'] ?? '', 64);
+        if (!preg_match('/^[a-f0-9]{64}$/', $key)) {
+            json_response(['ok' => false, 'message' => 'Invalid product image key.'], 422);
+        }
+        $record = null;
+        if (database_enabled()) {
+            $record = database_delete_group_image($key, $user['name']);
+        } else {
+            $store = read_store();
+            $images = array_values(is_array($store['productImages'] ?? null) ? $store['productImages'] : []);
+            foreach ($images as $index => $image) {
+                if (($image['key'] ?? '') === $key) {
+                    $record = $image;
+                    unset($images[$index]);
+                    break;
+                }
+            }
+            if ($record) {
+                $store['productImages'] = array_values($images);
+                write_store($store);
+            }
+        }
+        if (!$record) json_response(['ok' => false, 'message' => 'Custom image not found.'], 404);
+        delete_managed_group_image((string) ($record['imagePath'] ?? $record['image_path'] ?? ''));
+        json_response(['ok' => true, 'message' => 'Custom image removed. The default image is active again.']);
     }
 
     if ($action === 'save') {
