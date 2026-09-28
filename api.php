@@ -52,6 +52,7 @@ try {
                 array_slice(array_reverse($store['versions']), 0, 12)
             ),
             'productImages' => array_values(is_array($store['productImages'] ?? null) ? $store['productImages'] : []),
+            'auditLogs' => array_values(is_array($store['auditLogs'] ?? null) ? array_slice($store['auditLogs'], 0, 200) : []),
         ]);
     }
 
@@ -248,6 +249,8 @@ try {
         $store['active'] = $version;
         $store['versions'][] = $version;
         if (count($store['versions']) > 25) $store['versions'] = array_slice($store['versions'], -25);
+        $logDetails = "Version '{$name}' created by {$user['name']}. " . ($cleanSummary ? "Total {$cleanSummary['totalProducts']} items ({$cleanSummary['totalAdjustedProducts']} adjusted)." : "");
+        record_audit_log($store, 'save_version', "Saved version '{$name}'", $logDetails, ['versionId' => $version['id'], 'versionName' => $name]);
         write_store($store);
         json_response(['ok' => true, 'active' => $version, 'message' => 'Price list saved.']);
     }
@@ -276,9 +279,51 @@ try {
             $store['versions'] = array_values(array_filter($store['versions'], fn(array $version) => ($version['id'] ?? '') !== $id));
             if (count($store['versions']) === $before) json_response(['ok' => false, 'message' => 'Saved version not found.'], 404);
             if (($store['active']['id'] ?? '') === $id) $store['active'] = $store['versions'] ? $store['versions'][array_key_last($store['versions'])] : null;
+            record_audit_log($store, 'delete_version', "Deleted saved version", "Removed version ID {$id} by {$user['name']}.", ['versionId' => $id]);
             write_store($store);
         }
         json_response(['ok' => true, 'message' => 'Saved version deleted.']);
+    }
+
+    if ($action === 'get-audit-logs') {
+        $store = read_store();
+        json_response([
+            'ok' => true,
+            'auditLogs' => array_values(is_array($store['auditLogs'] ?? null) ? array_slice($store['auditLogs'], 0, 200) : []),
+        ]);
+    }
+
+    if ($action === 'log-activity') {
+        require_csrf();
+        if (!can_edit($user)) {
+            json_response(['ok' => false, 'message' => 'Permission denied.'], 403);
+        }
+        $data = request_json();
+        $type = clean_text($data['type'] ?? 'cell_edit', 40);
+        $title = clean_text($data['title'] ?? 'Updated price list', 160);
+        $details = clean_text($data['details'] ?? '', 500);
+        $metadata = is_array($data['metadata'] ?? null) ? $data['metadata'] : [];
+
+        $store = read_store();
+        $log = record_audit_log($store, $type, $title, $details, $metadata);
+        write_store($store);
+
+        json_response([
+            'ok' => true,
+            'log' => $log,
+            'auditLogs' => array_values(array_slice($store['auditLogs'], 0, 200)),
+        ]);
+    }
+
+    if ($action === 'clear-audit-logs') {
+        require_csrf();
+        if (($user['role'] ?? '') !== 'admin') {
+            json_response(['ok' => false, 'message' => 'Only an administrator can clear audit logs.'], 403);
+        }
+        $store = read_store();
+        $store['auditLogs'] = [];
+        write_store($store);
+        json_response(['ok' => true, 'message' => 'Audit logs cleared.', 'auditLogs' => []]);
     }
 
     json_response(['ok' => false, 'message' => 'Unknown API action.'], 404);

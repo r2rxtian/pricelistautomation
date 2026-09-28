@@ -70,7 +70,33 @@ function can_edit(array $user): bool
 
 function default_store(): array
 {
-    return ['active' => null, 'versions' => [], 'productImages' => []];
+    return ['active' => null, 'versions' => [], 'productImages' => [], 'auditLogs' => []];
+}
+
+function record_audit_log(array &$store, string $type, string $title, string $details = '', array $metadata = []): array
+{
+    $user = current_user();
+    $actor = $user['name'] ?? 'System';
+    $role = $user['role'] ?? 'user';
+    if (empty($metadata['fileName']) && !empty($store['active']['name'])) {
+        $metadata['fileName'] = $store['active']['name'];
+    }
+    $log = [
+        'id' => bin2hex(random_bytes(6)),
+        'type' => $type,
+        'title' => $title,
+        'details' => $details,
+        'actor' => $actor,
+        'role' => $role,
+        'timestamp' => gmdate('c'),
+        'metadata' => $metadata,
+    ];
+    $store['auditLogs'] ??= [];
+    array_unshift($store['auditLogs'], $log);
+    if (count($store['auditLogs']) > 200) {
+        $store['auditLogs'] = array_slice($store['auditLogs'], 0, 200);
+    }
+    return $log;
 }
 
 function read_store(): array
