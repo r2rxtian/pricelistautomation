@@ -81,6 +81,35 @@ function record_audit_log(array &$store, string $type, string $title, string $de
     if (empty($metadata['fileName']) && !empty($store['active']['name'])) {
         $metadata['fileName'] = $store['active']['name'];
     }
+    $store['auditLogs'] ??= [];
+
+    // For save_version, if an entry for this version/file already exists, update it in place so logs do not stack up
+    if ($type === 'save_version') {
+        $targetVerId = (string) ($metadata['versionId'] ?? '');
+        $targetFile = trim((string) ($metadata['fileName'] ?? $metadata['versionName'] ?? ''));
+
+        foreach ($store['auditLogs'] as $idx => $existingLog) {
+            $existingVerId = (string) ($existingLog['metadata']['versionId'] ?? '');
+            $existingFile = trim((string) ($existingLog['metadata']['fileName'] ?? $existingLog['metadata']['versionName'] ?? ''));
+
+            $isSameVersion = ($targetVerId !== '' && $existingVerId === $targetVerId);
+            $isSameFile = ($targetFile !== '' && strcasecmp($existingFile, $targetFile) === 0);
+
+            if (($existingLog['type'] ?? '') === 'save_version' && ($isSameVersion || $isSameFile)) {
+                $existingLog['title'] = $title;
+                $existingLog['details'] = $details;
+                $existingLog['actor'] = $actor;
+                $existingLog['role'] = $role;
+                $existingLog['timestamp'] = gmdate('c');
+                $existingLog['metadata'] = array_replace($existingLog['metadata'] ?? [], $metadata);
+                // Move updated log to the top
+                array_splice($store['auditLogs'], $idx, 1);
+                array_unshift($store['auditLogs'], $existingLog);
+                return $existingLog;
+            }
+        }
+    }
+
     $log = [
         'id' => bin2hex(random_bytes(6)),
         'type' => $type,
@@ -91,7 +120,6 @@ function record_audit_log(array &$store, string $type, string $title, string $de
         'timestamp' => gmdate('c'),
         'metadata' => $metadata,
     ];
-    $store['auditLogs'] ??= [];
     array_unshift($store['auditLogs'], $log);
     if (count($store['auditLogs']) > 200) {
         $store['auditLogs'] = array_slice($store['auditLogs'], 0, 200);
@@ -106,7 +134,44 @@ function read_store(): array
         return default_store();
     }
     $decoded = json_decode((string) file_get_contents(STORAGE_FILE), true);
-    return is_array($decoded) ? array_replace(default_store(), $decoded) : default_store();
+    $store = is_array($decoded) ? array_replace(default_store(), $decoded) : default_store();
+
+    // Deduplicate versions so multiple saves of the same file do not stack up in history
+    if (!empty($store['versions']) && is_array($store['versions'])) {
+        $seen = [];
+        $unique = [];
+        for ($i = count($store['versions']) - 1; $i >= 0; $i--) {
+            $v = $store['versions'][$i];
+            $key = strtolower(trim((string) ($v['name'] ?? $v['id'] ?? '')));
+            if ($key !== '' && !isset($seen[$key])) {
+                $seen[$key] = true;
+                $unique[] = $v;
+            }
+        }
+        $store['versions'] = array_reverse($unique);
+    }
+
+    // Deduplicate save_version audit logs so multiple saves of the same file do not stack up
+    if (!empty($store['auditLogs']) && is_array($store['auditLogs'])) {
+        $seenLogs = [];
+        $uniqueLogs = [];
+        foreach ($store['auditLogs'] as $l) {
+            $type = (string) ($l['type'] ?? '');
+            if ($type === 'save_version') {
+                $targetFile = strtolower(trim((string) ($l['metadata']['fileName'] ?? $l['metadata']['versionName'] ?? $l['title'] ?? '')));
+                if ($targetFile !== '') {
+                    if (isset($seenLogs[$targetFile])) {
+                        continue; // Skip older stacked duplicate log
+                    }
+                    $seenLogs[$targetFile] = true;
+                }
+            }
+            $uniqueLogs[] = $l;
+        }
+        $store['auditLogs'] = $uniqueLogs;
+    }
+
+    return $store;
 }
 
 function write_store(array $store): void

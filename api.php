@@ -58,8 +58,8 @@ try {
 
     if ($action === 'upload-group-image') {
         require_csrf();
-        if (($user['role'] ?? '') !== 'admin') {
-            json_response(['ok' => false, 'message' => 'Only an administrator can manage product images.'], 403);
+        if (!in_array($user['role'] ?? '', EDIT_ROLES, true)) {
+            json_response(['ok' => false, 'message' => 'You do not have permission to manage product images.'], 403);
         }
         $category = clean_text($_POST['category'] ?? '', 120);
         $groupName = clean_text($_POST['groupName'] ?? '', 300);
@@ -134,8 +134,8 @@ try {
 
     if ($action === 'delete-group-image') {
         require_csrf();
-        if (($user['role'] ?? '') !== 'admin') {
-            json_response(['ok' => false, 'message' => 'Only an administrator can manage product images.'], 403);
+        if (!in_array($user['role'] ?? '', EDIT_ROLES, true)) {
+            json_response(['ok' => false, 'message' => 'You do not have permission to manage product images.'], 403);
         }
         $key = clean_text(request_json()['key'] ?? '', 64);
         if (!preg_match('/^[a-f0-9]{64}$/', $key)) {
@@ -161,7 +161,7 @@ try {
         }
         if (!$record) json_response(['ok' => false, 'message' => 'Custom image not found.'], 404);
         delete_managed_group_image((string) ($record['imagePath'] ?? $record['image_path'] ?? ''));
-        json_response(['ok' => true, 'message' => 'Custom image removed. The default image is active again.']);
+        json_response(['ok' => true, 'message' => 'Custom photo removed successfully.']);
     }
 
     if ($action === 'save') {
@@ -233,9 +233,37 @@ try {
             }
             $cleanRows[] = $clean;
         }
+        $targetId = clean_text($data['id'] ?? '', 32);
         $store = read_store();
+
+        $existingIndex = null;
+        $matchedId = null;
+
+        // Check if updating the specific file currently open (by ID or matching name)
+        if ($targetId !== '') {
+            foreach ($store['versions'] as $idx => $v) {
+                if (($v['id'] ?? '') === $targetId) {
+                    $existingIndex = $idx;
+                    $matchedId = $v['id'];
+                    break;
+                }
+            }
+        }
+
+        // Also check if an existing version has the exact same name (case-insensitive)
+        if ($existingIndex === null) {
+            foreach ($store['versions'] as $idx => $v) {
+                if (strcasecmp(trim((string)($v['name'] ?? '')), trim($name)) === 0) {
+                    $existingIndex = $idx;
+                    $matchedId = $v['id'] ?? null;
+                    break;
+                }
+            }
+        }
+
+        $versionId = $matchedId ?: bin2hex(random_bytes(8));
         $version = [
-            'id' => bin2hex(random_bytes(8)),
+            'id' => $versionId,
             'name' => $name,
             'headers' => $headers,
             'rows' => $cleanRows,
@@ -247,10 +275,25 @@ try {
             'savedBy' => $user['name'],
         ];
         $store['active'] = $version;
-        $store['versions'][] = $version;
-        if (count($store['versions']) > 25) $store['versions'] = array_slice($store['versions'], -25);
-        $logDetails = "Version '{$name}' created by {$user['name']}. " . ($cleanSummary ? "Total {$cleanSummary['totalProducts']} items ({$cleanSummary['totalAdjustedProducts']} adjusted)." : "");
-        record_audit_log($store, 'save_version', "Saved version '{$name}'", $logDetails, ['versionId' => $version['id'], 'versionName' => $name]);
+
+        if ($existingIndex !== null) {
+            // Update existing version in-place so versions DO NOT stack up in history!
+            $store['versions'][$existingIndex] = $version;
+            $logTitle = "Saved '{$name}'";
+            $logDetails = "Price list '{$name}' updated by {$user['name']}." . ($cleanSummary ? " Total {$cleanSummary['totalProducts']} items ({$cleanSummary['totalAdjustedProducts']} adjusted)." : "");
+        } else {
+            // Add as new version
+            $store['versions'][] = $version;
+            if (count($store['versions']) > 25) $store['versions'] = array_slice($store['versions'], -25);
+            $logTitle = "Saved '{$name}'";
+            $logDetails = "Price list '{$name}' created by {$user['name']}." . ($cleanSummary ? " Total {$cleanSummary['totalProducts']} items ({$cleanSummary['totalAdjustedProducts']} adjusted)." : "");
+        }
+
+        record_audit_log($store, 'save_version', $logTitle, $logDetails, [
+            'versionId' => $version['id'],
+            'versionName' => $name,
+            'fileName' => $name
+        ]);
         write_store($store);
         json_response(['ok' => true, 'active' => $version, 'message' => 'Price list saved.']);
     }

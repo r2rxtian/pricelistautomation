@@ -5,11 +5,126 @@
   const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', pending: null, pendingDelete: null, versions: [], productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditAdjustment: '', auditPage: 1, historyPage: 1, historyPageSize: 10 };
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), importDialog: $('#importDialog'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), importFileName: $('#importFileName'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
+    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
     auditLogsNav: $('#auditLogsNav'), openAuditLogsFromBell: $('#openAuditLogsFromBell'), auditAllCountBadge: $('#auditAllCountBadge'), auditEditsCountBadge: $('#auditEditsCountBadge'), auditVersionsCountBadge: $('#auditVersionsCountBadge'), auditFileSelect: $('#auditFileSelect'), auditFileSelectWrapper: $('#auditFileSelectWrapper'), auditTypeSelect: $('#auditTypeSelect'), auditTypeSelectWrapper: $('#auditTypeSelectWrapper'), auditUserSelect: $('#auditUserSelect'), auditUserSelectWrapper: $('#auditUserSelectWrapper'), historyAdjustmentSelectWrapper: $('#historyAdjustmentSelectWrapper'), refreshAuditLogsBtn: $('#refreshAuditLogsBtn'), auditTableHead: $('#auditTableHead'), versionsTableHead: $('#versionsTableHead'), historyEmptyTitle: $('#historyEmptyTitle'), historyEmptySubtitle: $('#historyEmptySubtitle'), historyChangesKicker: $('#historyChangesKicker'), historyChangesActions: $('#historyChangesActions'),
     notificationBtn: $('#notificationBtn'), notificationBadge: $('#notificationBadge'), notificationsDropdown: $('#notificationsDropdown'), notificationsList: $('#notificationsList'), notificationsEmpty: $('#notificationsEmpty'), notificationsCountBadge: $('#notificationsCountBadge'), markAllReadBtn: $('#markAllReadBtn'), clearLogsBtn: $('#clearLogsBtn'),
-    uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn')
+    uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn'),
+    categoryCheckboxesList: $('#categoryCheckboxesList'), categoryAdjustSearch: $('#categoryAdjustSearch'), selectAllCategoriesBtn: $('#selectAllCategoriesBtn'), deselectAllCategoriesBtn: $('#deselectAllCategoriesBtn'), selectedCategoryCountBadge: $('#selectedCategoryCountBadge'), applyButtonText: $('#applyButtonText'), adjPreviewSummary: $('#adjPreviewSummary'), closeAdjustmentBarBtn: $('#closeAdjustmentBarBtn')
   };
+
+  const selectedAdjustmentCategories = new Set();
+
+  function getPriceCategories() {
+    const map = new Map();
+    state.rows.forEach(row => {
+      const cat = String(row[0] ?? '').trim();
+      if (cat) {
+        map.set(cat, (map.get(cat) || 0) + 1);
+      }
+    });
+    return [...map.entries()].map(([name, count]) => ({
+      name,
+      count,
+      adjustment: getCategoryAdjustment(name)
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function updateAdjustmentUI() {
+    const categories = getPriceCategories();
+    const totalCategories = categories.length;
+    const selectedCount = selectedAdjustmentCategories.size;
+    const rawVal = String(dom.percentage?.value ?? '').trim();
+    const pct = Number(rawVal);
+    const isValidPct = rawVal !== '' && Number.isFinite(pct) && pct >= -100 && pct <= 10000;
+    const sign = pct > 0 ? '+' : '';
+
+    let affectedProducts = 0;
+    categories.forEach(c => {
+      if (selectedAdjustmentCategories.has(c.name)) affectedProducts += c.count;
+    });
+
+    if (dom.selectedCategoryCountBadge) {
+      dom.selectedCategoryCountBadge.textContent = `${selectedCount} of ${totalCategories} selected`;
+      dom.selectedCategoryCountBadge.classList.toggle('has-selection', selectedCount > 0);
+    }
+
+    $$('.adj-preset-chip').forEach(chip => {
+      const presetVal = Number(chip.dataset.preset);
+      chip.classList.toggle('active', isValidPct && pct === presetVal);
+    });
+
+    const btn = $('#previewButton');
+    const btnText = $('#applyButtonText');
+    const summary = $('#adjPreviewSummary');
+
+    if (selectedCount === 0) {
+      if (btnText) btnText.textContent = 'Select categories to apply';
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('is-disabled');
+      }
+      if (summary) summary.textContent = 'Please check at least one category above.';
+    } else {
+      if (btn) {
+        btn.disabled = !isValidPct;
+        btn.classList.toggle('is-disabled', !isValidPct);
+      }
+      const pctDisplay = isValidPct ? `${sign}${pct}%` : '%';
+      if (selectedCount === totalCategories) {
+        if (btnText) btnText.textContent = `Apply ${pctDisplay} to all categories`;
+        if (summary) summary.textContent = `Will update all ${totalCategories} categories (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
+      } else if (selectedCount === 1) {
+        const singleCat = [...selectedAdjustmentCategories][0];
+        if (btnText) btnText.textContent = `Apply ${pctDisplay} to ${singleCat}`;
+        if (summary) summary.textContent = `Will update ${singleCat} (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
+      } else {
+        if (btnText) btnText.textContent = `Apply ${pctDisplay} to ${selectedCount} categories`;
+        if (summary) summary.textContent = `Will update ${selectedCount} categories (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
+      }
+    }
+  }
+
+  function renderCategoryAdjustmentList(filterQuery = '') {
+    if (!dom.categoryCheckboxesList) return;
+    const categories = getPriceCategories();
+    const query = String(filterQuery || '').trim().toLowerCase();
+    const filtered = query ? categories.filter(c => c.name.toLowerCase().includes(query)) : categories;
+
+    if (!categories.length) {
+      dom.categoryCheckboxesList.innerHTML = '<div class="category-checkboxes-empty">No categories available in this workbook.</div>';
+      updateAdjustmentUI();
+      return;
+    }
+
+    if (!filtered.length) {
+      dom.categoryCheckboxesList.innerHTML = `<div class="category-checkboxes-empty">No categories match "${escapeHtml(filterQuery)}"</div>`;
+      return;
+    }
+
+    dom.categoryCheckboxesList.innerHTML = filtered.map(cat => {
+      const isChecked = selectedAdjustmentCategories.has(cat.name);
+      const num = Number(cat.adjustment || 0);
+      const sign = num > 0 ? '+' : '';
+      const adjCls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
+      return `
+        <label class="category-checkbox-item ${isChecked ? 'checked' : ''}" data-category="${escapeHtml(cat.name)}">
+          <input type="checkbox" class="category-adjust-checkbox" value="${escapeHtml(cat.name)}" ${isChecked ? 'checked' : ''}>
+          <span class="cat-custom-checkbox" aria-hidden="true">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+          <div class="cat-checkbox-content">
+            <span class="cat-name" title="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</span>
+            <div class="cat-meta-pills">
+              <span class="cat-count-pill">${cat.count} ${cat.count === 1 ? 'item' : 'items'}</span>
+              <span class="cat-adj-pill ${adjCls}" title="Current adjustment: ${sign}${num}%">${sign}${num}%</span>
+            </div>
+          </div>
+        </label>
+      `;
+    }).join('');
+
+    updateAdjustmentUI();
+  }
 
   async function api(action, options = {}) {
     const response = await fetch(`api.php?action=${encodeURIComponent(action)}`, { headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf || '' }, ...options });
@@ -21,15 +136,19 @@
   function escapeHtml(value) { const node = document.createElement('div'); node.textContent = String(value ?? ''); return node.innerHTML; }
   function displayDate(value) { if (!value) return 'Not saved'; return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
   function getCategoryAdjustment(category) {
-    if (category && state.categoryAdjustments && state.categoryAdjustments[category] !== undefined) {
-      return Number(state.categoryAdjustments[category]);
+    const cat = String(category ?? '').trim();
+    if (cat && state.categoryAdjustments && state.categoryAdjustments[cat] !== undefined) {
+      return Number(state.categoryAdjustments[cat]);
     }
     return Number(state.adjustment || 0);
   }
   function adjusted(value, category = state.category) {
-    const number = Number(value);
+    const rawNum = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, '').trim());
+    if (!Number.isFinite(rawNum)) return value;
     const adj = getCategoryAdjustment(category);
-    return Number.isFinite(number) ? number * (1 + adj / 100) : value;
+    if (!adj || !Number.isFinite(adj)) return rawNum;
+    const computed = rawNum * (1 + adj / 100);
+    return Math.max(0, Math.round(computed * 10000) / 10000);
   }
   function isNumeric(value) { return value !== '' && value !== null && Number.isFinite(Number(String(value).replace(/,/g, ''))); }
   function numeric(value) { return Number(String(value).replace(/,/g, '')); }
@@ -139,11 +258,18 @@
     button.setAttribute('data-tooltip', open ? 'Close editor' : 'Edit prices');
     button.title = open ? 'Close editor' : 'Edit prices';
     if (open) {
-      dom.percentage.value = getCategoryAdjustment(state.category);
-      const title = $('#adjustmentTitle');
-      const subtitle = popover.querySelector('.edit-summary span');
-      if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
-      if (subtitle) subtitle.textContent = state.category ? `Adjust ${state.category} or apply globally to all categories.` : 'Adjust prices for current category or apply globally.';
+      const allCategories = getPriceCategories();
+      const cat = String(state.category || '').trim();
+      selectedAdjustmentCategories.clear();
+      if (cat && allCategories.some(c => c.name === cat)) {
+        selectedAdjustmentCategories.add(cat);
+        dom.percentage.value = getCategoryAdjustment(cat);
+      } else {
+        allCategories.forEach(c => selectedAdjustmentCategories.add(c.name));
+        dom.percentage.value = state.adjustment || 0;
+      }
+      if (dom.categoryAdjustSearch) dom.categoryAdjustSearch.value = '';
+      renderCategoryAdjustmentList('');
       requestAnimationFrame(() => {
         dom.percentage.focus();
         dom.percentage.select();
@@ -181,7 +307,7 @@
       setPriceEditor(false); dom.emptyState.hidden = false; dom.dataView.hidden = true;
       if (metricGroup) metricGroup.hidden = true;
       dom.listTitle.textContent = 'Start with a workbook';
-      dom.listMeta.textContent = 'Upload an .xlsx or .xls file to map its products and prices.';
+      dom.listMeta.textContent = 'Upload an .xlsx or .xls file to open and edit prices.';
       dom.listMeta.title = '';
       setSavedMeta(''); dom.activeBadge.hidden = true;
       $('#editButton').classList.add('is-disabled');
@@ -265,24 +391,46 @@
     return state.productImages.find(image => groupLookupKey(image.category, image.groupName) === key) || null;
   }
   function defaultGroupImagePath(category, groupName) {
-    const text = `${category} ${groupName}`.toLowerCase();
-    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) return 'assets/products/presentation.jpg';
-    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'assets/products/breads.jpg';
-    if (/cone/i.test(text)) return 'assets/products/cones.jpg';
-    if (/tart|shell|pie/i.test(text)) return 'assets/products/tarts.jpg';
-    if (/chocolate|praline|bonbon|truffle/i.test(text)) return 'assets/products/chocolates.jpg';
-    if (/macaron/i.test(text)) return 'assets/products/macarons.jpg';
-    if (/basket|spoon|savory|canape/i.test(text)) return 'assets/products/savory.jpg';
-    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) return 'assets/products/pastries.jpg';
-    return 'assets/products/gourmet.jpg';
+    return null;
   }
   function groupImagePath(category, groupName) {
-    return imageOverride(category, groupName)?.imagePath || defaultGroupImagePath(category, groupName);
+    return imageOverride(category, groupName)?.imagePath || null;
   }
   function groupVisual(category, groupName, items) {
     const custom = imageOverride(category, groupName);
-    const label = custom?.altText || groupName || category || 'Product group';
-    return `<img class="group-photo-img" src="${escapeHtml(groupImagePath(category, groupName))}" alt="${escapeHtml(label)}" loading="lazy">`;
+    if (custom?.imagePath) {
+      const label = custom.altText || groupName || category || 'Product group';
+      return `<div class="group-photo-wrap has-photo">
+        <img class="group-photo-img" src="${escapeHtml(custom.imagePath)}" alt="${escapeHtml(label)}" loading="lazy">
+        ${state.canEdit ? `<button type="button" class="group-photo-change-btn edit-only choose-group-image" data-category="${escapeHtml(category)}" data-group="${escapeHtml(groupName)}" title="Change photo for ${escapeHtml(groupName)}">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Change
+        </button>` : ''}
+      </div>`;
+    }
+    return `<div class="group-photo-empty-container">
+      ${state.canEdit ? `
+        <button type="button" class="group-add-photo-btn edit-only choose-group-image" data-category="${escapeHtml(category)}" data-group="${escapeHtml(groupName)}" title="Upload custom photo for ${escapeHtml(groupName)}">
+          <div class="group-add-photo-icon-box">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+          <span class="group-add-photo-label">+ Add photo</span>
+        </button>
+      ` : `
+        <div class="group-no-photo-readonly" title="No photo uploaded">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>No photo</span>
+        </div>
+      `}
+    </div>`;
   }
 
   function productGroups() {
@@ -317,12 +465,25 @@
     }
     dom.imageSettingsList.innerHTML = visible.map(group => {
       const custom = imageOverride(group.category, group.groupName);
+      const previewMarkup = custom?.imagePath
+        ? `<img class="image-setting-preview" src="${escapeHtml(custom.imagePath)}" alt="${escapeHtml(group.groupName)} preview">`
+        : `<div class="image-setting-preview empty-preview" title="No photo set">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+           </div>`;
       return `<article class="image-setting-row">
-        <img class="image-setting-preview" src="${escapeHtml(groupImagePath(group.category, group.groupName))}" alt="${escapeHtml(group.groupName)} preview">
-        <div class="image-setting-copy"><span>${escapeHtml(group.category)}</span><strong>${escapeHtml(group.groupName)}</strong><small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? 'Custom image' : 'Default image'}</small></div>
+        ${previewMarkup}
+        <div class="image-setting-copy">
+          <span>${escapeHtml(group.category)}</span>
+          <strong>${escapeHtml(group.groupName)}</strong>
+          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? 'Custom photo' : 'No photo set yet'}</small>
+        </div>
         <div class="image-setting-actions">
-          <button class="button secondary choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">Choose image</button>
-          ${custom ? `<button class="button danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${escapeHtml(group.groupName)}">Restore default</button>` : ''}
+          <button class="button ${custom ? 'secondary' : 'primary'} choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">${custom ? 'Change photo' : '+ Upload photo'}</button>
+          ${custom ? `<button class="button danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${escapeHtml(group.groupName)}">Remove photo</button>` : ''}
         </div>
       </article>`;
     }).join('');
@@ -343,7 +504,6 @@
         <th rowspan="3">Price/pc<br>USD</th>
         <th rowspan="3">Price/box<br>In USD</th>
         <th colspan="3" class="col-pallet-header">PALLET PER CONTAINER</th>
-        <th rowspan="3" class="col-actions-th edit-only"></th>
       </tr>
       <tr class="excel-header excel-header-sub">
         <th colspan="2">40ft Container</th>
@@ -368,7 +528,6 @@
         <th>Box size</th>
         <th>MOQ</th>
         <th>Total Price Based on MOQ</th>
-        <th class="col-actions-th edit-only"></th>
       </tr>`;
     const standardRow = (row, actualIndex, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
       const formatPallet = val => {
@@ -394,11 +553,6 @@
         <td class="excel-cell col-pallet" data-row="${actualIndex}" data-col="10" tabindex="0">${formatPallet(row[10])}</td>
         <td class="excel-cell col-pallet" data-row="${actualIndex}" data-col="11" tabindex="0">${formatPallet(row[11])}</td>
         <td class="excel-cell col-pallet" data-row="${actualIndex}" data-col="12" tabindex="0">${formatPallet(row[12])}</td>
-        <td class="row-action-cell edit-only">
-          <button type="button" class="btn-delete-row" data-row="${actualIndex}" title="Delete row" aria-label="Delete product row">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          </button>
-        </td>
       </tr>`;
     };
     const presentationRow = (row, actualIndex, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
@@ -420,11 +574,6 @@
         <td class="excel-cell" data-row="${actualIndex}" data-col="7" tabindex="0">${valueMarkup(row, 7)}</td>
         <td class="excel-cell" data-row="${actualIndex}" data-col="15" tabindex="0">${moq}</td>
         <td class="excel-cell" data-row="${actualIndex}" data-col="17" tabindex="0">${valueMarkup(row, 17)}</td>
-        <td class="row-action-cell edit-only">
-          <button type="button" class="btn-delete-row" data-row="${actualIndex}" title="Delete row" aria-label="Delete product row">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          </button>
-        </td>
       </tr>`;
     };
 
@@ -449,7 +598,7 @@
     $('thead', dom.table).innerHTML = firstIsPresentation ? presentationHeader() : standardHeader();
     $('tbody', dom.table).innerHTML = groups.map(group => {
       const isPresentation = String(group.category || '').toLowerCase() === 'presentation stands';
-      const columnCount = isPresentation ? 13 : 14;
+      const columnCount = 13;
       const groupHeader = group.groupName
         ? `<tr class="product-group-row"><td colspan="${columnCount}" class="group-title-cell"><strong class="group-title-text">${escapeHtml(group.groupName)}</strong></td></tr>`
         : '';
@@ -669,9 +818,10 @@
       if (state.priceColumns.includes(colIdx)) {
         const cleanNum = Number(String(finalVal).replace(/[^0-9.-]/g, ''));
         if (Number.isFinite(cleanNum) && cleanNum >= 0 && String(finalVal).trim() !== '') {
-          const cat = String(state.rows[rowIdx][0] ?? '');
+          const cat = String(state.rows[rowIdx][0] ?? '').trim();
           const catAdj = getCategoryAdjustment(cat);
-          const baseVal = catAdj !== 0 ? (cleanNum / (1 + catAdj / 100)) : cleanNum;
+          const divisor = 1 + catAdj / 100;
+          const baseVal = (catAdj !== 0 && divisor > 0) ? (cleanNum / divisor) : cleanNum;
           const newNumericVal = Number(baseVal.toFixed(4));
           if (Number(oldRaw) !== newNumericVal) {
             state.rows[rowIdx][colIdx] = newNumericVal;
@@ -701,18 +851,6 @@
         dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
         dom.activeBadge.classList.add('draft-badge');
         setSavedMeta('Imported workbook · Unsaved edits');
-
-        const colName = state.headers[colIdx] || `Column ${getColumnLetter(colIdx)}`;
-        const productTitle = state.rows[rowIdx]?.[2] || state.rows[rowIdx]?.[1] || `Row #${rowIdx + 1}`;
-        const oldDisplay = oldRaw === '' ? 'empty' : String(oldRaw);
-        const newDisplay = state.rows[rowIdx][colIdx] === '' ? 'empty' : String(state.rows[rowIdx][colIdx]);
-        logActivity('cell_edit', `Edited ${colName} on ${productTitle}`, `Changed from "${oldDisplay}" to "${newDisplay}"`, {
-          row: rowIdx + 1,
-          column: colName,
-          product: productTitle,
-          oldValue: oldDisplay,
-          newValue: newDisplay
-        });
       }
     }
 
@@ -795,93 +933,7 @@
     }
   }
 
-  function addNewProductRow() {
-    if (!state.canEdit) return toast('You do not have permission to add rows.');
-    if (!state.active) return toast('Please upload or open a price list first.');
-    const category = state.category || state.rows[0]?.[0] || 'Pastries';
-    const width = Math.max(19, state.headers.length || 19);
-    const newRow = new Array(width).fill('');
-    const newNum = state.rows.length + 1;
-    newRow[0] = category;
-    newRow[1] = 'PRD-' + String(newNum).padStart(3, '0');
-    newRow[2] = 'New Product ' + newNum;
-    newRow[4] = '12 Months';
-    newRow[5] = '50';
-    newRow[6] = '12';
-    newRow[7] = 'Medium Box';
-    newRow[8] = 0;
-    newRow[9] = 0;
-    newRow[10] = '10 Boxes';
-    newRow[11] = '2 Boxes';
-    newRow[12] = '5 Boxes';
-    newRow[18] = category;
 
-    state.rows.push(newRow);
-    state.active.rows = state.rows;
-    state.active.isDraft = true;
-    setDraft(draftKey(), state.active);
-    dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
-    dom.activeBadge.classList.add('draft-badge');
-    setSavedMeta('Imported workbook · Unsaved edits');
-
-    logActivity('row_add', `Added new product "${newRow[2]}"`, `Code: ${newRow[1]} · Category: ${category}`, {
-      code: newRow[1],
-      product: newRow[2],
-      category: category
-    });
-
-    updateMetrics();
-    renderTable();
-
-    requestAnimationFrame(() => {
-      const allRows = dom.table.querySelectorAll('tbody tr.excel-data-row');
-      const lastRow = allRows[allRows.length - 1];
-      if (lastRow) {
-        lastRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const descCell = lastRow.querySelector('.excel-cell[data-col="2"]');
-        if (descCell) {
-          selectCell(descCell, true);
-        }
-      }
-    });
-    toast('Added new product row. You can edit directly in the cell.');
-  }
-
-  let pendingRowDeleteIndex = null;
-  function promptDeleteRow(rowIdx) {
-    if (!state.canEdit) return toast('You do not have permission to delete rows.');
-    if (!state.rows[rowIdx]) return;
-    pendingRowDeleteIndex = rowIdx;
-    const name = state.rows[rowIdx][2] || state.rows[rowIdx][1] || 'this product';
-    if (dom.deleteRowProductName) dom.deleteRowProductName.textContent = name;
-    dom.deleteRowDialog?.showModal();
-    requestAnimationFrame(() => dom.confirmDeleteRow?.focus());
-  }
-
-  function confirmDeleteRow() {
-    if (pendingRowDeleteIndex === null || !state.rows[pendingRowDeleteIndex]) return;
-    const name = state.rows[pendingRowDeleteIndex][2] || state.rows[pendingRowDeleteIndex][1] || 'Product';
-    const cat = state.rows[pendingRowDeleteIndex][0] || '';
-    state.rows.splice(pendingRowDeleteIndex, 1);
-    pendingRowDeleteIndex = null;
-    if (state.active) {
-      state.active.rows = state.rows;
-      state.active.isDraft = true;
-      setDraft(draftKey(), state.active);
-      dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
-      dom.activeBadge.classList.add('draft-badge');
-      setSavedMeta('Imported workbook · Unsaved edits');
-
-      logActivity('row_delete', `Deleted product "${name}"`, `Removed row from ${cat || 'price list'}`, {
-        product: name,
-        category: cat
-      });
-    }
-    dom.deleteRowDialog?.close();
-    updateMetrics();
-    renderTable();
-    toast(`Removed "${name}" from price list.`);
-  }
   function getHistoryPageSize() {
     const select = $('#historyPageSizeSelect');
     const val = Number(state.historyPageSize || (select ? select.value : 10));
@@ -1124,7 +1176,7 @@
             <div class="history-change-item">
               <div>
                 <strong>${escapeHtml(cat.category)}</strong>
-                ${cat.productCount ? `<div style="color:#716268; font-size:0.72rem; margin-top:2px;">${cat.productCount} pcs</div>` : ''}
+                ${cat.productCount ? `<div class="history-change-subtext">${cat.productCount} pcs</div>` : ''}
               </div>
               <span class="change-badge ${cls}">${sign}${num}%</span>
             </div>`;
@@ -1589,51 +1641,82 @@
     if (!window.XLSX) return toast('Excel tools are not available.');
     const wb = XLSX.utils.book_new();
 
-    const standardHeaders = [
-      'Worksheet', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group'
+    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
+    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', '', '', '', '', ''];
+    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', '', '', '', '', ''];
+    const standardMerges = [
+      { s: { r: 0, c: 0 }, e: { r: 2, c: 0 } },
+      { s: { r: 0, c: 1 }, e: { r: 2, c: 1 } },
+      { s: { r: 0, c: 2 }, e: { r: 2, c: 2 } },
+      { s: { r: 0, c: 3 }, e: { r: 2, c: 3 } },
+      { s: { r: 0, c: 4 }, e: { r: 2, c: 4 } },
+      { s: { r: 0, c: 5 }, e: { r: 2, c: 5 } },
+      { s: { r: 0, c: 6 }, e: { r: 2, c: 6 } },
+      { s: { r: 0, c: 7 }, e: { r: 2, c: 7 } },
+      { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
+      { s: { r: 1, c: 10 }, e: { r: 1, c: 10 } },
+      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } },
+      { s: { r: 0, c: 12 }, e: { r: 2, c: 12 } },
+      { s: { r: 0, c: 13 }, e: { r: 2, c: 13 } },
+      { s: { r: 0, c: 14 }, e: { r: 2, c: 14 } },
+      { s: { r: 0, c: 15 }, e: { r: 2, c: 15 } }
     ];
 
     const sheets = [
       {
-        name: 'Pastries',
+        name: 'Tart Shells',
         rows: [
-          ['Pastries', 'LRN-PST-001', 'Mini Butter Croissant 30g', '', '12 Months', '30', '120', 'Medium Box', 0.48, 57.60, '12 Boxes', '2 Boxes', '6 Boxes', '3.6', '4.2', '50 Boxes', '', 2880.00, 'Croissants'],
-          ['Pastries', 'LRN-PST-002', 'Pain Au Chocolat 35g', '', '12 Months', '35', '96', 'Medium Box', 0.54, 51.84, '12 Boxes', '2 Boxes', '6 Boxes', '3.4', '4.0', '50 Boxes', '', 2592.00, 'Croissants'],
-          ['Pastries', 'LRN-PST-003', 'Apple Cinnamon Danish', '', '12 Months', '40', '80', 'Large Box', 0.62, 49.60, '10 Boxes', '2 Boxes', '5 Boxes', '3.2', '3.9', '40 Boxes', '', 1984.00, 'Danishes']
+          ['LRN-TRT-001', 'Sweet Round Tart Shell 50mm', '18 Months', '15', '120', 'Medium Box', 0.38, 45.60, '168 Boxes/Pallet', '126 Boxes/Pallet', '144 Boxes/Pallet', '1.8', '2.4', '60 Boxes', 2736.00, 'Round Tart Shells'],
+          ['LRN-TRT-002', 'Chocolate Square Tart Shell 45mm', '18 Months', '14', '96', 'Medium Box', 0.42, 40.32, '168 Boxes/Pallet', '126 Boxes/Pallet', '144 Boxes/Pallet', '1.5', '2.1', '60 Boxes', 2419.20, 'Square Tart Shells'],
+          ['LRN-TRT-003', 'Vanilla Tartlet 80mm', '18 Months', '25', '72', 'Large Box', 0.58, 41.76, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '2.0', '2.7', '45 Boxes', 1879.20, 'Large Tartlets']
         ]
       },
       {
-        name: 'Tart Shells',
+        name: 'Pastries',
         rows: [
-          ['Tart Shells', 'LRN-TRT-001', 'Sweet Round Tart Shell 50mm', '', '18 Months', '15', '120', 'Medium Box', 0.38, 45.60, '16 Boxes', '2 Boxes', '8 Boxes', '1.8', '2.4', '60 Boxes', '', 2736.00, 'Round Tart Shells'],
-          ['Tart Shells', 'LRN-TRT-002', 'Chocolate Square Tart Shell 45mm', '', '18 Months', '14', '96', 'Medium Box', 0.42, 40.32, '16 Boxes', '2 Boxes', '8 Boxes', '1.5', '2.1', '60 Boxes', '', 2419.20, 'Square Tart Shells'],
-          ['Tart Shells', 'LRN-TRT-003', 'Vanilla Tartlet 80mm', '', '18 Months', '25', '72', 'Large Box', 0.58, 41.76, '12 Boxes', '2 Boxes', '6 Boxes', '2.0', '2.7', '45 Boxes', '', 1879.20, 'Large Tartlets']
+          ['LRN-PST-001', 'Mini Butter Croissant 30g', '12 Months', '30', '120', 'Medium Box', 0.48, 57.60, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '3.6', '4.2', '50 Boxes', 2880.00, 'Croissants'],
+          ['LRN-PST-002', 'Pain Au Chocolat 35g', '12 Months', '35', '96', 'Medium Box', 0.54, 51.84, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '3.4', '4.0', '50 Boxes', 2592.00, 'Croissants'],
+          ['LRN-PST-003', 'Apple Cinnamon Danish', '12 Months', '40', '80', 'Large Box', 0.62, 49.60, '100 Boxes/Pallet', '75 Boxes/Pallet', '80 Boxes/Pallet', '3.2', '3.9', '40 Boxes', 1984.00, 'Danishes']
         ]
       },
       {
         name: 'Cones & Baskets',
         rows: [
-          ['Cones & Baskets', 'LRN-CON-001', 'Sweet Mini Waffle Cone 75mm', '', '12 Months', '10', '180', 'Medium Box', 0.32, 57.60, '14 Boxes', '2 Boxes', '7 Boxes', '1.8', '2.5', '50 Boxes', '', 2880.00, 'Sweet Cones'],
-          ['Cones & Baskets', 'LRN-CON-002', 'Savory Sesame Cone 75mm', '', '12 Months', '10', '180', 'Medium Box', 0.34, 61.20, '14 Boxes', '2 Boxes', '7 Boxes', '1.8', '2.5', '50 Boxes', '', 3060.00, 'Savory Cones']
+          ['LRN-CON-001', 'Sweet Mini Waffle Cone 75mm', '12 Months', '10', '180', 'Medium Box', 0.32, 57.60, '140 Boxes/Pallet', '105 Boxes/Pallet', '120 Boxes/Pallet', '1.8', '2.5', '50 Boxes', 2880.00, 'Sweet Cones'],
+          ['LRN-CON-002', 'Savory Sesame Cone 75mm', '12 Months', '10', '180', 'Medium Box', 0.34, 61.20, '140 Boxes/Pallet', '105 Boxes/Pallet', '120 Boxes/Pallet', '1.8', '2.5', '50 Boxes', 3060.00, 'Savory Cones']
         ]
       },
       {
         name: 'Chocolates',
         rows: [
-          ['Chocolates', 'LRN-CHO-001', 'Dark Chocolate Truffle 70%', '', '9 Months', '12', '144', 'Small Box', 0.65, 93.60, '20 Boxes', '4 Boxes', '10 Boxes', '1.7', '2.2', '30 Boxes', '', 2808.00, 'Truffles'],
-          ['Chocolates', 'LRN-CHO-002', 'Praline Hazelnut Bonbon', '', '9 Months', '11', '144', 'Small Box', 0.68, 97.92, '20 Boxes', '4 Boxes', '10 Boxes', '1.6', '2.1', '30 Boxes', '', 2937.60, 'Bonbons']
+          ['LRN-CHO-001', 'Dark Chocolate Truffle 70%', '9 Months', '12', '144', 'Small Box', 0.65, 93.60, '180 Boxes/Pallet', '135 Boxes/Pallet', '150 Boxes/Pallet', '1.7', '2.2', '30 Boxes', 2808.00, 'Truffles'],
+          ['LRN-CHO-002', 'Praline Hazelnut Bonbon', '9 Months', '11', '144', 'Small Box', 0.68, 97.92, '180 Boxes/Pallet', '135 Boxes/Pallet', '150 Boxes/Pallet', '1.6', '2.1', '30 Boxes', 2937.60, 'Bonbons']
         ]
       },
       {
         name: 'Presentation Stands',
+        isPresentation: true,
+        headers: ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ', 'Product Group'],
         rows: [
-          ['Presentation Stands', 'LRN-STD-001', 'Acrylic 3-Tier Tart Stand', 'Clear acrylic 3mm', 'N/A', '850', '4', 'Display Box', 18.50, 74.00, '6 Boxes', '1 Box', '3 Boxes', '3.4', '4.2', '10 Sets', '10', 740.00, 'Acrylic Displays']
+          ['LRN-STD-001', 'Acrylic 3-Tier Tart Stand', '4', 18.50, 74.00, '3.4', '4.2', 'Display Box', '10 Sets', 740.00, 'Acrylic Displays']
         ]
       }
     ];
 
     sheets.forEach(sheet => {
-      const ws = XLSX.utils.aoa_to_sheet([standardHeaders, ...sheet.rows]);
+      let wsData;
+      let ws;
+      if (sheet.isPresentation) {
+        wsData = [sheet.headers, ...sheet.rows];
+        ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      } else {
+        wsData = [standardHeaderRow1, standardHeaderRow2, standardHeaderRow3, ...sheet.rows];
+        ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws['!merges'] = standardMerges;
+        ws['!freeze'] = { xSplit: 0, ySplit: 3 };
+      }
       XLSX.utils.book_append_sheet(wb, ws, sheet.name);
     });
 
@@ -1652,24 +1735,73 @@
     } catch {
       throw new Error('Unable to read this file as an Excel workbook.');
     }
-    const headers = ['Worksheet', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group'];
+    const headers = ['Category', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group'];
     const products = [];
     const usedSheets = new Set();
     for (const sheetName of workbook.SheetNames) {
       const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: true });
+      if (!matrix || !matrix.length) continue;
       let map = null;
       let currentSection = sheetName;
-      for (const row of matrix) {
+      for (let rIdx = 0; rIdx < matrix.length; rIdx++) {
+        const row = matrix[rIdx];
         const labels = row.map(value => String(value ?? '').replace(/[\r\n]+/g, ' ').trim());
         const nonEmptyLabels = labels.filter(Boolean);
-        if (nonEmptyLabels.length === 1 && nonEmptyLabels[0].length > 2 && !/price list|don't miss|la rose noire|homepage|facebook|instagram|twitter|tel:/i.test(nonEmptyLabels[0])) currentSection = nonEmptyLabels[0];
-        const codeIndex = labels.findIndex(value => /(^|\s)(code no|lrn code)(\s|$)/i.test(value));
+        if (nonEmptyLabels.length === 1 && nonEmptyLabels[0].length > 2 && !/price list|don't miss|la rose noire|homepage|facebook|instagram|twitter|tel:/i.test(nonEmptyLabels[0])) {
+          currentSection = nonEmptyLabels[0];
+        }
+        const codeIndex = labels.findIndex(value => /(^|\s)(code no|lrn code|code)(\s|$)/i.test(value));
         const hasPrice = labels.some(value => /price\s*\/\s*(pc|box)|total price/i.test(value));
         if (codeIndex >= 0 && hasPrice) {
-          const find = pattern => labels.findIndex(value => pattern.test(value));
-          const palletStart = find(/pallet per container/i);
+          const findInRow = (r, pattern) => (r || []).findIndex(value => pattern.test(String(value ?? '').replace(/[\r\n]+/g, ' ').trim()));
+          const find = pattern => findInRow(row, pattern);
+
+          // Find pallet columns across current row and neighboring rows (up to 3 rows above or below)
+          let p40L = find(/16\s*pallet|large.*16|40ft.*large/i);
+          let p40S = find(/2\s*pallet|small.*2|40ft.*small/i);
+          let p20L = find(/8\s*pallet|large.*8|20ft.*large/i);
+
+          for (let offset = -3; offset <= 3; offset++) {
+            if (offset === 0) continue;
+            const neighborRow = matrix[rIdx + offset];
+            if (!neighborRow || !Array.isArray(neighborRow)) continue;
+            if (p40L < 0) p40L = findInRow(neighborRow, /16\s*pallet|large.*16|40ft.*large/i);
+            if (p40S < 0) p40S = findInRow(neighborRow, /2\s*pallet|small.*2|40ft.*small/i);
+            if (p20L < 0) p20L = findInRow(neighborRow, /8\s*pallet|large.*8|20ft.*large/i);
+          }
+
+          if (p40L < 0) {
+            let palletContainerIdx = find(/pallet\s*per\s*container|pallet.*container|container.*pallet/i);
+            if (palletContainerIdx < 0) {
+              for (let offset = -3; offset <= 3; offset++) {
+                const neighborRow = matrix[rIdx + offset];
+                if (!neighborRow || !Array.isArray(neighborRow)) continue;
+                const testIdx = findInRow(neighborRow, /pallet\s*per\s*container|pallet.*container|container.*pallet/i);
+                if (testIdx >= 0) { palletContainerIdx = testIdx; break; }
+              }
+            }
+            if (palletContainerIdx >= 0) {
+              p40L = palletContainerIdx;
+              if (p40S < 0) p40S = palletContainerIdx + 1;
+              if (p20L < 0) p20L = palletContainerIdx + 2;
+            }
+          }
+
+          const boxPriceIdx = find(/price\s*\/\s*box/i);
+          if (p40L < 0 && boxPriceIdx >= 0 && !/presentation stands/i.test(sheetName)) {
+            p40L = boxPriceIdx + 1;
+            p40S = boxPriceIdx + 2;
+            p20L = boxPriceIdx + 3;
+          } else {
+            if (p40S < 0 && p40L >= 0) p40S = p40L + 1;
+            if (p20L < 0 && p40L >= 0) p20L = p40L + 2;
+          }
+
+          const catColIdx = labels.findIndex(value => /^(worksheet|category|section)$/i.test(value));
+
           map = {
             code: codeIndex,
+            categoryCol: catColIdx,
             description: find(/description|item name/i),
             details: /presentation stands/i.test(sheetName) ? find(/item name/i) + 1 : -1,
             expiry: find(/expiry/i),
@@ -1677,54 +1809,74 @@
             pieces: find(/pcs\s*\/\s*box|pc\s*\/\s*set/i),
             boxSize: find(/^box size$/i),
             unitPrice: find(/price\s*\/\s*pc/i),
-            boxPrice: find(/price\s*\/\s*box/i),
-            pallet40Large: palletStart,
-            pallet40Small: palletStart >= 0 ? palletStart + 1 : -1,
-            pallet20Large: palletStart >= 0 ? palletStart + 2 : -1,
+            boxPrice: boxPriceIdx,
+            pallet40Large: p40L,
+            pallet40Small: p40S,
+            pallet20Large: p20L,
             netWeight: find(/^nw/i),
             grossWeight: find(/^gw/i),
             moq: find(/^moq$/i),
             moqQuantity: find(/^moq$/i) >= 0 ? find(/^moq$/i) + 1 : -1,
             totalPrice: find(/total price/i),
+            productGroup: find(/product group/i)
           };
           continue;
         }
+
         if (!map) continue;
         const code = String(row[map.code] ?? '').trim();
+        if (!code || /^(code no|lrn code|code|description|item name|total)$/i.test(code)) continue;
+
         const unitPrice = map.unitPrice >= 0 ? row[map.unitPrice] : '';
         const boxPrice = map.boxPrice >= 0 ? row[map.boxPrice] : '';
         const totalPrice = map.totalPrice >= 0 ? row[map.totalPrice] : '';
-        if (!code || ![unitPrice, boxPrice, totalPrice].some(isNumeric)) continue;
-        const take = index => index >= 0 ? row[index] ?? '' : '';
+        if (![unitPrice, boxPrice, totalPrice].some(isNumeric)) continue;
+
+        const take = index => (index !== null && index !== undefined && index >= 0) ? (row[index] ?? '') : '';
+        const groupFromRow = map.productGroup >= 0 ? String(row[map.productGroup] ?? '').trim() : '';
+        const catFromRow = map.categoryCol >= 0 ? String(row[map.categoryCol] ?? '').trim() : '';
+        const categoryName = catFromRow || sheetName;
+
         products.push([
-          sheetName, code, take(map.description), take(map.details), take(map.expiry), take(map.weight),
+          categoryName, code, take(map.description), take(map.details), take(map.expiry), take(map.weight),
           take(map.pieces), take(map.boxSize), unitPrice, boxPrice, take(map.pallet40Large),
           take(map.pallet40Small), take(map.pallet20Large), take(map.netWeight), take(map.grossWeight),
-          take(map.moq), take(map.moqQuantity), totalPrice, currentSection
+          take(map.moq), take(map.moqQuantity), totalPrice, groupFromRow || currentSection
         ]);
         usedSheets.add(sheetName);
       }
     }
     if (!products.length) throw new Error('No product rows with price values were detected in this workbook.');
     const normalized = [headers, ...products];
-    state.pending = { name: file.name.replace(/\.(xlsx|xls)$/i, ''), matrix: normalized, priceColumns: headers.map((header, index) => /price\s*\/\s*(pc|box)/i.test(header) ? index : -1).filter(index => index >= 0) };
-    dom.importFileName.textContent = `${file.name} · ${products.length.toLocaleString()} products from ${usedSheets.size} worksheets`;
-    dom.importDialog.showModal();
-  }
-  async function confirmImport(event) {
-    event.preventDefault(); const headerIndex = 0; const rawHeaders = state.pending.matrix[headerIndex] || []; const width = Math.max(rawHeaders.length, ...state.pending.matrix.slice(headerIndex + 1).map(row => row.length));
-    const headers = Array.from({ length: width }, (_, index) => String(rawHeaders[index] || `Column ${index + 1}`).trim());
-    const priceColumns = state.pending.priceColumns;
-    const rows = state.pending.matrix.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
-    state.active = { id: '', name: state.pending.name, headers, rows, priceColumns, adjustment: 0, categoryAdjustments: {}, savedAt: null, savedBy: state.user.name, isDraft: true }; state.adjustment = 0; state.categoryAdjustments = {}; state.search = ''; dom.search.value = ''; dom.importDialog.close(); loadActive(state.active);
+    const headerIndex = 0;
+    const rawHeaders = normalized[headerIndex] || [];
+    const width = Math.max(rawHeaders.length, ...normalized.slice(headerIndex + 1).map(row => row.length));
+    const finalHeaders = Array.from({ length: width }, (_, index) => String(rawHeaders[index] || `Column ${index + 1}`).trim());
+    const priceColumns = finalHeaders.map((header, index) => /price\s*\/\s*(pc|box)/i.test(header) ? index : -1).filter(index => index >= 0);
+    const rows = normalized.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
+
+    const listName = file.name.replace(/\.(xlsx|xls)$/i, '');
+    state.active = {
+      id: '',
+      name: listName,
+      headers: finalHeaders,
+      rows,
+      priceColumns,
+      adjustment: 0,
+      categoryAdjustments: {},
+      savedAt: null,
+      savedBy: state.user.name,
+      isDraft: true
+    };
+    state.adjustment = 0;
+    state.categoryAdjustments = {};
+    state.search = '';
+    if (dom.search) dom.search.value = '';
+
+    loadActive(state.active);
     await setDraft(draftKey(), state.active);
-    const catSet = new Set(rows.map(r => r[0]).filter(Boolean));
-    logActivity('import_workbook', `Imported workbook "${state.pending.name}"`, `${rows.length.toLocaleString()} products loaded across ${catSet.size} categories.`, {
-      fileName: state.pending.name,
-      rowCount: rows.length,
-      categoryCount: catSet.size
-    });
-    toast(`${rows.length.toLocaleString()} products imported. Autosaved as draft.`);
+
+    toast(`${rows.length.toLocaleString()} products loaded into editor. Ready to edit.`);
   }
   function getChangeSummary() {
     const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
@@ -1812,6 +1964,7 @@
     const data = await api('save', {
       method: 'POST',
       body: JSON.stringify({
+        id: state.active?.id || null,
         name,
         headers: state.headers,
         rows: state.rows,
@@ -1832,28 +1985,108 @@
     await removeDraft(draftKey());
     loadActive(data.active); await loadState(true); toast(data.message);
   }
-  function exportRows() { return state.rows.map(row => state.headers.map((_, column) => state.priceColumns.includes(column) && isNumeric(row[column]) ? Number(adjusted(numeric(row[column]), String(row[0] ?? '')).toFixed(2)) : row[column])); }
   function exportExcel() {
     if (!window.XLSX) return toast('Excel tools are unavailable.');
-    const worksheet = XLSX.utils.aoa_to_sheet([state.headers, ...exportRows()]); worksheet['!freeze'] = { xSplit: 0, ySplit: 1 };
-    const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Updated Price List'); XLSX.writeFile(workbook, `${state.active.name} - updated.xlsx`);
+    const wb = XLSX.utils.book_new();
+
+    const categoryMap = new Map();
+    state.rows.forEach(row => {
+      const cat = String(row[0] || 'Price List').trim();
+      if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+      categoryMap.get(cat).push(row);
+    });
+
+    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
+    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', '', '', '', '', ''];
+    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', '', '', '', '', ''];
+    const standardMerges = [
+      { s: { r: 0, c: 0 }, e: { r: 2, c: 0 } },
+      { s: { r: 0, c: 1 }, e: { r: 2, c: 1 } },
+      { s: { r: 0, c: 2 }, e: { r: 2, c: 2 } },
+      { s: { r: 0, c: 3 }, e: { r: 2, c: 3 } },
+      { s: { r: 0, c: 4 }, e: { r: 2, c: 4 } },
+      { s: { r: 0, c: 5 }, e: { r: 2, c: 5 } },
+      { s: { r: 0, c: 6 }, e: { r: 2, c: 6 } },
+      { s: { r: 0, c: 7 }, e: { r: 2, c: 7 } },
+      { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
+      { s: { r: 1, c: 10 }, e: { r: 1, c: 10 } },
+      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } },
+      { s: { r: 0, c: 12 }, e: { r: 2, c: 12 } },
+      { s: { r: 0, c: 13 }, e: { r: 2, c: 13 } },
+      { s: { r: 0, c: 14 }, e: { r: 2, c: 14 } },
+      { s: { r: 0, c: 15 }, e: { r: 2, c: 15 } }
+    ];
+
+    const presentationHeaders = ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
+
+    categoryMap.forEach((catRows, catName) => {
+      const isPresentation = /presentation stands/i.test(catName);
+      const wsData = [];
+      if (isPresentation) {
+        wsData.push(presentationHeaders);
+        catRows.forEach(row => {
+          const itemName = [row[2], row[3]].filter(Boolean).join(' ');
+          const moq = [row[15], row[16]].filter(Boolean).join(' ');
+          wsData.push([
+            row[1],
+            itemName,
+            row[6],
+            isNumeric(row[8]) ? Number(adjusted(numeric(row[8]), catName).toFixed(2)) : row[8],
+            isNumeric(row[9]) ? Number(adjusted(numeric(row[9]), catName).toFixed(2)) : row[9],
+            row[13],
+            row[14],
+            row[7],
+            moq,
+            isNumeric(row[17]) ? Number(row[17]) : row[17],
+            row[18] || catName
+          ]);
+        });
+      } else {
+        wsData.push(standardHeaderRow1, standardHeaderRow2, standardHeaderRow3);
+        catRows.forEach(row => {
+          wsData.push([
+            row[1],
+            row[2],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            isNumeric(row[8]) ? Number(adjusted(numeric(row[8]), catName).toFixed(2)) : row[8],
+            isNumeric(row[9]) ? Number(adjusted(numeric(row[9]), catName).toFixed(2)) : row[9],
+            row[10],
+            row[11],
+            row[12],
+            row[13],
+            row[14],
+            row[15],
+            isNumeric(row[17]) ? Number(row[17]) : row[17],
+            row[18] || catName
+          ]);
+        });
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      if (!isPresentation) {
+        ws['!merges'] = standardMerges;
+        ws['!freeze'] = { xSplit: 0, ySplit: 3 };
+      } else {
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      }
+      const safeSheetName = catName.substring(0, 31).replace(/[\\/?*[\]]/g, '');
+      XLSX.utils.book_append_sheet(wb, ws, safeSheetName || 'Sheet');
+    });
+
+    const exportName = (state.active?.name || 'LRN Price List').replace(/[/\\?%*:|"<>]/g, '_');
+    XLSX.writeFile(wb, `${exportName} - updated.xlsx`);
+    toast('Excel workbook exported successfully.');
   }
   const pdfImageCache = {};
   function clearPdfImageCache() {
     Object.keys(pdfImageCache).forEach(key => delete pdfImageCache[key]);
   }
   async function loadPdfImages() {
-    const urls = {
-      breads: 'assets/products/breads.jpg',
-      cones: 'assets/products/cones.jpg',
-      tarts: 'assets/products/tarts.jpg',
-      presentation: 'assets/products/presentation.jpg',
-      chocolates: 'assets/products/chocolates.jpg',
-      macarons: 'assets/products/macarons.jpg',
-      savory: 'assets/products/savory.jpg',
-      pastries: 'assets/products/pastries.jpg',
-      gourmet: 'assets/products/gourmet.jpg'
-    };
+    const urls = {};
     state.productImages.forEach(image => {
       if (image.key && image.imagePath) urls[`custom:${image.key}`] = image.imagePath;
     });
@@ -1882,17 +2115,7 @@
 
   function getPdfGroupImageKey(category, groupName) {
     const custom = imageOverride(category, groupName);
-    if (custom?.key) return `custom:${custom.key}`;
-    const text = `${category} ${groupName}`.toLowerCase();
-    if (/presentation|stand|display|acrylic|holder|buffet/i.test(text)) return 'presentation';
-    if (/bread|baguette|roll|sourdough|loaf|bun/i.test(text)) return 'breads';
-    if (/cone/i.test(text)) return 'cones';
-    if (/tart|shell|pie/i.test(text)) return 'tarts';
-    if (/chocolate|praline|bonbon|truffle/i.test(text)) return 'chocolates';
-    if (/macaron/i.test(text)) return 'macarons';
-    if (/basket|spoon|savory|canape/i.test(text)) return 'savory';
-    if (/pastry|pastries|cake|choux|eclair|dessert/i.test(text)) return 'pastries';
-    return 'gourmet';
+    return custom?.key ? `custom:${custom.key}` : null;
   }
 
   async function exportPdf() {
@@ -2135,7 +2358,7 @@
           alternateRowStyles: {
             fillColor: [253, 248, 249]
           },
-          didDrawCell: function(data) {
+          didDrawCell: function (data) {
             if (data.section === 'body' && data.column.index === 0 && data.cell.raw && data.cell.raw.imageKey && pdfImages[data.cell.raw.imageKey]) {
               const imgData = pdfImages[data.cell.raw.imageKey];
               const pad = 2;
@@ -2150,7 +2373,7 @@
               }
             }
           },
-          willDrawPage: function() {
+          willDrawPage: function () {
             doc.setFillColor(255, 255, 255);
             doc.rect(0, 0, pageWidth, pageHeight, 'F');
           }
@@ -2297,17 +2520,36 @@
       dom.fileInput.value = '';
     }
   });
-  $('#confirmImport').addEventListener('click', confirmImport);
+
   async function applyPriceAdjustment() {
-    const value = Number(dom.percentage.value);
-    if (!Number.isFinite(value) || value < -100 || value > 10000) return toast('Enter a percentage from -100 to 10,000.');
-    const cat = state.category;
-    if (cat) {
+    const rawVal = String(dom.percentage.value ?? '').trim();
+    if (rawVal === '') {
+      return toast('Please enter a percentage adjustment (e.g. 5 for +5%, -10 for -10%).');
+    }
+    const value = Number(rawVal);
+    if (!Number.isFinite(value) || value < -100 || value > 10000) {
+      return toast('Enter a percentage from -100 to 10,000.');
+    }
+    const allCategories = getPriceCategories();
+    if (!allCategories.length) {
+      return toast('No categories available in the active price list.');
+    }
+    const selectedCats = [...selectedAdjustmentCategories];
+    if (!selectedCats.length) {
+      return toast('Please select at least one category to apply the adjustment.');
+    }
+
+    selectedCats.forEach(cat => {
       state.categoryAdjustments[cat] = value;
-    } else {
+    });
+
+    const isAll = selectedCats.length === allCategories.length;
+    if (isAll) {
       state.adjustment = value;
     }
+
     if (state.active) {
+      if (isAll) state.active.adjustment = value;
       state.active.categoryAdjustments = { ...state.categoryAdjustments };
       state.active.isDraft = true;
       await setDraft(draftKey(), state.active);
@@ -2317,85 +2559,74 @@
       renderTable();
     }
     setPriceEditor(false);
+
     const sign = value > 0 ? '+' : '';
-    const adjTitle = cat ? `Adjusted ${cat} prices by ${sign}${value}%` : `Adjusted baseline prices by ${sign}${value}%`;
-    const adjDetails = `New price rate applied to ${cat || 'all products'}. Draft saved.`;
-    logActivity('price_adjust', adjTitle, adjDetails, { category: cat, percentage: value });
-    toast(`Adjustment for ${cat || 'products'} updated to ${sign}${value}% & draft saved.`);
-  }
-
-  async function applyPriceAdjustmentToAll() {
-    const value = Number(dom.percentage.value);
-    if (!Number.isFinite(value) || value < -100 || value > 10000) return toast('Enter a percentage from -100 to 10,000.');
-    if (!state.active || !state.rows.length) return toast('Please upload or open a price list first before adjusting prices.');
-
-    state.adjustment = value;
-    const allCategories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))];
-    allCategories.forEach(cat => {
-      state.categoryAdjustments[cat] = value;
+    let affectedProducts = 0;
+    allCategories.forEach(c => {
+      if (selectedAdjustmentCategories.has(c.name)) affectedProducts += c.count;
     });
 
-    if (state.active) {
-      state.active.adjustment = value;
-      state.active.categoryAdjustments = { ...state.categoryAdjustments };
-      state.active.isDraft = true;
-      await setDraft(draftKey(), state.active);
-      loadActive(state.active);
-    } else {
-      updateMetrics();
-      renderTable();
-    }
-    setPriceEditor(false);
-    const sign = value > 0 ? '+' : '';
-    const catCount = allCategories.length;
-    const adjTitle = `Applied ${sign}${value}% to all categories`;
-    const adjDetails = `Global price adjustment of ${sign}${value}% applied across all ${catCount} categories (${state.rows.length.toLocaleString()} products). Draft saved.`;
-    logActivity('price_adjust', adjTitle, adjDetails, {
-      percentage: value,
-      applyAll: true,
-      categoryCount: catCount,
-      categories: allCategories
-    });
-    toast(`Applied ${sign}${value}% adjustment to all ${catCount} categories & draft saved.`);
+    toast(`Applied ${sign}${value}% adjustment to ${selectedCats.length} category/categories & draft saved.`);
   }
 
-  $('#previewButton').addEventListener('click', event => {
+  $('#previewButton')?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
     applyPriceAdjustment();
-  });
-  $('#applyAllCategoriesButton')?.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopPropagation();
-    applyPriceAdjustmentToAll();
   });
   $('#adjustmentForm')?.addEventListener('submit', event => {
     event.preventDefault();
     event.stopPropagation();
     applyPriceAdjustment();
   });
-  dom.percentage.addEventListener('keydown', event => {
+  dom.percentage?.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
       applyPriceAdjustment();
     }
   });
-  $('#adjustmentBar')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.stopPropagation();
-      applyPriceAdjustment();
+  dom.percentage?.addEventListener('input', () => {
+    updateAdjustmentUI();
+  });
+  dom.closeAdjustmentBarBtn?.addEventListener('click', () => {
+    setPriceEditor(false);
+  });
+  dom.categoryCheckboxesList?.addEventListener('change', event => {
+    const cb = event.target.closest('.category-adjust-checkbox');
+    if (!cb) return;
+    const cat = cb.value;
+    if (cb.checked) {
+      selectedAdjustmentCategories.add(cat);
+    } else {
+      selectedAdjustmentCategories.delete(cat);
     }
+    cb.closest('.category-checkbox-item')?.classList.toggle('checked', cb.checked);
+    updateAdjustmentUI();
+  });
+  dom.selectAllCategoriesBtn?.addEventListener('click', () => {
+    getPriceCategories().forEach(c => selectedAdjustmentCategories.add(c.name));
+    renderCategoryAdjustmentList(dom.categoryAdjustSearch?.value || '');
+  });
+  dom.deselectAllCategoriesBtn?.addEventListener('click', () => {
+    selectedAdjustmentCategories.clear();
+    renderCategoryAdjustmentList(dom.categoryAdjustSearch?.value || '');
+  });
+  dom.categoryAdjustSearch?.addEventListener('input', () => {
+    renderCategoryAdjustmentList(dom.categoryAdjustSearch.value);
+  });
+  $$('.adj-preset-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      dom.percentage.value = chip.dataset.preset;
+      updateAdjustmentUI();
+      dom.percentage.focus();
+    });
   });
   dom.search.addEventListener('input', () => { state.search = dom.search.value; renderTable(); });
   dom.category.addEventListener('change', () => {
     state.category = dom.category.value;
-    dom.percentage.value = getCategoryAdjustment(state.category);
-    const title = $('#adjustmentTitle');
-    const subtitle = document.querySelector('#adjustmentBar .edit-summary span');
-    if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
-    if (subtitle) subtitle.textContent = state.category ? `Adjust ${state.category} or apply globally to all categories.` : 'Adjust prices for current category or apply globally.';
+    const cat = String(state.category || '').trim();
+    dom.percentage.value = getCategoryAdjustment(cat);
     updateMetrics();
     renderTable();
   });
@@ -2440,7 +2671,7 @@
       if (saved && ['workspacePanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
         return saved;
       }
-    } catch {}
+    } catch { }
     return 'workspacePanel';
   }
 
@@ -2468,7 +2699,7 @@
 
     try {
       localStorage.setItem('pla_active_panel', finalPanelId);
-    } catch {}
+    } catch { }
 
     if (updateHash) {
       const hashMap = {
@@ -2596,11 +2827,11 @@
               <div class="history-change-item">
                 <div>
                   <strong>${escapeHtml(cat.category)}</strong>
-                  ${cat.productCount ? `<div style="color:#716268; font-size:0.72rem; margin-top:2px;">${cat.productCount} pcs</div>` : ''}
+                  ${cat.productCount ? `<div class="history-change-subtext">${cat.productCount} pcs</div>` : ''}
                 </div>
                 <span class="change-badge ${cls}">${sign}${num}%</span>
               </div>`;
-          }).join('') || '<div style="padding:16px; text-align:center; color:#716268;">No specific category adjustments recorded.</div>';
+          }).join('') || '<div class="history-change-empty">No specific category adjustments recorded.</div>';
           dialog.showModal();
         }
       }
@@ -2740,7 +2971,9 @@
       dom.groupImageInput.value = '';
       if (activeButton?.isConnected) {
         activeButton.disabled = false;
-        activeButton.textContent = 'Choose image';
+        if (!activeButton.classList.contains('group-add-photo-btn') && !activeButton.classList.contains('group-photo-change-btn')) {
+          activeButton.textContent = 'Change photo';
+        }
       }
     }
   });
@@ -2913,19 +3146,24 @@
     if (subtitle) subtitle.textContent = state.category ? `Adjust ${state.category} or apply globally to all categories.` : 'Adjust prices for current category or apply globally.';
     updateMetrics();
     renderTable();
-    logActivity('reset_prices', 'Reset price adjustments to 0%', 'All category and product percentage adjustments were cleared.', {});
     toast('All price adjustments reset to original (0%). Uploaded file retained.');
   });
 
   // --- Spreadsheet Event Listeners ---
   dom.table?.addEventListener('click', event => {
-    if (event.target.closest('.excel-cell-editor')) {
+    const chooseButton = event.target.closest('.choose-group-image');
+    if (chooseButton) {
+      if (!state.canEdit) return;
+      state.pendingImageGroup = {
+        category: chooseButton.dataset.category || '',
+        groupName: chooseButton.dataset.group || '',
+        button: chooseButton
+      };
+      dom.groupImageInput.value = '';
+      dom.groupImageInput.click();
       return;
     }
-    const deleteBtn = event.target.closest('.btn-delete-row');
-    if (deleteBtn) {
-      event.stopPropagation();
-      promptDeleteRow(Number(deleteBtn.dataset.row));
+    if (event.target.closest('.excel-cell-editor')) {
       return;
     }
     const td = event.target.closest('.excel-cell');
@@ -2944,9 +3182,8 @@
     if (state.activeCell.td) {
       const inTable = event.target.closest('#priceTable');
       const inFormula = event.target.closest('#excelFormulaBar');
-      const inAction = event.target.closest('.row-action-cell') || event.target.closest('.btn-delete-row');
       const inDialog = event.target.closest('dialog');
-      if (!inTable && !inFormula && !inAction && !inDialog) {
+      if (!inTable && !inFormula && !inDialog) {
         deselectCell();
       }
     }
@@ -3052,19 +3289,6 @@
     }
   });
 
-  dom.addRowBtn?.addEventListener('click', addNewProductRow);
-
-  dom.confirmDeleteRow?.addEventListener('click', event => {
-    event.preventDefault();
-    confirmDeleteRow();
-  });
-
-  dom.deleteRowDialog?.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && event.target !== dom.deleteRowDialog.querySelector('button[value="cancel"]')) {
-      event.preventDefault();
-      confirmDeleteRow();
-    }
-  });
 
   // Upload Modal Listeners
   dom.closeUploadModalBtn?.addEventListener('click', closeUploadModal);
@@ -3158,7 +3382,7 @@
   function setLastReadTimestamp(ts = Date.now()) {
     try {
       localStorage.setItem('pla_last_read_audit_ts', String(ts));
-    } catch {}
+    } catch { }
   }
 
   function renderNotifications() {
@@ -3316,7 +3540,7 @@
           state.auditLogs = res.auditLogs;
           renderNotifications();
         }
-      } catch {}
+      } catch { }
     }
   });
 
@@ -3328,7 +3552,7 @@
           state.auditLogs = res.auditLogs;
           renderNotifications();
         }
-      } catch {}
+      } catch { }
     }
   }, 25000);
 
@@ -3336,7 +3560,7 @@
     let savedTheme = null;
     try {
       savedTheme = localStorage.getItem('pla_theme');
-    } catch {}
+    } catch { }
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const currentTheme = savedTheme || (prefersDark ? 'dark' : 'light');
     applyTheme(currentTheme);
@@ -3348,7 +3572,7 @@
         applyTheme(nextTheme);
         try {
           localStorage.setItem('pla_theme', nextTheme);
-        } catch {}
+        } catch { }
       });
     });
   }

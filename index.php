@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260928-audit-v1">
+    <link rel="stylesheet" href="assets/app.css?v=20260929-category-checkboxes-v13">
     <script>
     (function() {
         try {
@@ -138,7 +138,7 @@ $user = current_user();
                                     <line x1="8" y1="13" x2="16" y2="13"/>
                                     <line x1="8" y1="17" x2="16" y2="17"/>
                                 </svg>
-                                <span id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to map its products and prices.</span>
+                                <span id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to open and edit prices.</span>
                             </div>
                             <div class="file-audit-row" id="savedMetaRow" hidden>
                                 <svg class="audit-clock-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -152,7 +152,7 @@ $user = current_user();
                     <div id="metricGroup" class="metric-group" hidden>
                         <div class="metric-item"><strong id="productCount">0</strong><span>Products</span></div>
                         <div class="metric-item"><strong id="categoryCount">0</strong><span>Categories</span></div>
-                        <div class="metric-item"><strong id="priceColumnCount">0</strong><span>Auto price fields</span></div>
+                        <div class="metric-item"><strong id="priceColumnCount">0</strong><span>Price columns</span></div>
                         <div class="metric-item"><strong id="currentAdjustment">0%</strong><span>Adjustment</span></div>
                     </div>
                     <div class="heading-actions">
@@ -197,23 +197,65 @@ $user = current_user();
                             </div>
                         </div>
                         <section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
-                            <div class="edit-summary"><strong id="adjustmentTitle">Adjust all prices</strong><span>Use a positive or negative percentage.</span></div>
-                            <form id="adjustmentForm" class="adjustment-form-wrap" onsubmit="return false;">
-                                <label for="percentage">Percentage adjustment</label>
-                                <div class="percentage-input-row">
-                                    <div class="percentage-input"><input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0"><span>%</span></div>
-                                    <button id="previewButton" type="submit" class="button primary" title="Apply adjustment to current category (Press Enter)">Apply</button>
+                            <div class="popover-header">
+                                <div class="edit-summary">
+                                    <strong id="adjustmentTitle">Adjust Prices</strong>
+                                    <span>Increase or decrease prices by percentage for selected categories.</span>
                                 </div>
-                                <div class="adjustment-divider"><span>or apply globally</span></div>
-                                <button id="applyAllCategoriesButton" type="button" class="button secondary btn-apply-all-categories" title="Apply this percentage to all categories in the price list">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <rect x="3" y="3" width="7" height="7"></rect>
-                                        <rect x="14" y="3" width="7" height="7"></rect>
-                                        <rect x="14" y="14" width="7" height="7"></rect>
-                                        <rect x="3" y="14" width="7" height="7"></rect>
-                                    </svg>
-                                    <span>Apply to all categories</span>
-                                </button>
+                                <button type="button" id="closeAdjustmentBarBtn" class="popover-close-btn" aria-label="Close" title="Close editor">✕</button>
+                            </div>
+                            <form id="adjustmentForm" class="adjustment-form-wrap" onsubmit="return false;">
+                                <div class="adjustment-field-group">
+                                    <div class="adj-field-header">
+                                        <label for="percentage">Percentage Adjustment</label>
+                                        <span class="adj-field-hint">e.g. +5% or -10%</span>
+                                    </div>
+                                    <div class="percentage-input-row">
+                                        <div class="percentage-input">
+                                            <input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0" placeholder="0.00">
+                                            <span>%</span>
+                                        </div>
+                                    </div>
+                                    <div class="adj-presets" role="group" aria-label="Preset percentages">
+                                        <button type="button" class="adj-preset-chip" data-preset="2">+2%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="5">+5%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="10">+10%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="-5">-5%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="-10">-10%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="0">0%</button>
+                                    </div>
+                                </div>
+
+                                <div class="adjustment-categories-section">
+                                    <div class="adj-categories-header">
+                                        <div class="adj-categories-title">
+                                            <label>Select Categories</label>
+                                            <span id="selectedCategoryCountBadge" class="selected-cat-badge">0 selected</span>
+                                        </div>
+                                        <div class="adj-categories-quick-actions">
+                                            <button type="button" id="selectAllCategoriesBtn" class="text-button">Select all</button>
+                                            <span class="sep-dot">·</span>
+                                            <button type="button" id="deselectAllCategoriesBtn" class="text-button">Deselect</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="category-search-box" id="categoryAdjustSearchBox">
+                                        <svg class="cat-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        <input type="search" id="categoryAdjustSearch" placeholder="Search categories..." autocomplete="off">
+                                    </div>
+
+                                    <div class="category-checkboxes-container" id="categoryCheckboxesList" role="group" aria-label="Target categories">
+                                        <!-- Categories with checkboxes rendered dynamically via JavaScript -->
+                                    </div>
+                                </div>
+
+                                <div class="adjustment-actions">
+                                    <button id="previewButton" type="submit" class="button primary btn-apply-adjustment">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <span id="applyButtonText">Apply Adjustment</span>
+                                    </button>
+                                    <span id="adjPreviewSummary" class="adj-preview-summary">Select categories above to apply percentage.</span>
+                                </div>
                             </form>
                         </section>
                     </div>
@@ -232,13 +274,6 @@ $user = current_user();
                             <label class="select-control"><span>Category</span><select id="categorySelect"></select></label>
                         </div>
                         <div class="actions">
-                            <button id="addRowBtn" class="button primary icon-button edit-only" type="button" title="Add new product row">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                                <span>Add row</span>
-                            </button>
                             <button id="excelButton" class="button secondary">Export Excel</button>
                             <button id="pdfButton" class="button secondary">Export PDF</button>
                         </div>
@@ -470,7 +505,7 @@ $user = current_user();
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </span>
                 <div>
-                    <p class="kicker">WORKBOOK IMPORT</p>
+                    <p class="kicker">EXCEL IMPORT</p>
                     <h2>Upload Price List Excel File</h2>
                 </div>
             </div>
@@ -478,7 +513,7 @@ $user = current_user();
         </div>
 
         <p class="muted upload-modal-desc">
-            Upload an Excel workbook (<code>.xlsx</code> or <code>.xls</code>) to map product categories, descriptions, specifications, and prices directly into the spreadsheet editor.
+            Upload an Excel workbook (<code>.xlsx</code> or <code>.xls</code>) to open and edit products, specifications, and prices directly in the spreadsheet editor.
         </p>
 
         <!-- Downloadable Official Template Card -->
@@ -571,14 +606,6 @@ $user = current_user();
     </div>
 </dialog>
 
-<dialog id="importDialog">
-    <form method="dialog" class="dialog-card" id="importForm">
-        <div class="dialog-heading"><div><p class="kicker">Import review</p><h2>Confirm workbook mapping</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p id="importFileName" class="muted"></p>
-        <div class="auto-mapping"><strong>Automatic price mapping</strong><p>Only price per piece and price per box values will be adjusted automatically. Product details and totals remain unchanged.</p></div>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmImport" value="default" class="button primary">Import price list</button></div>
-    </form>
-</dialog>
 
 <dialog id="saveDialog">
     <form method="dialog" class="dialog-card save-version-dialog" id="saveForm">
@@ -595,14 +622,6 @@ $user = current_user();
         <div class="dialog-heading"><div><p class="kicker">Permanent action</p><h2>Delete saved version?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
         <p>This removes <strong id="deleteVersionName"></strong> from history. This action cannot be undone.</p>
         <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDelete" value="default" class="button danger">Delete version</button></div>
-    </form>
-</dialog>
-
-<dialog id="deleteRowDialog">
-    <form method="dialog" class="dialog-card delete-dialog" id="deleteRowForm">
-        <div class="dialog-heading"><div><p class="kicker">Delete row</p><h2>Remove product row?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p>Are you sure you want to remove <strong id="deleteRowProductName">this product</strong> from the price list?</p>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDeleteRow" value="default" class="button danger">Delete row</button></div>
     </form>
 </dialog>
 
@@ -624,9 +643,9 @@ $user = current_user();
 
 <dialog id="deleteImageDialog">
     <form method="dialog" class="dialog-card" id="deleteImageForm">
-        <div class="dialog-heading"><div><p class="kicker">Restore default</p><h2>Remove custom image?</h2></div><button value="cancel" class="icon-button" aria-label="Close">&times;</button></div>
-        <p>The custom image for <strong id="deleteImageName"></strong> will be removed and the built-in category image will be used again.</p>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDeleteImage" value="default" class="button danger">Restore default</button></div>
+        <div class="dialog-heading"><div><p class="kicker">Remove photo</p><h2>Remove custom photo?</h2></div><button value="cancel" class="icon-button" aria-label="Close">&times;</button></div>
+        <p>The custom photo for <strong id="deleteImageName"></strong> will be removed.</p>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDeleteImage" value="default" class="button danger">Remove photo</button></div>
     </form>
 </dialog>
 
@@ -635,6 +654,6 @@ $user = current_user();
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260928-audit-v1"></script>
+<script src="assets/app.js?v=20260929-clean-save-v14"></script>
 </body>
 </html>
