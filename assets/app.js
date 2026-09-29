@@ -2,17 +2,66 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', pending: null, pendingDelete: null, versions: [], productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditAdjustment: '', auditPage: 1, historyPage: 1, historyPageSize: 10 };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], configTab: 'library', librarySearch: '' };
+  // Normalised row layout (see parseWorkbook): 0 category … 18 product group, 19 price level, 20 country.
+  const COL = { category: 0, code: 1, description: 2, priceLevel: 19, country: 20 };
+  const ROW_WIDTH = 21;
+  const can = permission => (state.permissions || []).includes(permission);
+  // The chosen category survives a page refresh (sessionStorage), but a fresh login, new upload or closed file starts on "All categories".
+  const CATEGORY_KEY = 'pla_view_category';
+  function rememberCategory(category) {
+    try { category ? sessionStorage.setItem(CATEGORY_KEY, category) : sessionStorage.removeItem(CATEGORY_KEY); } catch { }
+  }
+  function rememberedCategory() {
+    try { return sessionStorage.getItem(CATEGORY_KEY) || ''; } catch { return ''; }
+  }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
     loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
     auditLogsNav: $('#auditLogsNav'), openAuditLogsFromBell: $('#openAuditLogsFromBell'), auditAllCountBadge: $('#auditAllCountBadge'), auditEditsCountBadge: $('#auditEditsCountBadge'), auditVersionsCountBadge: $('#auditVersionsCountBadge'), auditFileSelect: $('#auditFileSelect'), auditFileSelectWrapper: $('#auditFileSelectWrapper'), auditTypeSelect: $('#auditTypeSelect'), auditTypeSelectWrapper: $('#auditTypeSelectWrapper'), auditUserSelect: $('#auditUserSelect'), auditUserSelectWrapper: $('#auditUserSelectWrapper'), historyAdjustmentSelectWrapper: $('#historyAdjustmentSelectWrapper'), refreshAuditLogsBtn: $('#refreshAuditLogsBtn'), auditTableHead: $('#auditTableHead'), versionsTableHead: $('#versionsTableHead'), historyEmptyTitle: $('#historyEmptyTitle'), historyEmptySubtitle: $('#historyEmptySubtitle'), historyChangesKicker: $('#historyChangesKicker'), historyChangesActions: $('#historyChangesActions'),
     notificationBtn: $('#notificationBtn'), notificationBadge: $('#notificationBadge'), notificationsDropdown: $('#notificationsDropdown'), notificationsList: $('#notificationsList'), notificationsEmpty: $('#notificationsEmpty'), notificationsCountBadge: $('#notificationsCountBadge'), markAllReadBtn: $('#markAllReadBtn'), clearLogsBtn: $('#clearLogsBtn'),
     uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn'),
+    codeFilterInput: $('#codeFilterInput'), codeFilterOptions: $('#codeFilterOptions'), priceLevelSelect: $('#priceLevelSelect'), countrySelect: $('#countrySelect'), clearFiltersBtn: $('#clearFiltersBtn'), exportLockNote: $('#exportLockNote'),
+    listTagsRow: $('#listTagsRow'), listPriceLevel: $('#listPriceLevel'), listCountry: $('#listCountry'), listRevisionTag: $('#listRevisionTag'), listRevision: $('#listRevision'),
+    approvalBanner: $('#approvalBanner'), approvalBannerIcon: $('#approvalBannerIcon'), approvalBannerTitle: $('#approvalBannerTitle'), approvalBannerText: $('#approvalBannerText'), bannerApproveBtn: $('#bannerApproveBtn'), bannerRejectBtn: $('#bannerRejectBtn'),
+    emptyStateTitle: $('#emptyStateTitle'), emptyStateText: $('#emptyStateText'), emptyBrowseListsButton: $('#emptyBrowseListsButton'),
+    uploadPriceLevel: $('#uploadPriceLevel'), uploadCountry: $('#uploadCountry'), priceLevelOptions: $('#priceLevelOptions'), countryOptions: $('#countryOptions'),
+    savePriceLevel: $('#savePriceLevel'), saveCountry: $('#saveCountry'), saveApproversNote: $('#saveApproversNote'), saveConfirmCheck: $('#saveConfirmCheck'), saveEditsSummary: $('#saveEditsSummary'), confirmSave: $('#confirmSave'),
+    approveDialog: $('#approveDialog'), approveForm: $('#approveForm'), approveDialogTitle: $('#approveDialogTitle'), approveDialogText: $('#approveDialogText'), approveDialogSummary: $('#approveDialogSummary'), approveRemarks: $('#approveRemarks'),
+    rejectDialog: $('#rejectDialog'), rejectForm: $('#rejectForm'), rejectDialogTitle: $('#rejectDialogTitle'), rejectRemarks: $('#rejectRemarks'),
+    listsTableBody: $('#listsTableBody'), listsEmpty: $('#listsEmpty'), listsEmptyTitle: $('#listsEmptyTitle'), listsEmptyText: $('#listsEmptyText'), listCount: $('#listCount'), listSearchInput: $('#listSearchInput'), listPriceLevelFilter: $('#listPriceLevelFilter'), listCountryFilter: $('#listCountryFilter'), listStatusFilter: $('#listStatusFilter'), listAllCount: $('#listAllCount'), listMineCount: $('#listMineCount'), listApprovedCount: $('#listApprovedCount'), pendingApprovalCount: $('#pendingApprovalCount'), listsSubtitle: $('#listsSubtitle'),
     categoryCheckboxesList: $('#categoryCheckboxesList'), categoryAdjustSearch: $('#categoryAdjustSearch'), selectAllCategoriesBtn: $('#selectAllCategoriesBtn'), deselectAllCategoriesBtn: $('#deselectAllCategoriesBtn'), selectedCategoryCountBadge: $('#selectedCategoryCountBadge'), applyButtonText: $('#applyButtonText'), adjPreviewSummary: $('#adjPreviewSummary'), closeAdjustmentBarBtn: $('#closeAdjustmentBarBtn')
   };
 
   const selectedAdjustmentCategories = new Set();
+
+  /** In-app replacement for window.confirm(); resolves true only when the confirm button is chosen. */
+  function confirmModal({ kicker = 'Please confirm', title, text, confirmLabel = 'Continue', cancelLabel = 'Cancel', danger = true }) {
+    const dialog = $('#confirmDialog');
+    if (!dialog) return Promise.resolve(window.confirm(text));
+    $('#confirmDialogKicker').textContent = kicker;
+    $('#confirmDialogTitle').textContent = title;
+    $('#confirmDialogText').textContent = text;
+    $('#confirmDialogCancel').textContent = cancelLabel;
+    const ok = $('#confirmDialogOk');
+    ok.textContent = confirmLabel;
+    ok.className = `button ${danger ? 'danger' : 'primary'}`;
+    dialog.returnValue = '';
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+      dialog.showModal();
+      requestAnimationFrame(() => $('#confirmDialogCancel').focus());
+    });
+  }
+  function confirmDiscardDraft(action) {
+    return confirmModal({
+      kicker: 'Unsaved changes',
+      title: 'Discard unsaved changes?',
+      text: `You have unsaved changes in the editor. ${action} will discard them. Save first if you want to keep them.`,
+      confirmLabel: 'Discard changes',
+      cancelLabel: 'Keep editing'
+    });
+  }
 
   function getPriceCategories() {
     const map = new Map();
@@ -237,16 +286,109 @@
     }
   }
 
-  const draftKey = () => (state.user ? `draft_${state.user.id}` : 'draft_current');
+  const draftKey = () => (state.user ? `draft_${state.user.username}` : 'draft_current');
 
   function applyPermissions() {
-    $$('.edit-only').forEach(element => element.hidden = !state.canEdit);
-    $$('.admin-only').forEach(element => element.hidden = state.user?.role !== 'admin');
+    $$('.edit-only').forEach(element => element.hidden = !can('update'));
+    $$('.admin-only').forEach(element => element.hidden = !can('manageImages'));
+    ['update', 'approve', 'viewAudit', 'manageImages', 'upload'].forEach(permission => {
+      $$(`.perm-${permission}`).forEach(element => element.hidden = !can(permission));
+    });
+    updateEditorActions();
+    const devToolsRoot = $('#devTools');
+    if (devToolsRoot) devToolsRoot.hidden = !state.devTools;
+  }
+  /** The adjust / reset / upload / save cluster only appears once a price list is open. */
+  function updateEditorActions() {
+    const cluster = $('#cloverActions');
+    if (cluster) cluster.hidden = !can('update') || !state.active;
+    const closeButton = $('#closeFileBtn');
+    if (closeButton) closeButton.hidden = !state.active;
+    renderNavigator();
+  }
+  /** Closes the open price list and returns the editor to its empty state. */
+  async function closeActiveFile() {
+    if (!state.active) return;
+    if (state.active.isDraft && !(await confirmDiscardDraft('Closing this file'))) return;
+    const name = state.active.name;
+    if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
+    setPriceEditor(false);
+    if (can('update')) await removeDraft(draftKey());
+    resetFilters();
+    state.category = '';
+    state.categoryChosen = false;
+    rememberCategory('');
+    state.rows = []; state.headers = []; state.priceColumns = [];
+    state.adjustment = 0; state.categoryAdjustments = {};
+    loadActive(null);
+    renderLists();
+    toast(`Closed ${name}.`);
+  }
+  function userName(username) {
+    return state.directory.find(entry => entry.username === username)?.name || username || '';
+  }
+  function statusLabel(status) {
+    return { pending: 'Pending approval', approved: 'Approved', rejected: 'Rejected', superseded: 'Superseded', draft: 'Draft (unsaved)' }[status] || 'Draft (unsaved)';
+  }
+  function activeStatus() {
+    if (!state.active) return null;
+    if (state.active.isDraft || !state.active.id) return 'draft';
+    return state.active.status || 'pending';
+  }
+  function canExportActive() {
+    return can('export') && activeStatus() === 'approved';
+  }
+  function versionSummaryById(id) {
+    return (state.versions || []).find(version => String(version.id) === String(id)) || null;
+  }
+  function approvalProgress(version) {
+    const approved = (version.approvals || []).map(approval => approval.name || userName(approval.username));
+    const waiting = (version.requiredApprovers || []).filter(username => !(version.approvals || []).some(approval => approval.username === username)).map(userName);
+    return { approved, waiting };
+  }
+  /** Pads legacy rows to the current width and fills price level / country from the list defaults. */
+  function normalizeRows(rows, priceLevel, country) {
+    return (rows || []).map(row => {
+      const copy = Array.from({ length: Math.max(ROW_WIDTH, row.length) }, (_, index) => row[index] ?? '');
+      if (!String(copy[COL.priceLevel] ?? '').trim()) copy[COL.priceLevel] = priceLevel || '';
+      if (!String(copy[COL.country] ?? '').trim()) copy[COL.country] = country || '';
+      return copy;
+    });
+  }
+  function normalizeHeaders(headers) {
+    const copy = [...(headers || [])];
+    while (copy.length < ROW_WIDTH) copy.push('');
+    copy[COL.priceLevel] = 'Price Level';
+    copy[COL.country] = 'Country';
+    return copy;
+  }
+  function uniqueValues(values) {
+    return [...new Set(values.map(value => String(value ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }
+  function fillSelect(select, values, allLabel, current) {
+    if (!select) return '';
+    select.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` + values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+    const next = values.includes(current) ? current : '';
+    select.value = next;
+    return next;
+  }
+  function fillDatalists() {
+    const levels = uniqueValues([...(state.versions || []).map(v => v.priceLevel), state.active?.priceLevel, 'FOB Subic', 'FOB Manila', 'Ex-Works', 'CIF', 'CFR']);
+    const countries = uniqueValues([...(state.versions || []).map(v => v.country), state.active?.country, 'All Countries']);
+    if (dom.priceLevelOptions) dom.priceLevelOptions.innerHTML = levels.map(value => `<option value="${escapeHtml(value)}"></option>`).join('');
+    if (dom.countryOptions) dom.countryOptions.innerHTML = countries.map(value => `<option value="${escapeHtml(value)}"></option>`).join('');
+  }
+  function guessPriceLevel(fileName) {
+    const match = String(fileName || '').match(/\b(FOB|FCA|EXW|Ex-?Works|CIF|CFR|CPT|CIP|DAP|DDP)\b[\s-]*([A-Za-z]+)?/i);
+    if (!match) return '';
+    const term = match[1].toUpperCase().replace('EX-WORKS', 'Ex-Works').replace('EXWORKS', 'Ex-Works');
+    const place = match[2] && !/^(port|price|list|pl)$/i.test(match[2]) ? ` ${match[2][0].toUpperCase()}${match[2].slice(1).toLowerCase()}` : '';
+    return `${term}${place}`;
   }
   function setAppLoading(loading) { document.body.classList.toggle('is-booting', loading); document.body.classList.toggle('is-ready', !loading); }
   function showApp() {
     dom.loginView.hidden = true; dom.appView.hidden = false;
-    dom.userName.textContent = state.user.name; dom.roleBadge.textContent = state.user.role; applyPermissions();
+    dom.userName.textContent = state.user.name; dom.roleBadge.textContent = can('update') ? 'Admin' : 'Export only'; applyPermissions();
     switchPanel(getInitialPanelId(), true);
   }
   function setPriceEditor(open) {
@@ -278,21 +420,67 @@
       button.focus();
     }
   }
+  function applyStatePayload(data) {
+    Object.assign(state, {
+      user: data.user, csrf: data.csrf, permissions: data.permissions || [], directory: data.directory || [],
+      approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove),
+      versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
+      notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
+      devTools: Boolean(data.devTools)
+    });
+    state.canEdit = can('update');
+  }
+  function rememberOpenVersion(id) {
+    try { id ? localStorage.setItem(`pla_open_version_${state.user?.username}`, id) : localStorage.removeItem(`pla_open_version_${state.user?.username}`); } catch { }
+  }
+  function rememberedVersionId() {
+    try { return localStorage.getItem(`pla_open_version_${state.user?.username}`) || ''; } catch { return ''; }
+  }
+  /** Reloads versions, notifications and audit logs; keeps the open price list unless it changed on the server. */
+  async function refreshState() {
+    const data = await api('state');
+    applyStatePayload(data);
+    applyPermissions();
+    const open = state.active?.id && !state.active.isDraft ? versionSummaryById(state.active.id) : null;
+    if (state.active?.id && !state.active.isDraft && (!open || open.status !== state.active.status || (open.approvals || []).length !== (state.active.approvals || []).length)) {
+      if (open) await openVersion(open.id, { silent: true, stay: true });
+      else loadActive(null);
+    } else {
+      renderWorkflowState();
+    }
+    fillDatalists(); renderLists(); renderHistory(); renderNotifications();
+  }
   async function loadState(skipDraftCheck = false) {
     const data = await api('state');
-    Object.assign(state, { user: data.user, csrf: data.csrf, canEdit: data.canEdit, active: data.active, versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [] });
-    let targetActive = data.active;
+    applyStatePayload(data);
+    let targetActive = null;
     let isRestoredDraft = false;
-    if (!skipDraftCheck) {
+    if (!skipDraftCheck && can('update')) {
       const draft = await getDraft(draftKey());
       if (draft && draft.rows && draft.rows.length) {
         targetActive = draft;
         isRestoredDraft = true;
       }
     }
-    showApp(); loadActive(targetActive); renderHistory(); renderImageSettings(); renderNotifications();
+    if (!targetActive) {
+      const rememberedId = rememberedVersionId();
+      const remembered = rememberedId ? versionSummaryById(rememberedId) : null;
+      if (remembered) {
+        try { targetActive = (await api('open', { method: 'POST', body: JSON.stringify({ id: remembered.id }) })).active; } catch { targetActive = null; }
+      }
+    }
+    showApp(); fillDatalists(); loadActive(targetActive); renderLists(); renderHistory(); renderImageSettings(); renderNotifications();
     setAppLoading(false);
-    if (isRestoredDraft) toast('Restored unsaved draft workbook.');
+    if (isRestoredDraft) toast('Restored your unsaved draft.');
+  }
+  async function openVersion(id, { silent = false, stay = false } = {}) {
+    if (!silent && state.active?.isDraft && String(state.active.id || '') !== String(id) && !(await confirmDiscardDraft('Opening another price list'))) return null;
+    const data = await api('open', { method: 'POST', body: JSON.stringify({ id }) });
+    if (can('update')) await removeDraft(draftKey());
+    loadActive(data.active);
+    if (!stay) switchPanel('workspacePanel', true);
+    if (!silent) toast(`Opened ${data.active.name}.`);
+    return data.active;
   }
   function setSavedMeta(text) {
     if (!dom.savedMeta) return;
@@ -302,12 +490,25 @@
 
   function loadActive(active) {
     state.active = active;
+    state.activeCell = { rowIdx: null, colIdx: null, td: null };
+    updateEditorActions();
     const metricGroup = $('#metricGroup');
     if (!active) {
+      rememberOpenVersion('');
+      $('#workspacePanel')?.classList.remove('has-file');
+      dom.listTitle.title = '';
       setPriceEditor(false); dom.emptyState.hidden = false; dom.dataView.hidden = true;
       if (metricGroup) metricGroup.hidden = true;
-      dom.listTitle.textContent = 'Start with a workbook';
-      dom.listMeta.textContent = 'Upload an .xlsx or .xls file to open and edit prices.';
+      if (dom.listTagsRow) dom.listTagsRow.hidden = true;
+      if (dom.approvalBanner) dom.approvalBanner.hidden = true;
+      if (dom.bannerApproveBtn) dom.bannerApproveBtn.hidden = true;
+      if (dom.bannerRejectBtn) dom.bannerRejectBtn.hidden = true;
+      const canUpload = can('upload');
+      dom.listTitle.textContent = canUpload ? 'Start with a workbook' : 'Open an approved price list';
+      dom.listMeta.textContent = canUpload ? 'Upload an .xlsx or .xls file to open and edit prices.' : 'Choose an approved price list to view and export.';
+      if (dom.emptyStateTitle) dom.emptyStateTitle.textContent = canUpload ? 'Import your current price list' : 'No price list open';
+      if (dom.emptyStateText) dom.emptyStateText.textContent = canUpload ? 'Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.' : 'Approved price lists are listed under Approvals, where you can open or export them.';
+      if (dom.emptyBrowseListsButton) dom.emptyBrowseListsButton.hidden = canUpload;
       dom.listMeta.title = '';
       setSavedMeta(''); dom.activeBadge.hidden = true;
       $('#editButton').classList.add('is-disabled');
@@ -322,8 +523,14 @@
       return;
     }
     if (metricGroup) metricGroup.hidden = false;
-    state.headers = active.headers || [];
-    state.rows = active.rows || [];
+    active.priceLevel = String(active.priceLevel || '');
+    active.country = String(active.country || '');
+    active.changes = Array.isArray(active.changes) ? active.changes : [];
+    if (active.isDraft) active.pendingChanges = Array.isArray(active.pendingChanges) ? active.pendingChanges : [];
+    state.headers = normalizeHeaders(active.headers);
+    state.rows = normalizeRows(active.rows, active.priceLevel, active.country);
+    active.headers = state.headers;
+    active.rows = state.rows;
     state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || '')));
     state.adjustment = Number(active.adjustment || 0);
     state.categoryAdjustments = active.categoryAdjustments ? { ...active.categoryAdjustments } : {};
@@ -332,32 +539,108 @@
     $('#editButton').setAttribute('aria-disabled', String(!canEdit));
     setPriceEditor(false);
 
-    const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
-    dom.category.innerHTML = categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
-    if (!state.category || !categories.includes(state.category)) {
-      state.category = categories[0] || '';
-    }
+    const categories = uniqueValues(state.rows.map(row => row[COL.category]));
+    dom.category.innerHTML = `<option value="">All categories</option>` + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+    // "All categories" is the default view; after a refresh the previously chosen category is restored.
+    if (!state.category) state.category = rememberedCategory();
+    if (!categories.includes(state.category)) state.category = '';
     dom.category.value = state.category;
     dom.percentage.value = getCategoryAdjustment(state.category);
+    // Country / price level / price list are chosen with the navigator cascade (one file per country).
+    state.priceLevelFilter = '';
+    state.countryFilter = '';
+    if (dom.codeFilterOptions) dom.codeFilterOptions.innerHTML = uniqueValues(state.rows.map(row => row[COL.code])).slice(0, 2000).map(code => `<option value="${escapeHtml(code)}"></option>`).join('');
 
-    dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = 'Current file'; dom.listMeta.textContent = active.name;
+    dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = active.name; dom.listMeta.textContent = active.name;
+    dom.listTitle.title = active.name;
     dom.listMeta.title = active.name;
-
-    const isUnsaved = Boolean(active.isDraft || !active.id);
-    if (isUnsaved) {
-      setSavedMeta('Imported workbook · Unsaved');
-      dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
-      dom.activeBadge.classList.add('draft-badge');
-    } else {
-      setSavedMeta(active.savedAt ? `Last saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Imported workbook · Saved');
-      dom.activeBadge.innerHTML = '<span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active';
-      dom.activeBadge.classList.remove('draft-badge');
+    $('#workspacePanel')?.classList.add('has-file');
+    if (dom.listTagsRow) {
+      dom.listTagsRow.hidden = false;
+      dom.listPriceLevel.textContent = active.priceLevel || 'Not set';
+      dom.listCountry.textContent = active.country || 'Not set';
+      dom.listRevisionTag.hidden = !(active.revision > 1);
+      dom.listRevision.textContent = String(active.revision || 1);
     }
+    if (!active.isDraft && active.id) rememberOpenVersion(active.id);
 
     dom.activeBadge.hidden = false;
     $('#saveButton').classList.toggle('is-disabled', !canEdit);
     $('#saveButton').setAttribute('aria-disabled', String(!canEdit));
+    renderWorkflowState();
     updateMetrics(); renderTable(); renderImageSettings();
+  }
+
+  /** Status badge, approval banner and export lock for the open price list. */
+  function renderWorkflowState() {
+    const active = state.active;
+    const status = activeStatus();
+    if (!active || !status) return;
+    const badgeClass = { draft: 'draft-badge', pending: 'pending-badge', approved: '', rejected: 'rejected-badge', superseded: 'superseded-badge' }[status] ?? '';
+    const dotClass = status === 'approved' ? '' : 'warning';
+    dom.activeBadge.className = `status-badge ${badgeClass}`.trim();
+    dom.activeBadge.innerHTML = `<span class="pulse-dot ${dotClass}" aria-hidden="true"><span class="pulse-ring"></span></span>${escapeHtml(statusLabel(status))}`;
+
+    if (status === 'draft') {
+      const edits = (active.pendingChanges || []).length;
+      setSavedMeta(active.id ? `Unsaved edits to the version saved by ${active.savedBy || 'a user'}${edits ? ` · ${edits} cell edit${edits === 1 ? '' : 's'}` : ''}` : 'Imported workbook · Unsaved');
+    } else {
+      setSavedMeta(active.savedAt ? `Saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Saved');
+    }
+
+    // Compact one-line status note beside the price level / country tags (no extra row above the table).
+    const note = dom.approvalBanner;
+    if (note) {
+      let text = '';
+      const { approved, waiting } = approvalProgress(active);
+      const canDecide = Boolean(active.canApprove) && status === 'pending';
+      if (status === 'pending') {
+        text = canDecide
+          ? 'Waiting for your approval'
+          : `Awaiting approval${waiting.length ? ` from ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}`;
+        if (approved.length) text += ` · approved by ${approved.join(', ')}`;
+      } else if (status === 'approved') {
+        text = `Approved by ${active.approvedBy || approved.join(' & ')}${active.approvedAt ? ` · ${displayDate(active.approvedAt)}` : ''}`;
+      } else if (status === 'rejected') {
+        text = `Rejected by ${active.rejectedBy || 'an approver'}${active.rejectionRemarks ? `: ${active.rejectionRemarks}` : ''}`;
+      } else if (status === 'superseded') {
+        text = 'Superseded by a newer approved revision';
+      }
+      note.hidden = !text;
+      note.dataset.tone = status;
+      note.title = text;
+      dom.approvalBannerIcon.textContent = { pending: '⏳', approved: '✓', rejected: '✕', superseded: '↻' }[status] || '';
+      dom.approvalBannerText.textContent = text;
+      dom.bannerApproveBtn.hidden = !canDecide;
+      dom.bannerRejectBtn.hidden = !canDecide;
+    }
+
+    const exportable = canExportActive();
+    ['#excelButton', '#pdfButton'].forEach(selector => {
+      const button = $(selector);
+      if (!button) return;
+      button.hidden = !can('export');
+      button.disabled = !exportable;
+      button.title = exportable ? '' : 'Only approved price lists can be exported.';
+    });
+    if (dom.exportLockNote) {
+      dom.exportLockNote.hidden = exportable || !can('export');
+      dom.exportLockNote.textContent = status === 'draft' ? 'Save and get approval to export' : status === 'pending' ? 'Export unlocks after approval' : status === 'rejected' ? 'Rejected lists cannot be exported' : status === 'superseded' ? 'Superseded by a newer approved list' : '';
+    }
+  }
+
+  /** Marks the open list as an unsaved draft and stores it locally. */
+  function markDraft() {
+    if (!state.active) return;
+    state.active.rows = state.rows;
+    state.active.categoryAdjustments = { ...state.categoryAdjustments };
+    state.active.adjustment = state.adjustment;
+    if (!state.active.isDraft) {
+      state.active.isDraft = true;
+      state.active.pendingChanges = [];
+    }
+    setDraft(draftKey(), state.active);
+    renderWorkflowState();
   }
   function hasPriceAdjustments() {
     if (Number(state.adjustment || 0) !== 0) return true;
@@ -379,9 +662,27 @@
       dom.resetPricesButton.setAttribute('aria-disabled', String(!canReset));
     }
   }
+  function hasActiveFilters() {
+    return Boolean(state.search.trim() || state.codeFilter.trim() || state.priceLevelFilter || state.countryFilter);
+  }
+  function filterDescription() {
+    return [
+      state.category ? `Category: ${state.category}` : '',
+      state.codeFilter.trim() ? `LRN code: ${state.codeFilter.trim()}` : '',
+      state.priceLevelFilter ? `Price level: ${state.priceLevelFilter}` : '',
+      state.countryFilter ? `Country: ${state.countryFilter}` : '',
+      state.search.trim() ? `Search: "${state.search.trim()}"` : ''
+    ].filter(Boolean).join(', ');
+  }
   function filteredRows() {
     const query = state.search.trim().toLowerCase();
-    return state.rows.map((row, index) => ({ row, index })).filter(({ row }) => (!state.category || String(row[0] ?? '') === state.category) && (!query || row.some(value => String(value ?? '').toLowerCase().includes(query))));
+    const code = state.codeFilter.trim().toLowerCase();
+    return state.rows.map((row, index) => ({ row, index })).filter(({ row }) =>
+      (!state.category || String(row[COL.category] ?? '') === state.category) &&
+      (!code || String(row[COL.code] ?? '').toLowerCase().includes(code)) &&
+      (!state.priceLevelFilter || String(row[COL.priceLevel] ?? '') === state.priceLevelFilter) &&
+      (!state.countryFilter || String(row[COL.country] ?? '') === state.countryFilter) &&
+      (!query || row.some(value => String(value ?? '').toLowerCase().includes(query))));
   }
   function groupLookupKey(category, groupName) {
     return `${String(category || '').trim().toLowerCase()}\u241f${String(groupName || '').trim().toLowerCase()}`;
@@ -447,7 +748,7 @@
   }
 
   function renderImageSettings() {
-    if (!dom.imageSettingsList || state.user?.role !== 'admin') return;
+    if (!dom.imageSettingsList || !can('manageImages')) return;
     const groups = productGroups();
     const categories = [...new Set(groups.map(group => group.category))];
     if (!state.imageCategory || !categories.includes(state.imageCategory)) state.imageCategory = categories[0] || '';
@@ -479,14 +780,18 @@
         <div class="image-setting-copy">
           <span>${escapeHtml(group.category)}</span>
           <strong>${escapeHtml(group.groupName)}</strong>
-          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? 'Custom photo' : 'No photo set yet'}</small>
+          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? escapeHtml(libraryPhotoName(custom.libraryId) || 'Custom photo') : 'No photo set yet'}</small>
         </div>
         <div class="image-setting-actions">
-          <button class="button ${custom ? 'secondary' : 'primary'} choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">${custom ? 'Change photo' : '+ Upload photo'}</button>
+          <button class="button ${custom ? 'secondary' : 'primary'} choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">${custom ? 'Change photo' : 'Choose from library'}</button>
           ${custom ? `<button class="button danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${escapeHtml(group.groupName)}">Remove photo</button>` : ''}
         </div>
       </article>`;
     }).join('');
+    if ($('#typesCountBadge')) $('#typesCountBadge').textContent = String(groups.length);
+  }
+  function libraryPhotoName(id) {
+    return (state.photoLibrary || []).find(photo => photo.id === id)?.name || '';
   }
   function renderTable() {
     const visible = filteredRows();
@@ -596,12 +901,25 @@
 
     const firstIsPresentation = visible.length > 0 && String(visible[0].row[0] || '').toLowerCase() === 'presentation stands';
     $('thead', dom.table).innerHTML = firstIsPresentation ? presentationHeader() : standardHeader();
+    let currentLayoutIsPresentation = firstIsPresentation;
+    let previousCategory = null;
+    const showCategoryDividers = !state.category && new Set(groups.map(group => group.category)).size > 1;
     $('tbody', dom.table).innerHTML = groups.map(group => {
       const isPresentation = String(group.category || '').toLowerCase() === 'presentation stands';
       const columnCount = 13;
-      const groupHeader = group.groupName
+      let prefix = '';
+      if (showCategoryDividers && group.category !== previousCategory) {
+        prefix += `<tr class="category-divider-row"><td colspan="${columnCount}">${escapeHtml(group.category)}</td></tr>`;
+      }
+      if (isPresentation !== currentLayoutIsPresentation) {
+        // Presentation Stands use a different column layout, so repeat the matching header inline.
+        prefix += (isPresentation ? presentationHeader() : standardHeader()).replace(/<th/g, '<th scope="col"');
+        currentLayoutIsPresentation = isPresentation;
+      }
+      previousCategory = group.category;
+      const groupHeader = prefix + (group.groupName
         ? `<tr class="product-group-row"><td colspan="${columnCount}" class="group-title-cell"><strong class="group-title-text">${escapeHtml(group.groupName)}</strong></td></tr>`
-        : '';
+        : '');
       const rowsHtml = group.rows.map(({ row, index: actualIndex, visibleIndex }, indexInGroup) => {
         const isFirst = indexInGroup === 0;
         return isPresentation
@@ -611,6 +929,7 @@
       return `${groupHeader}${rowsHtml}`;
     }).join('');
     dom.noResults.hidden = visible.length > 0;
+    if (dom.clearFiltersBtn) dom.clearFiltersBtn.hidden = !hasActiveFilters();
 
     // Restore active cell selection if any
     if (state.activeCell.rowIdx !== null && state.activeCell.colIdx !== null) {
@@ -845,12 +1164,25 @@
       }
 
       if (valChanged && state.active) {
-        state.active.rows = state.rows;
-        state.active.isDraft = true;
+        const row = state.rows[rowIdx];
+        const isPrice = state.priceColumns.includes(colIdx);
+        const cat = String(row[COL.category] ?? '');
+        const shown = value => (isPrice && isNumeric(value) ? money.format(adjusted(numeric(value), cat)) : String(value ?? ''));
+        const change = {
+          code: String(row[COL.code] ?? ''),
+          product: String(row[COL.description] ?? '').split(/\r?\n/)[0].slice(0, 200),
+          category: cat,
+          column: String(state.headers[colIdx] || getColumnLetter(colIdx)).replace(/\s+/g, ' ').trim(),
+          oldValue: shown(oldRaw),
+          newValue: shown(row[colIdx])
+        };
+        markDraft();
+        state.active.pendingChanges.push(change);
         setDraft(draftKey(), state.active);
-        dom.activeBadge.innerHTML = '<span class="pulse-dot warning" aria-hidden="true"><span class="pulse-ring"></span></span>Draft (Unsaved)';
-        dom.activeBadge.classList.add('draft-badge');
-        setSavedMeta('Imported workbook · Unsaved edits');
+        renderWorkflowState();
+        logActivity('cell_edit', `Edited ${change.column} of ${change.code || 'a product'}`, `${change.product || change.code}: ${change.oldValue || 'empty'} → ${change.newValue || 'empty'}`, {
+          productCode: change.code, productName: change.product, category: change.category, column: change.column, oldValue: change.oldValue, newValue: change.newValue
+        });
       }
     }
 
@@ -1019,7 +1351,7 @@
     if (log?.metadata?.fileName) return log.metadata.fileName;
     if (log?.metadata?.versionName) return log.metadata.versionName;
     if (log?.metadata?.file) return log.metadata.file;
-    return state.active?.name || 'Current file';
+    return ['login', 'image_update', 'image_delete'].includes(log?.type) ? '—' : 'Unknown file';
   }
 
   function isLogCurrentFile(log) {
@@ -1036,12 +1368,35 @@
       case 'row_add': return 'Added Row';
       case 'row_delete': return 'Deleted Row';
       case 'reset_prices': return 'Reset Prices';
-      case 'import_workbook': return 'Import File';
-      case 'delete_version': return 'Deleted Version';
+      case 'import_workbook': return 'Upload';
+      case 'delete_version': return 'Deleted';
+      case 'approve_version': return 'Approved';
+      case 'reject_version': return 'Rejected';
+      case 'export_excel': return 'Excel Export';
+      case 'export_pdf': return 'PDF Export';
+      case 'image_update': return 'Photo Update';
+      case 'image_delete': return 'Photo Removed';
+      case 'login': return 'Sign-in';
+      case 'dev_reset': return 'Data Reset';
       default: return 'Activity';
     }
   }
 
+  /** 'changes' when the event altered prices/data, 'details' when there is more to show, null when the row says it all. */
+  function auditInspectKind(type) {
+    if (['cell_edit', 'price_adjust', 'reset_prices', 'save_version', 'row_add', 'row_delete'].includes(type)) return 'changes';
+    if (['import_workbook', 'approve_version', 'reject_version', 'delete_version'].includes(type)) return 'details';
+    return null;
+  }
+  function auditDayLabel(iso) {
+    if (!iso) return 'Earlier';
+    const date = new Date(iso);
+    const startOf = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diffDays = Math.round((startOf(new Date()) - startOf(date)) / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return new Intl.DateTimeFormat('en-PH', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+  }
   function getAuditDiffMarkup(log) {
     const meta = log.metadata || {};
     if (log.type === 'cell_edit') {
@@ -1066,7 +1421,10 @@
         </div>`;
     }
     if (log.type === 'save_version') {
-      return `<span class="history-version-badge">${escapeHtml(meta.versionName || 'Saved snapshot')}</span>`;
+      const cats = Array.isArray(meta.adjustedCategories) ? meta.adjustedCategories.length : 0;
+      const edits = Number(meta.changeCount || 0);
+      const parts = [cats ? `${cats} categor${cats === 1 ? 'y' : 'ies'} adjusted` : '', edits ? `${edits} edit${edits === 1 ? '' : 's'}` : ''].filter(Boolean);
+      return `<span class="diff-chip neutral">${escapeHtml(parts.join(' · ') || 'No price changes')}</span>`;
     }
     if (log.type === 'row_add') {
       return `<span class="diff-chip new">+ Added product</span>`;
@@ -1078,9 +1436,13 @@
       return `<span class="diff-chip neutral">Reset to 0%</span>`;
     }
     if (log.type === 'import_workbook') {
-      return `<span class="diff-chip neutral">${Number(meta.productCount || 0).toLocaleString()} products</span>`;
+      return `<span class="diff-chip neutral">${Number(meta.rowCount || meta.productCount || 0).toLocaleString()} products</span>`;
     }
-    return `<span class="diff-chip neutral">Logged</span>`;
+    if (log.type === 'approve_version') return `<span class="list-status-pill status-approved">Approved</span>`;
+    if (log.type === 'reject_version') return `<span class="list-status-pill status-rejected">Rejected</span>`;
+    if (log.type === 'export_excel' || log.type === 'export_pdf') return `<span class="diff-chip neutral">${log.type === 'export_pdf' ? 'PDF' : 'Excel'}</span>`;
+    if (log.type === 'delete_version') return `<span class="diff-chip old">Removed</span>`;
+    return '<span class="audit-no-action" aria-hidden="true">—</span>';
   }
 
   function showAuditLogModal(log) {
@@ -1266,7 +1628,7 @@
     content.innerHTML = bodyHtml;
 
     if (actions) {
-      if (log.type === 'save_version' && logMeta.versionId) {
+      if (logMeta.versionId && versionSummaryById(logMeta.versionId)) {
         actions.innerHTML = `
           <button type="button" class="button primary open-version" data-id="${escapeHtml(logMeta.versionId)}">Open in workspace</button>
           <button value="cancel" class="button secondary">Close</button>`;
@@ -1284,14 +1646,15 @@
     // 1. Update tab count badges
     const allLogs = state.auditLogs || [];
     const editLogs = allLogs.filter(l => ['cell_edit', 'price_adjust', 'row_add', 'row_delete', 'reset_prices'].includes(l.type));
-    const versionItems = state.versions || [];
+    const workflowLogs = allLogs.filter(l => ['import_workbook', 'save_version', 'approve_version', 'reject_version', 'export_excel', 'export_pdf', 'delete_version'].includes(l.type));
+    const versionItems = [];
 
     if (dom.auditAllCountBadge) dom.auditAllCountBadge.textContent = String(allLogs.length);
     if (dom.auditEditsCountBadge) dom.auditEditsCountBadge.textContent = String(editLogs.length);
-    if (dom.auditVersionsCountBadge) dom.auditVersionsCountBadge.textContent = String(versionItems.length);
+    if (dom.auditVersionsCountBadge) dom.auditVersionsCountBadge.textContent = String(workflowLogs.length);
 
     // 2. Update active tab button style
-    $$('.audit-tab-btn').forEach(btn => {
+    $$('.audit-tab-btn[data-audit-tab]').forEach(btn => {
       const isActive = (btn.dataset.auditTab || 'all') === (state.auditTab || 'all');
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -1351,144 +1714,6 @@
     const userWrapper = $('#auditUserSelectWrapper');
     const adjWrapper = $('#historyAdjustmentSelectWrapper');
 
-    // 4. Handle "Saved Versions" tab mode
-    if (state.auditTab === 'versions') {
-      if (auditHead) auditHead.hidden = true;
-      if (versionsHead) versionsHead.hidden = false;
-      if (fileWrapper) fileWrapper.hidden = false;
-      if (typeWrapper) typeWrapper.hidden = true;
-      if (userWrapper) userWrapper.hidden = false;
-      if (adjWrapper) adjWrapper.hidden = false;
-
-      const adjFilter = state.historyAdjustment || '';
-      const userFilter = state.auditUser || '';
-      const fileFilter = state.auditFile || '';
-
-      const filteredVersions = versionItems.filter(version => {
-        const matchesQuery = !query ||
-          String(version.name || '').toLowerCase().includes(query) ||
-          String(version.savedBy || '').toLowerCase().includes(query) ||
-          String(version.id || '').toLowerCase().includes(query);
-
-        const summaryAdjustments = Array.isArray(version.summary?.adjustedCategories)
-          ? version.summary.adjustedCategories.map(category => Number(category.adjustment || 0))
-          : [];
-        const adj = Number(version.adjustment || 0);
-        let matchesAdj = true;
-        if (adjFilter === 'positive') matchesAdj = adj > 0 || summaryAdjustments.some(value => value > 0);
-        else if (adjFilter === 'negative') matchesAdj = adj < 0 || summaryAdjustments.some(value => value < 0);
-        else if (adjFilter === 'zero') matchesAdj = adj === 0 && !summaryAdjustments.some(value => value !== 0);
-
-        const matchesUser = !userFilter || String(version.savedBy || '') === userFilter;
-
-        let matchesFile = true;
-        if (fileFilter === '__current__') {
-          matchesFile = Boolean(version.name && state.active?.name && version.name.trim().toLowerCase() === state.active.name.trim().toLowerCase());
-        } else if (fileFilter) {
-          matchesFile = String(version.name || '') === fileFilter;
-        }
-
-        return matchesQuery && matchesAdj && matchesUser && matchesFile;
-      });
-
-      if (dom.historyCount) dom.historyCount.textContent = `${filteredVersions.length} version${filteredVersions.length === 1 ? '' : 's'}`;
-
-      const pageSize = getHistoryPageSize();
-
-      if (!filteredVersions.length) {
-        dom.historyTableBody.innerHTML = '';
-        if (dom.historyEmpty) dom.historyEmpty.hidden = false;
-        if (emptyTitle) emptyTitle.textContent = 'No saved versions yet';
-        if (emptySubtitle) emptySubtitle.textContent = 'Saved price lists will appear here with their date, editor, and adjustment.';
-        updatePaginationControls(0, 1, pageSize, 'versions', 'version');
-        return;
-      }
-
-      if (dom.historyEmpty) dom.historyEmpty.hidden = true;
-
-      const { startIdx, endIdx } = updatePaginationControls(filteredVersions.length, state.historyPage, pageSize, 'versions', 'version');
-      const pageItems = filteredVersions.slice(startIdx, endIdx);
-
-      dom.historyTableBody.innerHTML = pageItems.map((version, index) => {
-        const hasSummary = version.summary && Array.isArray(version.summary.adjustedCategories) && version.summary.adjustedCategories.length > 0;
-        let adjMarkup = '';
-        if (hasSummary && version.summary.adjustedCategories.length > 0) {
-          const adjs = version.summary.adjustedCategories.map(c => Number(c.adjustment || 0));
-          const allSame = adjs.every(val => val === adjs[0]);
-          const sign = adjs[0] > 0 ? '+' : '';
-          const catCount = version.summary.adjustedCategories.length;
-          const pillText = allSame
-            ? `${sign}${adjs[0]}% across ${catCount} categories`
-            : `Adjusted across ${catCount} categories`;
-          const affected = version.summary.totalAdjustedProducts
-            ?? version.summary.adjustedCategories.reduce((sum, category) => sum + Number(category.productCount || 0), 0);
-
-          adjMarkup = `
-            <div class="history-adj-wrap">
-              <span class="history-adj-pill has-adj">
-                <svg class="history-adj-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                <span>${escapeHtml(pillText)}</span>
-              </span>
-              <div class="history-adj-meta">${Number(affected || 0).toLocaleString()} products affected</div>
-              <button type="button" class="history-view-changes-btn view-changes-link" data-id="${escapeHtml(version.id)}">View changes ›</button>
-            </div>`;
-        } else {
-          const adj = Number(version.adjustment || 0);
-          let label = 'No adjustment';
-          if (adj !== 0) {
-            const sign = adj > 0 ? '+' : '';
-            label = `${sign}${adj}%`;
-          } else if (version.id && version.id.startsWith('1a8')) {
-            label = '0%';
-          }
-          adjMarkup = `
-            <div class="history-adj-wrap">
-              <span class="history-adj-pill neutral">
-                <svg class="history-adj-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" fill="#958b90" stroke="none"/><line x1="8" y1="12" x2="16" y2="12" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></svg>
-                <span>${escapeHtml(label)}</span>
-              </span>
-            </div>`;
-        }
-
-        let versionLabel = version.id ? escapeHtml(version.id.substring(0, 8)) : `v${filteredVersions.length - (startIdx + index)}`;
-        if (version.id && version.id.startsWith('dfaa36d')) versionLabel = 'dfaa36d';
-
-        return `
-          <tr class="history-data-row">
-            <td class="history-version-cell"><span class="history-version-badge">${versionLabel}</span></td>
-            <td class="history-name-cell">${escapeHtml(version.name)}</td>
-            <td class="history-by-cell">${escapeHtml(version.savedBy || 'System Admin')}</td>
-            <td class="history-date-cell">${displayDate(version.savedAt)}</td>
-            <td class="history-adj-cell">${adjMarkup}</td>
-            <td class="history-actions-cell">
-              <div class="history-actions-group">
-                <button type="button" class="button history-btn-open open-version" data-id="${escapeHtml(version.id)}">Open</button>
-                <div class="history-more-wrapper">
-                  <button type="button" class="button history-btn-more more-menu-trigger" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}" aria-label="More actions" title="More options"><svg aria-hidden="true" width="17" height="5" viewBox="0 0 17 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="1.7"/><circle cx="8.5" cy="2.5" r="1.7"/><circle cx="14.5" cy="2.5" r="1.7"/></svg></button>
-                  <div class="history-dropdown-menu" hidden>
-                    <button type="button" class="history-dropdown-item copy-version-id" data-id="${escapeHtml(version.id)}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                      <span>Copy version ID</span>
-                    </button>
-                    ${hasSummary && version.summary.adjustedCategories.length > 0 ? `
-                    <button type="button" class="history-dropdown-item view-changes-link" data-id="${escapeHtml(version.id)}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                      <span>View changes</span>
-                    </button>` : ''}
-                    ${state.user.role === 'admin' ? `
-                    <button type="button" class="history-dropdown-item delete-item delete-version" data-id="${escapeHtml(version.id)}" data-name="${escapeHtml(version.name)}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                      <span>Delete version</span>
-                    </button>` : ''}
-                  </div>
-                </div>
-              </div>
-            </td>
-          </tr>`;
-      }).join('');
-      return;
-    }
-
     // 5. Handle "All Activity" and "Price & Cell Edits" mode
     if (auditHead) auditHead.hidden = false;
     if (versionsHead) versionsHead.hidden = true;
@@ -1497,7 +1722,7 @@
     if (userWrapper) userWrapper.hidden = false;
     if (adjWrapper) adjWrapper.hidden = true;
 
-    const baseList = (state.auditTab === 'edits') ? editLogs : allLogs;
+    const baseList = state.auditTab === 'edits' ? editLogs : state.auditTab === 'workflow' ? workflowLogs : allLogs;
     const typeFilter = state.auditType || '';
     const userFilter = state.auditUser || '';
     const fileFilter = state.auditFile || '';
@@ -1546,24 +1771,31 @@
     const { startIdx, endIdx } = updatePaginationControls(filteredLogs.length, state.historyPage, pageSize, 'items', 'item');
     const pageItems = filteredLogs.slice(startIdx, endIdx);
 
+    let previousDay = '';
     dom.historyTableBody.innerHTML = pageItems.map(log => {
       const typeLabel = getAuditTypeLabel(log.type);
       const icon = getAuditTypeIcon(log.type);
-      const diffMarkup = getAuditDiffMarkup(log);
+      const inspect = auditInspectKind(log.type);
       const role = String(log.role || 'user').toLowerCase();
+      const roleLabel = role === 'admin' ? 'Admin' : role === 'user' ? 'Export only' : role;
       const fileName = getLogFileName(log);
-      const isCurrent = isLogCurrentFile(log);
+      const hasFile = !['login', 'image_update', 'image_delete'].includes(log.type) && fileName && fileName !== 'Unknown file';
+      const isCurrent = hasFile && isLogCurrentFile(log);
+      const day = auditDayLabel(log.timestamp);
+      const divider = day !== previousDay ? `<tr class="audit-day-row"><td colspan="6">${escapeHtml(day)}</td></tr>` : '';
+      previousDay = day;
+      const time = log.timestamp ? new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(new Date(log.timestamp)) : '';
 
-      return `
-        <tr class="history-data-row audit-event-row">
+      return `${divider}
+        <tr class="history-data-row audit-event-row ${inspect ? 'is-inspectable' : ''}" ${inspect ? `data-log-id="${escapeHtml(log.id)}"` : ''}>
           <td class="history-date-cell">
-            <div class="audit-time-main">${displayDate(log.timestamp)}</div>
+            <div class="audit-time-main">${escapeHtml(time)}</div>
             <div class="audit-time-relative">${formatRelativeTime(log.timestamp)}</div>
           </td>
           <td class="history-by-cell">
             <div class="audit-actor-wrap">
               <span class="audit-actor-name">${escapeHtml(log.actor || 'User')}</span>
-              <span class="audit-role-pill ${role}">${escapeHtml(role)}</span>
+              <span class="audit-role-pill ${role}">${escapeHtml(roleLabel)}</span>
             </div>
           </td>
           <td class="audit-type-cell">
@@ -1572,28 +1804,168 @@
               <span>${typeLabel}</span>
             </span>
           </td>
-          <td class="audit-file-cell">
-            <div class="audit-file-wrap">
-              <div class="audit-file-name" title="${escapeHtml(fileName)}">
-                <svg class="audit-file-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                <span class="audit-file-text">${escapeHtml(fileName)}</span>
-              </div>
-              ${isCurrent ? `<span class="audit-current-file-badge"><span class="pulse-dot tiny"></span>Current file</span>` : ''}
-            </div>
-          </td>
           <td class="audit-desc-cell">
             <div class="audit-title-text">${escapeHtml(log.title || 'Price List Event')}</div>
             ${log.details ? `<div class="audit-details-text">${escapeHtml(log.details)}</div>` : ''}
+            ${hasFile ? `<div class="audit-file-tag" title="${escapeHtml(fileName)}">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>${escapeHtml(fileName)}</span>${isCurrent ? '<em>Open now</em>' : ''}
+            </div>` : ''}
           </td>
           <td class="audit-diff-cell">
-            ${diffMarkup}
+            ${getAuditDiffMarkup(log)}
           </td>
           <td class="history-actions-cell">
-            <button type="button" class="history-view-changes-btn view-audit-diff-btn" data-log-id="${escapeHtml(log.id)}">View changes ›</button>
+            ${inspect
+              ? `<button type="button" class="history-view-changes-btn view-audit-diff-btn" data-log-id="${escapeHtml(log.id)}">${inspect === 'changes' ? 'View changes' : 'View details'} ›</button>`
+              : '<span class="audit-no-action" aria-hidden="true">—</span>'}
           </td>
         </tr>`;
     }).join('');
   }
+  // --- Country › Price level › Price list navigator (one saved price list per country) ---
+  function navigableVersions() {
+    return (state.versions || []).filter(version => version.status !== 'superseded' && version.country);
+  }
+  function renderNavigator() {
+    const lists = navigableVersions();
+    const active = state.active;
+    const isDraft = Boolean(active && (active.isDraft || !active.id));
+    const option = (value, label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+    const countries = uniqueValues([...lists.map(version => version.country), active?.country]);
+    $$('.nav-cascade').forEach(box => {
+      const countrySelect = box.querySelector('.nav-country');
+      const levelSelect = box.querySelector('.nav-level');
+      const listSelect = box.querySelector('.nav-list');
+      const country = box.dataset.cascade === 'empty' ? '' : (active?.country || '');
+      const level = country ? (active?.priceLevel || '') : '';
+      countrySelect.innerHTML = (country ? '' : option('', 'Choose country…')) + countries.map(value => option(value, value)).join('');
+      countrySelect.value = country;
+      const levels = uniqueValues([...lists.filter(version => version.country === country).map(version => version.priceLevel), level]);
+      levelSelect.innerHTML = levels.length ? levels.map(value => option(value, value)).join('') : option('', '—');
+      levelSelect.value = level;
+      levelSelect.disabled = !country;
+      const files = lists.filter(version => version.country === country && version.priceLevel === level);
+      listSelect.innerHTML = (isDraft && country ? option('__draft__', `Unsaved: ${active.name}`) : '')
+        + files.map(version => option(version.id, `${version.name}${version.revision > 1 ? ` (rev ${version.revision})` : ''}${box.dataset.cascade === 'empty' ? ` · ${statusLabel(version.status)}` : ''}`)).join('')
+        || option('', '—');
+      listSelect.value = isDraft ? '__draft__' : String(active?.id || '');
+      listSelect.disabled = !country;
+    });
+    // Pills have fixed widths, so long values are truncated; the full text is shown on hover.
+    $$('.nav-cascade select').forEach(select => { select.title = select.selectedOptions[0]?.textContent || ''; });
+    if (dom.category) dom.category.title = dom.category.selectedOptions[0]?.textContent || '';
+    const emptyOpen = $('#emptyOpenSaved');
+    if (emptyOpen) emptyOpen.hidden = Boolean(active) || !lists.length;
+  }
+  async function openFromNavigator(id) {
+    if (!id || id === '__draft__') return renderNavigator();
+    if (String(id) === String(state.active?.id) && !state.active?.isDraft) return renderNavigator();
+    try {
+      const opened = await openVersion(id, { stay: true });
+      if (!opened) renderNavigator();
+    } catch (error) {
+      toast(error.message);
+      renderNavigator();
+    }
+  }
+  document.addEventListener('change', event => {
+    const select = event.target.closest('.nav-cascade select');
+    if (!select) return;
+    const box = select.closest('.nav-cascade');
+    const lists = navigableVersions();
+    if (select.classList.contains('nav-country')) {
+      // Newest list for that country, keeping the current price level when that country has it.
+      const forCountry = lists.filter(version => version.country === select.value);
+      const target = forCountry.find(version => version.priceLevel === state.active?.priceLevel) || forCountry[0];
+      openFromNavigator(target?.id);
+    } else if (select.classList.contains('nav-level')) {
+      const country = box.querySelector('.nav-country').value;
+      openFromNavigator(lists.find(version => version.country === country && version.priceLevel === select.value)?.id);
+    } else if (select.classList.contains('nav-list')) {
+      openFromNavigator(select.value);
+    }
+  });
+
+  // --- Approvals panel ---
+  function statusPill(status) {
+    return `<span class="list-status-pill status-${escapeHtml(status || 'pending')}">${escapeHtml(statusLabel(status))}</span>`;
+  }
+  function adjustmentPill(version) {
+    const adjusted = version.summary?.adjustedCategories || [];
+    if (!adjusted.length) return '<span class="history-adj-pill neutral">No adjustment</span>';
+    const rates = [...new Set(adjusted.map(item => Number(item.adjustment || 0)))];
+    const text = rates.length === 1 ? `${rates[0] > 0 ? '+' : ''}${rates[0]}% · ${adjusted.length} categor${adjusted.length === 1 ? 'y' : 'ies'}` : `Varies · ${adjusted.length} categories`;
+    return `<span class="history-adj-pill has-adj ${rates.every(rate => rate < 0) ? 'neg' : ''}">${escapeHtml(text)}</span>`;
+  }
+  function renderLists() {
+    if (!dom.listsTableBody) return;
+    const versions = state.versions || [];
+    const awaitingMine = versions.filter(version => version.canApprove);
+    const approved = versions.filter(version => version.status === 'approved');
+    dom.listAllCount.textContent = String(versions.length);
+    dom.listMineCount.textContent = String(awaitingMine.length);
+    dom.listApprovedCount.textContent = String(approved.length);
+    if (dom.pendingApprovalCount) {
+      dom.pendingApprovalCount.hidden = !awaitingMine.length;
+      dom.pendingApprovalCount.textContent = String(awaitingMine.length);
+    }
+    if (dom.listsSubtitle) {
+      dom.listsSubtitle.textContent = can('update')
+        ? 'Saved price lists need approval from their assigned approvers before anyone can export them.'
+        : 'Approved price lists you can view and export.';
+    }
+    $$('.list-tab-btn').forEach(button => {
+      const active = button.dataset.listTab === state.listTab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    state.listPriceLevel = fillSelect(dom.listPriceLevelFilter, uniqueValues(versions.map(v => v.priceLevel)), 'All price levels', state.listPriceLevel);
+    state.listCountry = fillSelect(dom.listCountryFilter, uniqueValues(versions.map(v => v.country)), 'All countries', state.listCountry);
+
+    const base = state.listTab === 'mine' ? awaitingMine : state.listTab === 'approved' ? approved : versions;
+    const query = state.listSearch.trim().toLowerCase();
+    const visible = base.filter(version =>
+      (!state.listPriceLevel || version.priceLevel === state.listPriceLevel) &&
+      (!state.listCountry || version.country === state.listCountry) &&
+      (!state.listStatus || version.status === state.listStatus) &&
+      (!query || [version.name, version.savedBy, version.priceLevel, version.country, ...(version.categories || [])].some(value => String(value || '').toLowerCase().includes(query))));
+
+    dom.listCount.textContent = `${visible.length} price list${visible.length === 1 ? '' : 's'}`;
+    dom.listsEmpty.hidden = visible.length > 0;
+    if (!visible.length) {
+      dom.listsEmptyTitle.textContent = state.listTab === 'mine' ? 'Nothing waiting for your approval' : versions.length ? 'No matching price lists' : (can('update') ? 'No saved price lists yet' : 'No approved price lists yet');
+      dom.listsEmptyText.textContent = state.listTab === 'mine' ? 'New approval requests will appear here and in your notifications.' : versions.length ? 'Try different filters.' : (can('update') ? 'Upload a workbook, adjust prices, then save it to send it for approval.' : 'Approved price lists will appear here once an approver signs off.');
+    }
+    dom.listsTableBody.innerHTML = visible.map(version => {
+      const { approved: approvedBy, waiting } = approvalProgress(version);
+      const isOpen = String(state.active?.id) === String(version.id);
+      let statusDetail = '';
+      if (version.status === 'pending') statusDetail = waiting.length ? `Waiting: ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : '';
+      else if (version.status === 'approved') statusDetail = `By ${version.approvedBy || approvedBy.join(' & ')}`;
+      else if (version.status === 'rejected') statusDetail = `By ${version.rejectedBy || ''}${version.rejectionRemarks ? `: ${version.rejectionRemarks}` : ''}`;
+      const vid = escapeHtml(version.id);
+      // One contextual action per row; everything else lives in the kebab menu.
+      const primary = version.canApprove
+        ? `<button type="button" class="row-primary is-approve" data-action="approve" data-id="${vid}">Approve</button>`
+        : `<button type="button" class="row-primary" data-action="open" data-id="${vid}">${isOpen ? 'View' : 'Open'}</button>`;
+      const actions = `${primary}<button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>`;
+      return `
+        <tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
+          <td class="history-name-cell">
+            <strong class="list-name">${escapeHtml(version.name)}</strong>
+            <div class="list-sub">${version.revision > 1 ? `Revision ${version.revision} · ` : ''}${Number(version.productCount || 0).toLocaleString()} products${version.changeCount ? ` · ${Number(version.changeCount).toLocaleString()} cell edits` : ''}</div>
+          </td>
+          <td>${escapeHtml(version.priceLevel || '—')}</td>
+          <td>${escapeHtml(version.country || '—')}</td>
+          <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
+          <td>${adjustmentPill(version)}</td>
+          <td>${version.canApprove ? '<span class="list-status-pill status-mine">Needs your approval</span>' : statusPill(version.status)}${statusDetail ? `<div class="list-sub" title="${escapeHtml(statusDetail)}">${escapeHtml(statusDetail)}</div>` : ''}</td>
+          <td class="col-actions"><div class="list-actions">${actions}</div></td>
+        </tr>`;
+    }).join('');
+  }
+
   function openFilePicker() { dom.fileInput.value = ''; dom.fileInput.click(); }
 
   let stagedUploadFile = null;
@@ -1612,6 +1984,7 @@
       return toast('Please select a valid Excel workbook (.xlsx or .xls).');
     }
     stagedUploadFile = file;
+    if (dom.uploadPriceLevel && !dom.uploadPriceLevel.value.trim()) dom.uploadPriceLevel.value = guessPriceLevel(file.name);
     if (dom.selectedFileName) dom.selectedFileName.textContent = file.name;
     if (dom.selectedFileSize) dom.selectedFileSize.textContent = formatBytes(file.size);
     if (dom.selectedFileInfo) dom.selectedFileInfo.hidden = false;
@@ -1627,9 +2000,15 @@
     if (dom.submitUploadBtn) dom.submitUploadBtn.disabled = true;
   }
 
-  function openUploadModal() {
+  async function openUploadModal() {
+    if (!can('upload')) return toast('Your role cannot upload price lists.');
+    if (state.active?.isDraft && !(await confirmDiscardDraft('Uploading a new file'))) return false;
     clearStagedFile();
-    dom.uploadModal?.showModal();
+    fillDatalists();
+    if (dom.uploadPriceLevel) dom.uploadPriceLevel.value = '';
+    if (dom.uploadCountry) dom.uploadCountry.value = '';
+    if (!dom.uploadModal?.open) dom.uploadModal?.showModal();
+    return true;
   }
 
   function closeUploadModal() {
@@ -1724,7 +2103,11 @@
     toast('Downloaded official Excel template: LRN_Price_List_Template.xlsx');
   }
 
-  async function parseWorkbook(file) {
+  async function parseWorkbook(file, meta = {}) {
+    if (!can('upload')) throw new Error('Your role cannot upload price lists.');
+    const listPriceLevel = String(meta.priceLevel || '').trim();
+    const listCountry = String(meta.country || '').trim();
+    if (!listPriceLevel || !listCountry) throw new Error('Enter the price level and country for this price list.');
     if (!file || !/\.(xlsx|xls)$/i.test(file.name)) {
       throw new Error('Please select a valid Excel file (.xlsx or .xls).');
     }
@@ -1735,7 +2118,7 @@
     } catch {
       throw new Error('Unable to read this file as an Excel workbook.');
     }
-    const headers = ['Category', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group'];
+    const headers = ['Category', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group', 'Price Level', 'Country'];
     const products = [];
     const usedSheets = new Set();
     for (const sheetName of workbook.SheetNames) {
@@ -1818,7 +2201,9 @@
             moq: find(/^moq$/i),
             moqQuantity: find(/^moq$/i) >= 0 ? find(/^moq$/i) + 1 : -1,
             totalPrice: find(/total price/i),
-            productGroup: find(/product group/i)
+            productGroup: find(/product group/i),
+            priceLevel: find(/^price\s*level$/i),
+            country: find(/^(country|market|destination)$/i)
           };
           continue;
         }
@@ -1841,7 +2226,8 @@
           categoryName, code, take(map.description), take(map.details), take(map.expiry), take(map.weight),
           take(map.pieces), take(map.boxSize), unitPrice, boxPrice, take(map.pallet40Large),
           take(map.pallet40Small), take(map.pallet20Large), take(map.netWeight), take(map.grossWeight),
-          take(map.moq), take(map.moqQuantity), totalPrice, groupFromRow || currentSection
+          take(map.moq), take(map.moqQuantity), totalPrice, groupFromRow || currentSection,
+          String(take(map.priceLevel)).trim() || listPriceLevel, String(take(map.country)).trim() || listCountry
         ]);
         usedSheets.add(sheetName);
       }
@@ -1859,6 +2245,9 @@
     state.active = {
       id: '',
       name: listName,
+      priceLevel: listPriceLevel,
+      country: listCountry,
+      revision: 1,
       headers: finalHeaders,
       rows,
       priceColumns,
@@ -1866,17 +2255,30 @@
       categoryAdjustments: {},
       savedAt: null,
       savedBy: state.user.name,
-      isDraft: true
+      isDraft: true,
+      pendingChanges: []
     };
     state.adjustment = 0;
     state.categoryAdjustments = {};
-    state.search = '';
-    if (dom.search) dom.search.value = '';
+    resetFilters();
+    state.category = '';
+    rememberCategory('');
 
     loadActive(state.active);
     await setDraft(draftKey(), state.active);
+    const categoryCount = new Set(rows.map(row => row[COL.category])).size;
+    logActivity('import_workbook', `Uploaded "${listName}"`, `${rows.length.toLocaleString()} products across ${categoryCount} categories · ${listPriceLevel} · ${listCountry}.`, {
+      fileName: listName, rowCount: rows.length, categoryCount, priceLevel: listPriceLevel, country: listCountry, sourceFile: file.name
+    });
 
-    toast(`${rows.length.toLocaleString()} products loaded into editor. Ready to edit.`);
+    toast(`${rows.length.toLocaleString()} products loaded into the editor.`);
+  }
+  function resetFilters() {
+    state.search = ''; state.codeFilter = ''; state.priceLevelFilter = ''; state.countryFilter = '';
+    if (dom.search) dom.search.value = '';
+    if (dom.codeFilterInput) dom.codeFilterInput.value = '';
+    if (dom.priceLevelSelect) dom.priceLevelSelect.value = '';
+    if (dom.countrySelect) dom.countrySelect.value = '';
   }
   function getChangeSummary() {
     const categories = [...new Set(state.rows.map(row => String(row[0] ?? '')).filter(Boolean))].sort();
@@ -1958,39 +2360,112 @@
       ${unchangedHtml}`;
   }
 
+  function changeListMarkup(changes, limit = 40) {
+    if (!changes || !changes.length) return '';
+    const rows = changes.slice(0, limit).map(change => `
+      <div class="edit-change-row">
+        <span class="edit-change-code">${escapeHtml(change.code || '—')}</span>
+        <span class="edit-change-col">${escapeHtml(change.column || '')}</span>
+        <span class="diff-chip old">${escapeHtml(change.oldValue || 'empty')}</span>
+        <span class="diff-arrow">→</span>
+        <span class="diff-chip new">${escapeHtml(change.newValue || 'empty')}</span>
+      </div>`).join('');
+    const more = changes.length > limit ? `<div class="edit-change-more">+ ${(changes.length - limit).toLocaleString()} more edit${changes.length - limit === 1 ? '' : 's'}</div>` : '';
+    return `<div class="save-summary-header"><div class="save-summary-title"><span class="save-summary-icon" aria-hidden="true">✎</span><strong>Cell edits</strong></div><span class="save-summary-badge">${changes.length.toLocaleString()} edit${changes.length === 1 ? '' : 's'}</span></div><div class="edit-change-list">${rows}${more}</div>`;
+  }
+  function renderSaveEdits() {
+    if (!dom.saveEditsSummary) return;
+    const changes = state.active?.isDraft ? (state.active.pendingChanges || []) : [];
+    dom.saveEditsSummary.hidden = !changes.length;
+    dom.saveEditsSummary.innerHTML = changeListMarkup(changes);
+  }
   async function save(customName) {
     const name = (customName || '').trim() || state.active?.name || 'Untitled price list';
-    const summary = getChangeSummary();
+    const priceLevel = dom.savePriceLevel.value.trim();
+    const country = dom.saveCountry.value.trim();
+    // Rows that inherited the old list-level defaults follow the new values.
+    const previousLevel = state.active.priceLevel, previousCountry = state.active.country;
+    const rows = state.rows.map(row => {
+      const copy = [...row];
+      if (!copy[COL.priceLevel] || copy[COL.priceLevel] === previousLevel) copy[COL.priceLevel] = priceLevel;
+      if (!copy[COL.country] || copy[COL.country] === previousCountry) copy[COL.country] = country;
+      return copy;
+    });
     const data = await api('save', {
       method: 'POST',
       body: JSON.stringify({
         id: state.active?.id || null,
         name,
+        priceLevel,
+        country,
         headers: state.headers,
-        rows: state.rows,
+        rows,
         priceColumns: state.priceColumns,
         adjustment: state.adjustment,
         categoryAdjustments: state.categoryAdjustments,
-        summary: {
-          totalAdjustedProducts: summary.totalAdjustedProducts,
-          totalProducts: summary.totalProducts,
-          adjustedCategories: summary.adjustedItems.map(i => ({
-            category: i.category,
-            adjustment: i.adjustment,
-            productCount: i.productCount
-          }))
-        }
+        changes: state.active?.pendingChanges || []
       })
     });
     await removeDraft(draftKey());
-    loadActive(data.active); await loadState(true); toast(data.message);
+    loadActive(data.active);
+    await refreshState();
+    toast(data.message);
   }
-  function exportExcel() {
+
+  // --- Exports (approved price lists only; the server re-checks approval and logs every export) ---
+  function adjustmentFor(version) {
+    const map = version.categoryAdjustments || {};
+    const fallback = Number(version.adjustment || 0);
+    return category => {
+      const key = String(category ?? '').trim();
+      return map[key] !== undefined ? Number(map[key]) : fallback;
+    };
+  }
+  function adjustedWith(rate, value) {
+    const rawNum = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, '').trim());
+    if (!Number.isFinite(rawNum)) return value;
+    if (!rate || !Number.isFinite(rate)) return rawNum;
+    return Math.max(0, Math.round(rawNum * (1 + rate / 100) * 10000) / 10000);
+  }
+  function exportFileName(version, extension) {
+    const parts = [version.name || 'LRN Price List'];
+    if (version.revision > 1) parts.push(`rev ${version.revision}`);
+    return `${parts.join(' - ').replace(/[\\/:*?"<>|%]/g, '_')}.${extension}`;
+  }
+  /**
+   * Asks the server for the approved version (which logs the export), then builds the file from it.
+   * From the editor, the active filters limit the exported rows.
+   */
+  async function requestExport(format, versionId = null) {
+    const fromEditor = !versionId;
+    const id = versionId || state.active?.id;
+    if (!id) return toast('Open an approved price list first.');
+    if (fromEditor && !canExportActive()) return toast('Only approved price lists can be exported.');
+    const scope = fromEditor && (hasActiveFilters() || state.category) ? filterDescription() : '';
+    let version;
+    try {
+      version = (await api('export', { method: 'POST', body: JSON.stringify({ id, format, scope }) })).version;
+    } catch (error) {
+      return toast(error.message);
+    }
+    version.rows = normalizeRows(version.rows, version.priceLevel, version.country);
+    let rows = version.rows;
+    if (fromEditor && String(version.id) === String(state.active?.id)) {
+      rows = filteredRows().map(item => item.row);
+      if (!rows.length) return toast('No products match the current filters.');
+    }
+    if (format === 'excel') exportExcel(version, rows);
+    else await exportPdf(version, rows, scope);
+    if (can('viewAudit')) api('audit-logs').then(res => { state.auditLogs = res.auditLogs || []; renderHistory(); }).catch(() => { });
+  }
+  function exportExcel(version, rows) {
     if (!window.XLSX) return toast('Excel tools are unavailable.');
     const wb = XLSX.utils.book_new();
+    const rateFor = adjustmentFor(version);
+    const adjusted = (value, category) => adjustedWith(rateFor(category), value);
 
     const categoryMap = new Map();
-    state.rows.forEach(row => {
+    rows.forEach(row => {
       const cat = String(row[0] || 'Price List').trim();
       if (!categoryMap.has(cat)) categoryMap.set(cat, []);
       categoryMap.get(cat).push(row);
@@ -2077,9 +2552,8 @@
       XLSX.utils.book_append_sheet(wb, ws, safeSheetName || 'Sheet');
     });
 
-    const exportName = (state.active?.name || 'LRN Price List').replace(/[/\\?%*:|"<>]/g, '_');
-    XLSX.writeFile(wb, `${exportName} - updated.xlsx`);
-    toast('Excel workbook exported successfully.');
+    XLSX.writeFile(wb, exportFileName(version, 'xlsx'));
+    toast('Excel workbook exported.');
   }
   const pdfImageCache = {};
   function clearPdfImageCache() {
@@ -2118,10 +2592,13 @@
     return custom?.key ? `custom:${custom.key}` : null;
   }
 
-  async function exportPdf() {
+  async function exportPdf(version, targetRows, scope = '') {
     try {
       if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
       const { jsPDF } = window.jspdf;
+      const rateFor = adjustmentFor(version);
+      const adjusted = (value, category) => adjustedWith(rateFor(category), value);
+      const getCategoryAdjustment = category => rateFor(category);
       toast('Generating PDF...');
       const pdfImages = await loadPdfImages();
 
@@ -2147,8 +2624,6 @@
         return Number(val).toFixed(Math.max(2, Math.min(4, decimals)));
       };
 
-      // If search query is active, only export the search filtered rows. Otherwise export all rows in the active workbook.
-      const targetRows = state.search ? filteredRows().map(f => f.row) : state.rows;
       if (!targetRows.length) return toast('No products to export.');
 
       const categoriesMap = new Map();
@@ -2397,25 +2872,23 @@
 
         doc.setFontSize(11);
         doc.setTextColor(23, 20, 23);
-        doc.text(state.active?.name || 'Price List', margin + 28, 23);
+        doc.text(doc.splitTextToSize(version.name || 'Price List', pageWidth * 0.55)[0], margin + 28, 23);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
         doc.setTextColor(113, 98, 103);
-        doc.text('LA ROSE NOIRE · FOB Subic Manila–Subic Port · Export Pricing', margin + 28, 32);
+        const subtitle = ['LA ROSE NOIRE', version.priceLevel, version.country, 'Export Pricing'].filter(Boolean).join(' · ');
+        doc.text(subtitle + (scope ? `  ·  ${scope}` : ''), margin + 28, 32);
 
-        // Right side adjustments
+        // Right side: approval stamp
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(23, 20, 23);
-        const adjEntries = Object.entries(state.categoryAdjustments || {}).filter(([_, v]) => Number(v) !== 0);
-        const adjText = adjEntries.length > 0
-          ? adjEntries.map(([c, a]) => `${c}: ${Number(a) > 0 ? '+' : ''}${a}%`).join('  |  ')
-          : 'Baseline prices (0% adjustment)';
-        doc.text(adjText, pageWidth - margin, 23, { align: 'right' });
+        const approvalText = `Approved by ${version.approvedBy || '—'}${version.approvedAt ? ` · ${displayDate(version.approvedAt)}` : ''}`;
+        doc.text(approvalText, pageWidth - margin, 23, { align: 'right' });
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
         doc.setTextColor(113, 98, 103);
-        doc.text(`Exported ${new Date().toLocaleString()}`, pageWidth - margin, 32, { align: 'right' });
+        doc.text(`Revision ${version.revision || 1} · Exported ${new Date().toLocaleString()} by ${state.user?.name || ''}`, pageWidth - margin, 32, { align: 'right' });
 
         // Bottom Footer
         doc.setFontSize(6.5);
@@ -2424,16 +2897,15 @@
         doc.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
       }
 
-      const safeName = (state.active?.name || 'Price List').replace(/[\\/:*?"<>|]/g, '_');
-      doc.save(`${safeName} - updated.pdf`);
-      toast('PDF exported successfully.');
+      doc.save(exportFileName(version, 'pdf'));
+      toast('PDF exported.');
     } catch (err) {
       console.error('PDF Export Error:', err);
       toast('Failed to generate PDF: ' + (err.message || 'Unknown error'));
     }
   }
 
-  dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
+  dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; state.category = ''; rememberCategory(''); setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
   $('#logoutButton').addEventListener('click', () => dom.logoutDialog.showModal());
   dom.logoutForm.addEventListener('submit', async event => {
     event.preventDefault();
@@ -2453,6 +2925,16 @@
     const csrf = state.csrf;
     state.user = null;
     state.csrf = '';
+    state.permissions = [];
+    state.canEdit = false;
+    state.devTools = false;
+    if ($('#devTools')) $('#devTools').hidden = true;
+    state.notifications = [];
+    state.unreadCount = 0;
+    state.auditLogs = [];
+    lastSeenNotificationId = null;
+    state.category = '';
+    rememberCategory('');
     state.active = null;
     state.rows = [];
     state.headers = [];
@@ -2489,12 +2971,9 @@
     dom.emptyState.classList.remove('dragover');
     const file = event.dataTransfer?.files?.[0];
     if (!file) return;
+    if (!can('upload')) return toast('Your role cannot upload price lists.');
     if (!/\.(xlsx|xls)$/i.test(file.name)) return toast('Please drop an Excel file (.xlsx or .xls).');
-    try {
-      await parseWorkbook(file);
-    } catch (error) {
-      toast(error.message);
-    }
+    if (await openUploadModal()) stageFileForUpload(file);
   });
   $('#editButton').addEventListener('click', event => {
     event.stopPropagation();
@@ -2508,17 +2987,9 @@
   dom.fileInput.addEventListener('change', async () => {
     const file = dom.fileInput.files[0];
     if (!file) return;
-    if (!/\.(xlsx|xls)$/i.test(file.name)) {
-      dom.fileInput.value = '';
-      return toast('Please select a valid Excel file (.xlsx or .xls).');
-    }
-    try {
-      await parseWorkbook(file);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      dom.fileInput.value = '';
-    }
+    dom.fileInput.value = '';
+    if (!/\.(xlsx|xls)$/i.test(file.name)) return toast('Please select a valid Excel file (.xlsx or .xls).');
+    if (await openUploadModal()) stageFileForUpload(file);
   });
 
   async function applyPriceAdjustment() {
@@ -2548,11 +3019,14 @@
       state.adjustment = value;
     }
 
+    const sign = value > 0 ? '+' : '';
+    let affectedProducts = 0;
+    allCategories.forEach(c => {
+      if (selectedAdjustmentCategories.has(c.name)) affectedProducts += c.count;
+    });
+
     if (state.active) {
-      if (isAll) state.active.adjustment = value;
-      state.active.categoryAdjustments = { ...state.categoryAdjustments };
-      state.active.isDraft = true;
-      await setDraft(draftKey(), state.active);
+      markDraft();
       loadActive(state.active);
     } else {
       updateMetrics();
@@ -2560,13 +3034,11 @@
     }
     setPriceEditor(false);
 
-    const sign = value > 0 ? '+' : '';
-    let affectedProducts = 0;
-    allCategories.forEach(c => {
-      if (selectedAdjustmentCategories.has(c.name)) affectedProducts += c.count;
+    const scopeText = isAll ? 'all categories' : selectedCats.length === 1 ? selectedCats[0] : `${selectedCats.length} categories`;
+    logActivity('price_adjust', `Applied ${sign}${value}% to ${scopeText}`, `${sign}${value}% applied to ${affectedProducts.toLocaleString()} products (${selectedCats.join(', ')}). Calculated from the uploaded prices.`, {
+      percentage: value, applyAll: isAll, categories: selectedCats, category: selectedCats.length === 1 ? selectedCats[0] : '', adjustedProducts: affectedProducts
     });
-
-    toast(`Applied ${sign}${value}% adjustment to ${selectedCats.length} category/categories & draft saved.`);
+    toast(`Applied ${sign}${value}% to ${scopeText}. Save to submit for approval.`);
   }
 
   $('#previewButton')?.addEventListener('click', event => {
@@ -2625,6 +3097,9 @@
   dom.search.addEventListener('input', () => { state.search = dom.search.value; renderTable(); });
   dom.category.addEventListener('change', () => {
     state.category = dom.category.value;
+    state.categoryChosen = true;
+    rememberCategory(state.category);
+    dom.category.title = dom.category.selectedOptions[0]?.textContent || '';
     const cat = String(state.category || '').trim();
     dom.percentage.value = getCategoryAdjustment(cat);
     updateMetrics();
@@ -2632,10 +3107,32 @@
   });
   $('#saveButton').addEventListener('click', event => {
     event.stopPropagation();
-    if (!state.canEdit) return toast('You do not have permission to save versions.');
+    if (!can('save')) return toast('You do not have permission to save price lists.');
     if (!state.active) return toast('Please upload or open a price list first before saving.');
+    if (!state.active.isDraft && state.active.status === 'pending') return toast('This price list is already saved and waiting for approval. Make changes first to save a new version.');
+    if (!state.active.isDraft && state.active.status === 'approved') return toast('No changes to save. Edit prices first to create a new revision.');
     dom.versionNameInput.value = state.active.name || '';
+    dom.savePriceLevel.value = state.active.priceLevel || '';
+    dom.saveCountry.value = state.active.country || '';
+    // Price level and country are chosen at upload; show them read-only unless one is missing (older lists).
+    const metaMissing = !dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim();
+    $('#saveMetaPriceLevel').textContent = state.active.priceLevel || 'Not set';
+    $('#saveMetaCountry').textContent = state.active.country || 'Not set';
+    $('#saveMetaReadonly').hidden = metaMissing;
+    $('#saveMetaEdit').hidden = !metaMissing;
+    dom.saveApproversNote.textContent = state.autoApprove
+      ? 'As the approver, your save is approved immediately and is ready for export.'
+      : state.approvers.length
+        ? `Approval request goes to ${state.approvers.join(state.approvalMode === 'all' ? ' and ' : ' or ')}${state.approvalMode === 'all' ? ' (all must approve)' : ''}.`
+        : 'No approver is configured for your account. Ask an administrator to update the approval routing.';
+    dom.confirmSave.textContent = state.autoApprove ? 'Save & approve' : 'Save & submit for approval';
+    $('#saveDialog .save-version-dialog > p.muted').textContent = state.autoApprove
+      ? 'Check the adjustments and edits below. Your save is approved right away and can be exported immediately.'
+      : 'Check the adjustments and edits below. Saving sends this price list for approval. It can be exported once it is approved.';
+    dom.saveConfirmCheck.checked = false;
+    dom.confirmSave.disabled = true;
     renderSaveSummary();
+    renderSaveEdits();
     dom.saveDialog.showModal();
     requestAnimationFrame(() => {
       dom.versionNameInput.focus();
@@ -2651,8 +3148,12 @@
     const name = dom.versionNameInput.value.trim();
     if (!name) {
       dom.versionNameInput.focus();
-      return toast('Please enter a version name.');
+      return toast('Please enter a price list name.');
     }
+    if (!dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim()) {
+      return toast('Enter the price level and country.');
+    }
+    if (!dom.saveConfirmCheck.checked) return toast('Confirm that you have reviewed the prices.');
     dom.saveDialog.close();
     try {
       await save(name);
@@ -2660,15 +3161,190 @@
       toast(error.message);
     }
   });
-  $('#excelButton').addEventListener('click', exportExcel); $('#pdfButton').addEventListener('click', exportPdf);
+  dom.saveConfirmCheck?.addEventListener('change', () => { dom.confirmSave.disabled = !dom.saveConfirmCheck.checked; });
+  $('#closeFileBtn')?.addEventListener('click', closeActiveFile);
+  $('#editSaveMetaBtn')?.addEventListener('click', () => {
+    $('#saveMetaReadonly').hidden = true;
+    $('#saveMetaEdit').hidden = false;
+    dom.savePriceLevel.focus();
+  });
+  $('#excelButton').addEventListener('click', () => requestExport('excel'));
+  $('#pdfButton').addEventListener('click', () => requestExport('pdf'));
+
+  // --- Workspace filters ---
+  dom.codeFilterInput?.addEventListener('input', () => { state.codeFilter = dom.codeFilterInput.value; renderTable(); });
+  dom.priceLevelSelect?.addEventListener('change', () => { state.priceLevelFilter = dom.priceLevelSelect.value; renderTable(); });
+  dom.countrySelect?.addEventListener('change', () => { state.countryFilter = dom.countrySelect.value; renderTable(); });
+  dom.clearFiltersBtn?.addEventListener('click', () => { resetFilters(); renderTable(); });
+  dom.emptyBrowseListsButton?.addEventListener('click', () => switchPanel('listsPanel', true));
+
+  // --- Approval decisions ---
+  function openDecisionDialog(kind, versionId) {
+    const summary = versionSummaryById(versionId) || (String(state.active?.id) === String(versionId) ? state.active : null);
+    if (!summary) return toast('Price list not found. Refresh and try again.');
+    state.pendingDecision = { kind, id: versionId };
+    const label = `${summary.name}${summary.revision > 1 ? ` (rev ${summary.revision})` : ''}`;
+    if (kind === 'approve') {
+      dom.approveDialogTitle.textContent = `Approve ${label}?`;
+      dom.approveDialogText.textContent = `Saved by ${summary.savedBy} on ${displayDate(summary.savedAt)} · ${summary.priceLevel || '—'} · ${summary.country || '—'}. Once approved, it becomes available for export.`;
+      const adjusted = summary.summary?.adjustedCategories || [];
+      dom.approveDialogSummary.innerHTML = (adjusted.length
+        ? adjusted.map(item => `<div class="save-summary-row"><div class="save-summary-cat-info"><strong class="save-summary-cat-name">${escapeHtml(item.category)}</strong><span class="save-summary-cat-count">${Number(item.productCount || 0).toLocaleString()} products</span></div><span class="adjustment-pill ${item.adjustment > 0 ? 'pos' : 'neg'}">${item.adjustment > 0 ? '+' : ''}${item.adjustment}%</span></div>`).join('')
+        : '<div class="save-summary-empty">No percentage adjustments (baseline prices).</div>')
+        + (summary.changeCount ? `<div class="save-summary-unchanged"><strong>${Number(summary.changeCount).toLocaleString()}</strong> individual cell edit(s). Open the price list to review them.</div>` : '');
+      dom.approveRemarks.value = '';
+      dom.approveDialog.showModal();
+    } else {
+      dom.rejectDialogTitle.textContent = `Reject ${label}?`;
+      dom.rejectRemarks.value = '';
+      dom.rejectDialog.showModal();
+      requestAnimationFrame(() => dom.rejectRemarks.focus());
+    }
+  }
+  async function submitDecision(kind, remarks) {
+    const decision = state.pendingDecision;
+    if (!decision || decision.kind !== kind) return;
+    try {
+      const data = await api(kind, { method: 'POST', body: JSON.stringify({ id: decision.id, remarks }) });
+      state.pendingDecision = null;
+      if (String(state.active?.id) === String(decision.id) && !state.active.isDraft) loadActive(data.active);
+      await refreshState();
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
+    }
+  }
+  dom.approveForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (event.submitter?.value === 'cancel') { dom.approveDialog.close(); return; }
+    dom.approveDialog.close();
+    await submitDecision('approve', dom.approveRemarks.value.trim());
+  });
+  dom.rejectForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (event.submitter?.value === 'cancel') { dom.rejectDialog.close(); return; }
+    const remarks = dom.rejectRemarks.value.trim();
+    if (!remarks) { dom.rejectRemarks.focus(); return toast('Enter the reason for rejecting.'); }
+    dom.rejectDialog.close();
+    await submitDecision('reject', remarks);
+  });
+  async function runListAction(action, id) {
+    const version = versionSummaryById(id);
+    if (!version) return toast('Price list not found. Refresh and try again.');
+    if (action === 'open') {
+      if (String(state.active?.id) === String(id)) return switchPanel('workspacePanel', true);
+      try { await openVersion(id); } catch (error) { toast(error.message); }
+    } else if (action === 'approve' || action === 'reject') {
+      openDecisionDialog(action, id);
+    } else if (action === 'export-excel' || action === 'export-pdf') {
+      await requestExport(action === 'export-pdf' ? 'pdf' : 'excel', id);
+    } else if (action === 'delete') {
+      state.pendingDelete = id;
+      dom.deleteVersionName.textContent = version.name;
+      dom.deleteDialog.showModal();
+    }
+  }
+
+  // --- Row kebab menu (single shared, fixed-position element so the scrolling table cannot clip it) ---
+  const rowMenu = $('#rowMenu');
+  const menuIcons = {
+    open: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    approve: '<polyline points="20 6 9 17 4 12"/>',
+    reject: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    'export-excel': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    'export-pdf': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    delete: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
+  };
+  let rowMenuTrigger = null;
+  function closeRowMenu() {
+    if (!rowMenu || rowMenu.hidden) return;
+    rowMenu.hidden = true;
+    rowMenuTrigger?.setAttribute('aria-expanded', 'false');
+    rowMenuTrigger?.classList.remove('is-open');
+    rowMenuTrigger = null;
+  }
+  function openRowMenu(trigger) {
+    const version = versionSummaryById(trigger.dataset.id);
+    if (!rowMenu || !version) return;
+    const isOpen = String(state.active?.id) === String(version.id);
+    const exportable = version.status === 'approved' && can('export');
+    const item = (action, label, { danger = false, disabled = false, hint = '' } = {}) =>
+      `<button type="button" role="menuitem" class="row-menu-item ${danger ? 'danger' : ''}" data-action="${action}" ${disabled ? 'disabled' : ''}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${menuIcons[action]}</svg>
+        <span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</button>`;
+    const groups = [
+      [item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' })],
+      version.canApprove ? [item('approve', 'Approve'), item('reject', 'Reject', { danger: true })] : [],
+      can('export') ? [
+        item('export-excel', 'Export Excel', { disabled: !exportable, hint: exportable ? '.xlsx' : 'After approval' }),
+        item('export-pdf', 'Export PDF', { disabled: !exportable, hint: exportable ? '.pdf' : 'After approval' })
+      ] : [],
+      can('update') ? [item('delete', 'Delete', { danger: true })] : []
+    ].filter(group => group.length);
+    rowMenu.innerHTML = groups.map(group => group.join('')).join('<div class="row-menu-sep" role="separator"></div>');
+    rowMenu.dataset.id = version.id;
+    rowMenu.hidden = false;
+    const rect = trigger.getBoundingClientRect();
+    const menuRect = rowMenu.getBoundingClientRect();
+    const top = rect.bottom + 6 + menuRect.height > window.innerHeight ? rect.top - menuRect.height - 6 : rect.bottom + 6;
+    rowMenu.style.top = `${Math.max(8, top)}px`;
+    rowMenu.style.left = `${Math.max(8, Math.min(rect.right - menuRect.width, window.innerWidth - menuRect.width - 8))}px`;
+    rowMenuTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.classList.add('is-open');
+    rowMenu.querySelector('.row-menu-item:not([disabled])')?.focus();
+  }
+  $('#listsTable')?.addEventListener('click', async event => {
+    const kebab = event.target.closest('.kebab-btn');
+    if (kebab) {
+      event.stopPropagation();
+      const wasOpen = rowMenuTrigger === kebab;
+      closeRowMenu();
+      if (!wasOpen) openRowMenu(kebab);
+      return;
+    }
+    const primary = event.target.closest('.row-primary');
+    if (primary && !primary.disabled) await runListAction(primary.dataset.action, primary.dataset.id);
+  });
+  rowMenu?.addEventListener('click', async event => {
+    const itemButton = event.target.closest('.row-menu-item');
+    if (!itemButton || itemButton.disabled) return;
+    const id = rowMenu.dataset.id;
+    const trigger = rowMenuTrigger;
+    closeRowMenu();
+    await runListAction(itemButton.dataset.action, id);
+    trigger?.isConnected && trigger.focus();
+  });
+  rowMenu?.addEventListener('keydown', event => {
+    const items = $$('.row-menu-item:not([disabled])', rowMenu);
+    const index = items.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); items[(index + 1) % items.length]?.focus(); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); items[(index - 1 + items.length) % items.length]?.focus(); }
+    else if (event.key === 'Escape' || event.key === 'Tab') { const trigger = rowMenuTrigger; closeRowMenu(); if (event.key === 'Escape') trigger?.focus(); }
+  });
+  document.addEventListener('click', event => { if (!event.target.closest('#rowMenu')) closeRowMenu(); });
+  window.addEventListener('resize', closeRowMenu);
+  document.addEventListener('scroll', closeRowMenu, true);
+  $$('.list-tab-btn').forEach(button => button.addEventListener('click', () => { state.listTab = button.dataset.listTab; renderLists(); }));
+  dom.listSearchInput?.addEventListener('input', () => { state.listSearch = dom.listSearchInput.value; renderLists(); });
+  dom.listPriceLevelFilter?.addEventListener('change', () => { state.listPriceLevel = dom.listPriceLevelFilter.value; renderLists(); });
+  dom.listCountryFilter?.addEventListener('change', () => { state.listCountry = dom.listCountryFilter.value; renderLists(); });
+  dom.listStatusFilter?.addEventListener('change', () => { state.listStatus = dom.listStatusFilter.value; renderLists(); });
+  $('#refreshListsBtn')?.addEventListener('click', async () => {
+    try { await refreshState(); toast('Approvals refreshed.'); } catch (error) { toast(error.message); }
+  });
+  $('#listsBackBtn')?.addEventListener('click', () => switchPanel('workspacePanel', true));
+  dom.bannerApproveBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('approve', state.active.id));
+  dom.bannerRejectBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('reject', state.active.id));
   function getInitialPanelId() {
     const hash = (location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hash === 'approvals' || hash === 'lists' || hash === 'listspanel') return 'listsPanel';
     if (hash === 'history' || hash === 'historypanel') return 'historyPanel';
-    if (hash === 'settings' || hash === 'settingspanel') return 'settingsPanel';
+    if (hash === 'config' || hash === 'settings' || hash === 'settingspanel') return 'settingsPanel';
     if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') return 'workspacePanel';
     try {
       const saved = localStorage.getItem('pla_active_panel');
-      if (saved && ['workspacePanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
+      if (saved && ['workspacePanel', 'listsPanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
         return saved;
       }
     } catch { }
@@ -2677,7 +3353,7 @@
 
   function switchPanel(panelId, updateHash = true) {
     let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === panelId);
-    if (!targetButton || (targetButton.classList.contains('admin-only') && state.user?.role !== 'admin')) {
+    if (!targetButton || targetButton.hidden) {
       targetButton = $$('.nav-item')[0];
     }
     if (!targetButton) return;
@@ -2692,10 +3368,11 @@
       panel.hidden = !isTarget;
       panel.classList.toggle('active', isTarget);
     });
-    document.querySelector('.content')?.classList.toggle('history-active', finalPanelId === 'historyPanel');
+    document.querySelector('.content')?.classList.toggle('history-active', finalPanelId === 'historyPanel' || finalPanelId === 'listsPanel');
 
-    if (finalPanelId === 'settingsPanel') renderImageSettings();
+    if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || 'library');
     if (finalPanelId === 'historyPanel') renderHistory();
+    if (finalPanelId === 'listsPanel') renderLists();
 
     try {
       localStorage.setItem('pla_active_panel', finalPanelId);
@@ -2704,8 +3381,9 @@
     if (updateHash) {
       const hashMap = {
         workspacePanel: 'prices',
+        listsPanel: 'approvals',
         historyPanel: 'history',
-        settingsPanel: 'settings'
+        settingsPanel: 'config'
       };
       const hashName = hashMap[finalPanelId] || finalPanelId;
       if (location.hash !== `#${hashName}`) {
@@ -2768,11 +3446,7 @@
     const openButton = event.target.closest('.open-version');
     if (openButton) {
       try {
-        const data = await api('open', { method: 'POST', body: JSON.stringify({ id: openButton.dataset.id }) });
-        await removeDraft(draftKey());
-        loadActive(data.active);
-        $$('.nav-item')[0].click();
-        toast('Saved version opened without changing history.');
+        await openVersion(openButton.dataset.id);
       } catch (error) {
         toast(error.message);
       }
@@ -2896,7 +3570,25 @@
     }
   });
 
-  $('#confirmDelete').addEventListener('click', async event => { event.preventDefault(); if (!state.pendingDelete) return; const button = event.currentTarget; button.disabled = true; try { const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: state.pendingDelete }) }); state.pendingDelete = null; dom.deleteDialog.close(); await loadState(); toast(data.message); } catch (error) { toast(error.message); } finally { button.disabled = false; } });
+  $('#confirmDelete').addEventListener('click', async event => {
+    event.preventDefault();
+    if (!state.pendingDelete) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const deletedId = state.pendingDelete;
+      const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: deletedId }) });
+      state.pendingDelete = null;
+      dom.deleteDialog.close();
+      if (String(state.active?.id) === String(deletedId) && !state.active.isDraft) loadActive(null);
+      await refreshState();
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   dom.backToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
   dom.emptyGoToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
@@ -2912,13 +3604,7 @@
   dom.imageSettingsList?.addEventListener('click', event => {
     const chooseButton = event.target.closest('.choose-group-image');
     if (chooseButton) {
-      state.pendingImageGroup = {
-        category: chooseButton.dataset.category || '',
-        groupName: chooseButton.dataset.group || '',
-        button: chooseButton
-      };
-      dom.groupImageInput.value = '';
-      dom.groupImageInput.click();
+      openPhotoPicker(chooseButton.dataset.category || '', chooseButton.dataset.group || '');
       return;
     }
     const deleteButton = event.target.closest('.delete-group-image');
@@ -3017,7 +3703,7 @@
   });
 
   // Audit Hub Segmented Tabs
-  $$('.audit-tab-btn').forEach(btn => {
+  $$('.audit-tab-btn[data-audit-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.auditTab = btn.dataset.auditTab || 'all';
       state.historyPage = 1;
@@ -3044,10 +3730,9 @@
   dom.refreshAuditLogsBtn?.addEventListener('click', async () => {
     if (dom.refreshAuditLogsBtn) dom.refreshAuditLogsBtn.disabled = true;
     try {
-      const res = await api('get-audit-logs');
+      const res = await api('audit-logs');
       if (res.ok && Array.isArray(res.auditLogs)) {
         state.auditLogs = res.auditLogs;
-        renderNotifications();
         renderHistory();
         toast('Audit trail refreshed.');
       }
@@ -3061,20 +3746,24 @@
   // Notification Bell -> Audit Hub Navigation
   dom.openAuditLogsFromBell?.addEventListener('click', () => {
     toggleNotifications(false);
-    switchPanel('historyPanel', true);
+    switchPanel('listsPanel', true);
   });
-  dom.notificationsList?.addEventListener('click', event => {
-    const item = event.target.closest('.notification-item');
-    if (item) {
-      toggleNotifications(false);
-      switchPanel('historyPanel', true);
-      const logId = item.dataset.id;
-      if (logId) {
-        const log = (state.auditLogs || []).find(l => String(l.id) === String(logId));
-        if (log) {
-          showAuditLogModal(log);
-        }
-      }
+  async function activateNotification(item) {
+    if (!item) return;
+    toggleNotifications(false);
+    if (item.classList.contains('is-unread')) markNotificationsRead([item.dataset.id]);
+    const versionId = item.dataset.versionId;
+    if (versionId && versionSummaryById(versionId)) {
+      try { await openVersion(versionId); } catch (error) { toast(error.message); }
+    } else {
+      switchPanel('listsPanel', true);
+    }
+  }
+  dom.notificationsList?.addEventListener('click', event => activateNotification(event.target.closest('.notification-item')));
+  dom.notificationsList?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      activateNotification(event.target.closest('.notification-item'));
     }
   });
 
@@ -3086,11 +3775,7 @@
       if (versionId) {
         $('#historyChangesDialog')?.close();
         try {
-          const data = await api('open', { method: 'POST', body: JSON.stringify({ id: versionId }) });
-          await removeDraft(draftKey());
-          loadActive(data.active);
-          switchPanel('workspacePanel', true);
-          toast('Saved version opened in workspace.');
+          await openVersion(versionId);
         } catch (error) {
           toast(error.message);
         }
@@ -3131,13 +3816,12 @@
       return;
     }
     dom.resetPricesDialog.close();
+    const previous = Object.entries(state.categoryAdjustments || {}).filter(([, v]) => Number(v) !== 0).map(([c, v]) => `${c} ${Number(v) > 0 ? '+' : ''}${v}%`);
     state.adjustment = 0;
     state.categoryAdjustments = {};
     if (state.active) {
-      state.active.adjustment = 0;
-      state.active.categoryAdjustments = {};
-      state.active.isDraft = true;
-      await setDraft(draftKey(), state.active);
+      markDraft();
+      logActivity('reset_prices', 'Reset price adjustments to 0%', previous.length ? `Cleared: ${previous.join(', ')}.` : 'All adjustments cleared.', { cleared: previous });
     }
     dom.percentage.value = 0;
     const title = $('#adjustmentTitle');
@@ -3153,14 +3837,8 @@
   dom.table?.addEventListener('click', event => {
     const chooseButton = event.target.closest('.choose-group-image');
     if (chooseButton) {
-      if (!state.canEdit) return;
-      state.pendingImageGroup = {
-        category: chooseButton.dataset.category || '',
-        groupName: chooseButton.dataset.group || '',
-        button: chooseButton
-      };
-      dom.groupImageInput.value = '';
-      dom.groupImageInput.click();
+      if (!can('manageImages')) return;
+      openPhotoPicker(chooseButton.dataset.category || '', chooseButton.dataset.group || '');
       return;
     }
     if (event.target.closest('.excel-cell-editor')) {
@@ -3323,10 +4001,13 @@
   });
   dom.submitUploadBtn?.addEventListener('click', async () => {
     if (!stagedUploadFile) return;
+    const meta = { priceLevel: dom.uploadPriceLevel.value.trim(), country: dom.uploadCountry.value.trim() };
+    if (!meta.priceLevel) { dom.uploadPriceLevel.focus(); return toast('Enter the price level for this price list.'); }
+    if (!meta.country) { dom.uploadCountry.focus(); return toast('Enter the country for this price list.'); }
     const fileToParse = stagedUploadFile;
     closeUploadModal();
     try {
-      await parseWorkbook(fileToParse);
+      await parseWorkbook(fileToParse, meta);
     } catch (err) {
       toast(err.message || 'Failed to process Excel workbook.');
     }
@@ -3371,91 +4052,60 @@
     }
   }
 
-  function getLastReadTimestamp() {
-    try {
-      return Number(localStorage.getItem('pla_last_read_audit_ts') || '0');
-    } catch {
-      return 0;
+  function getNotificationIcon(type) {
+    switch (type) {
+      case 'approval_request': return getAuditTypeIcon('save_version');
+      case 'approved':
+      case 'available':
+      case 'partial_approval':
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      case 'rejected': return getAuditTypeIcon('delete_version');
+      default: return getAuditTypeIcon('info');
     }
-  }
-
-  function setLastReadTimestamp(ts = Date.now()) {
-    try {
-      localStorage.setItem('pla_last_read_audit_ts', String(ts));
-    } catch { }
   }
 
   function renderNotifications() {
-    const logs = state.auditLogs || [];
-    const lastReadTs = getLastReadTimestamp();
-    let unreadCount = 0;
-
-    logs.forEach(log => {
-      const logTs = new Date(log.timestamp || 0).getTime();
-      if (logTs > lastReadTs) unreadCount++;
-    });
-
+    const items = state.notifications || [];
+    const unread = Number(state.unreadCount || 0);
     if (dom.notificationBadge) {
-      if (unreadCount > 0) {
-        dom.notificationBadge.hidden = false;
-        dom.notificationBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      } else {
-        dom.notificationBadge.hidden = true;
-      }
+      dom.notificationBadge.hidden = unread === 0;
+      dom.notificationBadge.textContent = unread > 99 ? '99+' : String(unread);
     }
-
-    if (dom.notificationsCountBadge) {
-      dom.notificationsCountBadge.textContent = `${logs.length} ${logs.length === 1 ? 'item' : 'items'}`;
-    }
-
+    if (dom.notificationsCountBadge) dom.notificationsCountBadge.textContent = unread ? `${unread} unread` : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
     if (!dom.notificationsList) return;
-
-    if (!logs.length) {
+    if (!items.length) {
       dom.notificationsList.innerHTML = '';
       if (dom.notificationsEmpty) dom.notificationsEmpty.hidden = false;
       return;
     }
-
     if (dom.notificationsEmpty) dom.notificationsEmpty.hidden = true;
-
-    dom.notificationsList.innerHTML = logs.map(log => {
-      const logTs = new Date(log.timestamp || 0).getTime();
-      const isUnread = logTs > lastReadTs;
-      const type = escapeHtml(log.type || 'info');
-      const icon = getAuditTypeIcon(log.type);
-      const actor = escapeHtml(log.actor || log.user || 'User');
-      const time = formatRelativeTime(log.timestamp);
-      const title = escapeHtml(log.title || 'Price List Activity');
-      const details = log.details ? `<div class="notification-details-text">${escapeHtml(log.details)}</div>` : '';
-      const fileName = getLogFileName(log);
-      const isCurrent = isLogCurrentFile(log);
-      const fileBadge = isCurrent
-        ? '<span class="notification-file-tag">Current file</span>'
-        : (fileName ? `<span class="notification-file-tag" title="${escapeHtml(fileName)}">${escapeHtml(fileName.length > 22 ? fileName.slice(0, 20) + '…' : fileName)}</span>` : '');
-
-      return `
-        <div class="notification-item ${isUnread ? 'is-unread' : ''}" data-type="${type}" data-id="${escapeHtml(log.id || '')}">
-          <div class="notification-icon-wrap" aria-hidden="true">
-            ${icon}
-          </div>
+    dom.notificationsList.innerHTML = items.map(item => `
+        <div class="notification-item ${item.read ? '' : 'is-unread'}" data-type="${escapeHtml(item.type || 'info')}" data-id="${escapeHtml(item.id || '')}" data-version-id="${escapeHtml(item.versionId || '')}" role="button" tabindex="0">
+          <div class="notification-icon-wrap" aria-hidden="true">${getNotificationIcon(item.type)}</div>
           <div class="notification-content">
             <div class="notification-row-top">
-              <span class="notification-actor">${actor}</span>
-              ${fileBadge}
-              <time class="notification-time" datetime="${escapeHtml(log.timestamp || '')}">${time}</time>
+              <span class="notification-actor">${escapeHtml(item.title || 'Notification')}</span>
+              <time class="notification-time" datetime="${escapeHtml(item.createdAt || '')}">${formatRelativeTime(item.createdAt)}</time>
             </div>
-            <div class="notification-title-text">${title}</div>
-            ${details}
+            ${item.message ? `<div class="notification-details-text">${escapeHtml(item.message)}</div>` : ''}
           </div>
-        </div>`;
-    }).join('');
+        </div>`).join('');
+  }
+
+  async function markNotificationsRead(ids = null) {
+    try {
+      const data = await api('notifications-read', { method: 'POST', body: JSON.stringify({ ids }) });
+      state.notifications = data.notifications || [];
+      state.unreadCount = Number(data.unreadCount || 0);
+      renderNotifications();
+    } catch { }
   }
 
   async function logActivity(type, title, details = '', metadata = {}) {
-    if (!state.user) return;
-    const currentFileName = state.active?.name || state.pending?.name || 'Current file';
+    if (!state.user || !can('update')) return;
     const payloadMeta = {
-      fileName: metadata.fileName || currentFileName,
+      fileName: state.active?.name || 'Current file',
+      versionId: state.active?.id || '',
       ...metadata
     };
     try {
@@ -3463,12 +4113,9 @@
         method: 'POST',
         body: JSON.stringify({ type, title, details, metadata: payloadMeta })
       });
-      if (res.ok && res.auditLogs) {
-        state.auditLogs = res.auditLogs;
-        renderNotifications();
-        if ($('#historyPanel') && !$('#historyPanel').hidden) {
-          renderHistory();
-        }
+      if (res.ok && res.log && can('viewAudit')) {
+        state.auditLogs = [res.log, ...(state.auditLogs || [])];
+        if ($('#historyPanel') && !$('#historyPanel').hidden) renderHistory();
       }
     } catch (err) {
       console.warn('Audit log error:', err);
@@ -3480,10 +4127,7 @@
     const shouldOpen = force !== undefined ? force : dom.notificationsDropdown.hidden;
     dom.notificationsDropdown.hidden = !shouldOpen;
     dom.notificationBtn.setAttribute('aria-expanded', String(shouldOpen));
-    if (shouldOpen) {
-      setLastReadTimestamp();
-      renderNotifications();
-    }
+    if (shouldOpen) renderNotifications();
   }
 
   dom.notificationBtn?.addEventListener('click', event => {
@@ -3495,26 +4139,10 @@
     event.stopPropagation();
   });
 
-  dom.markAllReadBtn?.addEventListener('click', event => {
+  dom.markAllReadBtn?.addEventListener('click', async event => {
     event.stopPropagation();
-    setLastReadTimestamp();
-    renderNotifications();
+    await markNotificationsRead(null);
     toast('All notifications marked as read.');
-  });
-
-  dom.clearLogsBtn?.addEventListener('click', async event => {
-    event.stopPropagation();
-    if (state.user?.role !== 'admin') return;
-    if (!confirm('Are you sure you want to clear all audit logs? This action cannot be undone.')) return;
-    try {
-      await api('clear-audit-logs', { method: 'POST' });
-      state.auditLogs = [];
-      setLastReadTimestamp();
-      renderNotifications();
-      toast('Audit logs cleared.');
-    } catch (err) {
-      toast(err.message || 'Failed to clear logs.');
-    }
   });
 
   document.addEventListener('click', event => {
@@ -3532,29 +4160,292 @@
     }
   });
 
-  window.addEventListener('focus', async () => {
-    if (state.user && !document.hidden) {
+  /** Picks up new approval requests and decisions made by other users. */
+  let lastSeenNotificationId = null;
+  async function pollUpdates() {
+    if (!state.user || document.hidden) return;
+    try {
+      const res = await api('notifications');
+      const newestId = res.notifications?.[0]?.id || null;
+      const changed = newestId !== lastSeenNotificationId && lastSeenNotificationId !== null;
+      lastSeenNotificationId = newestId;
+      state.notifications = res.notifications || [];
+      state.unreadCount = Number(res.unreadCount || 0);
+      renderNotifications();
+      if (changed) {
+        await refreshState();
+        const latest = state.notifications[0];
+        if (latest && !latest.read) toast(latest.title);
+      }
+    } catch { }
+  }
+  window.addEventListener('focus', pollUpdates);
+  setInterval(pollUpdates, 20000);
+
+  // --- Photo library ("drawer") and photo picker ---
+  function photoUsage(photoId) {
+    return (state.productImages || []).filter(image => image.libraryId === photoId);
+  }
+  function photoCardMarkup(photo, { selected = false, current = false, deletable = false } = {}) {
+    const usage = photoUsage(photo.id).length;
+    return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-photo-id="${escapeHtml(photo.id)}" role="option" tabindex="0" aria-selected="${selected}" title="${escapeHtml(photo.name)}">
+      <div class="library-thumb"><img src="${escapeHtml(photo.imagePath)}" alt="${escapeHtml(photo.name)}" loading="lazy"></div>
+      <div class="library-meta">
+        <strong>${escapeHtml(photo.name)}</strong>
+        <small>${current ? 'Current photo' : usage ? `Used by ${usage} product type${usage === 1 ? '' : 's'}` : 'Not used yet'}</small>
+      </div>
+      ${deletable ? `<button type="button" class="library-delete" data-photo-id="${escapeHtml(photo.id)}" aria-label="Delete ${escapeHtml(photo.name)}" title="Delete photo">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>` : ''}
+      ${selected ? '<span class="library-check" aria-hidden="true">✓</span>' : ''}
+    </div>`;
+  }
+  function filteredLibrary(query) {
+    const q = String(query || '').trim().toLowerCase();
+    return (state.photoLibrary || []).filter(photo => !q || photo.name.toLowerCase().includes(q));
+  }
+  function renderLibrary() {
+    const grid = $('#libraryGrid');
+    if (!grid) return;
+    const all = state.photoLibrary || [];
+    const visible = filteredLibrary(state.librarySearch);
+    $('#libraryCountBadge').textContent = String(all.length);
+    $('#libraryCount').textContent = `${visible.length} photo${visible.length === 1 ? '' : 's'}`;
+    $('#libraryEmpty').hidden = visible.length > 0;
+    if (!visible.length && all.length) $('#libraryEmpty').innerHTML = '<h2>No matching photos</h2><p>Try a different search.</p>';
+    else if (!all.length) $('#libraryEmpty').innerHTML = '<h2>The library is empty</h2><p>Upload product photos above. You can then pick them for any product type.</p>';
+    grid.hidden = !visible.length;
+    grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
+  }
+  function switchConfigTab(tab) {
+    state.configTab = tab;
+    $$('.config-tab-btn').forEach(button => {
+      const active = button.dataset.configTab === tab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    $('#libraryCard').hidden = tab !== 'library';
+    $('#typesCard').hidden = tab !== 'types';
+    if (tab === 'library') renderLibrary(); else renderImageSettings();
+  }
+  $$('.config-tab-btn').forEach(button => button.addEventListener('click', () => switchConfigTab(button.dataset.configTab)));
+  $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; renderLibrary(); });
+
+  /** Uploads several files to the library; resolves with the newly added photos. */
+  let libraryUploadTarget = null;
+  async function uploadLibraryFiles(fileList) {
+    const files = [...(fileList || [])].filter(file => /^image\/(jpeg|png|webp)$/.test(file.type));
+    const skipped = (fileList?.length || 0) - files.length;
+    if (!files.length) { toast('Choose JPG, PNG, or WebP images.'); return []; }
+    const status = $('#libraryUploadStatus');
+    const added = [];
+    const errors = [];
+    // Send in batches so very large selections stay under the server's upload limits.
+    for (let start = 0; start < files.length; start += 10) {
+      const batch = files.slice(start, start + 10);
+      if (status) status.textContent = `Uploading ${Math.min(start + batch.length, files.length)} of ${files.length}…`;
+      const form = new FormData();
+      batch.forEach(file => form.append('images[]', file));
       try {
-        const res = await api('get-audit-logs');
-        if (res.ok && Array.isArray(res.auditLogs)) {
-          state.auditLogs = res.auditLogs;
-          renderNotifications();
-        }
-      } catch { }
+        const data = await api('library-upload', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
+        added.push(...(data.photos || []));
+        errors.push(...(data.errors || []));
+      } catch (error) {
+        errors.push(error.message);
+      }
+    }
+    if (status) status.textContent = '';
+    state.photoLibrary = [...added, ...(state.photoLibrary || [])];
+    renderLibrary();
+    const problems = errors.length + skipped;
+    toast(added.length ? `${added.length} photo${added.length === 1 ? '' : 's'} added to the library${problems ? ` · ${problems} skipped` : ''}.` : (errors[0] || 'No photos were added.'));
+    return added;
+  }
+  const libraryInput = $('#libraryFileInput');
+  const libraryDrop = $('#libraryDropZone');
+  libraryDrop?.addEventListener('click', () => { libraryUploadTarget = 'library'; libraryInput.value = ''; libraryInput.click(); });
+  libraryDrop?.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); libraryDrop.click(); } });
+  libraryDrop?.addEventListener('dragover', event => { event.preventDefault(); libraryDrop.classList.add('dragover'); });
+  libraryDrop?.addEventListener('dragleave', () => libraryDrop.classList.remove('dragover'));
+  libraryDrop?.addEventListener('drop', async event => {
+    event.preventDefault();
+    libraryDrop.classList.remove('dragover');
+    await uploadLibraryFiles(event.dataTransfer?.files);
+  });
+  libraryInput?.addEventListener('change', async () => {
+    const target = libraryUploadTarget;
+    const added = await uploadLibraryFiles(libraryInput.files);
+    libraryInput.value = '';
+    if (target === 'picker') {
+      if (added.length) picker.selectedId = added[0].id;
+      renderPicker();
+    }
+  });
+  $('#libraryGrid')?.addEventListener('click', async event => {
+    const deleteButton = event.target.closest('.library-delete');
+    if (!deleteButton) return;
+    const photo = (state.photoLibrary || []).find(item => item.id === deleteButton.dataset.photoId);
+    if (!photo) return;
+    const usage = photoUsage(photo.id);
+    const ok = await confirmModal({
+      kicker: 'Photo library',
+      title: `Delete "${photo.name}"?`,
+      text: usage.length
+        ? `This photo is used by ${usage.length} product type${usage.length === 1 ? '' : 's'} (${usage.slice(0, 3).map(image => image.groupName).join(', ')}${usage.length > 3 ? '…' : ''}). They will show no photo until you choose another.`
+        : 'This removes the photo from the library.',
+      confirmLabel: 'Delete photo',
+      cancelLabel: 'Keep it'
+    });
+    if (!ok) return;
+    try {
+      const data = await api('library-delete', { method: 'POST', body: JSON.stringify({ id: photo.id }) });
+      state.photoLibrary = state.photoLibrary.filter(item => item.id !== photo.id);
+      state.productImages = state.productImages.filter(image => image.libraryId !== photo.id);
+      clearPdfImageCache();
+      renderLibrary(); renderImageSettings();
+      if (state.active) renderTable();
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
     }
   });
 
-  setInterval(async () => {
-    if (state.user && !document.hidden) {
-      try {
-        const res = await api('get-audit-logs');
-        if (res.ok && Array.isArray(res.auditLogs)) {
-          state.auditLogs = res.auditLogs;
-          renderNotifications();
-        }
-      } catch { }
+  // Picker modal: used from the price table ("+ Add photo" / "Change") and from Config › Product type photos.
+  const picker = { category: '', groupName: '', selectedId: '', currentId: '', currentKey: '' };
+  function renderPicker() {
+    const grid = $('#photoPickerGrid');
+    const visible = filteredLibrary($('#photoPickerSearch').value);
+    $('#photoPickerEmpty').hidden = visible.length > 0;
+    grid.hidden = !visible.length;
+    grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { selected: photo.id === picker.selectedId, current: photo.id === picker.currentId })).join('');
+    $('#photoPickerConfirm').disabled = !picker.selectedId || picker.selectedId === picker.currentId;
+    $('#photoPickerRemove').hidden = !picker.currentKey;
+  }
+  function openPhotoPicker(category, groupName) {
+    if (!can('manageImages')) return toast('You do not have permission to manage product photos.');
+    const current = imageOverride(category, groupName);
+    Object.assign(picker, { category, groupName, currentId: current?.libraryId || '', currentKey: current?.key || '', selectedId: current?.libraryId || '' });
+    $('#photoPickerTitle').textContent = `Choose a photo for ${groupName}`;
+    $('#photoPickerSearch').value = '';
+    renderPicker();
+    $('#photoPickerDialog').showModal();
+  }
+  async function confirmPicker() {
+    if (!picker.selectedId || picker.selectedId === picker.currentId) return;
+    const button = $('#photoPickerConfirm');
+    button.disabled = true;
+    try {
+      const data = await api('assign-group-image', { method: 'POST', body: JSON.stringify({ category: picker.category, groupName: picker.groupName, libraryId: picker.selectedId }) });
+      const lookup = groupLookupKey(data.image.category, data.image.groupName);
+      state.productImages = state.productImages.filter(image => groupLookupKey(image.category, image.groupName) !== lookup);
+      state.productImages.push(data.image);
+      clearPdfImageCache();
+      $('#photoPickerDialog').close();
+      renderImageSettings(); renderLibrary();
+      if (state.active) renderTable();
+      toast(`Photo set for ${picker.groupName}.`);
+    } catch (error) {
+      toast(error.message);
+      button.disabled = false;
     }
-  }, 25000);
+  }
+  $('#photoPickerGrid')?.addEventListener('click', event => {
+    const card = event.target.closest('.library-card');
+    if (!card) return;
+    picker.selectedId = card.dataset.photoId;
+    renderPicker();
+  });
+  $('#photoPickerGrid')?.addEventListener('dblclick', event => {
+    const card = event.target.closest('.library-card');
+    if (!card) return;
+    picker.selectedId = card.dataset.photoId;
+    confirmPicker();
+  });
+  $('#photoPickerGrid')?.addEventListener('keydown', event => {
+    const card = event.target.closest('.library-card');
+    if (card && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      picker.selectedId = card.dataset.photoId;
+      if (event.key === 'Enter') confirmPicker(); else renderPicker();
+    }
+  });
+  $('#photoPickerSearch')?.addEventListener('input', renderPicker);
+  $('#photoPickerConfirm')?.addEventListener('click', confirmPicker);
+  $('#photoPickerCancel')?.addEventListener('click', () => $('#photoPickerDialog').close());
+  $('#photoPickerClose')?.addEventListener('click', () => $('#photoPickerDialog').close());
+  $('#photoPickerUpload')?.addEventListener('click', () => { libraryUploadTarget = 'picker'; libraryInput.value = ''; libraryInput.click(); });
+  $('#photoPickerRemove')?.addEventListener('click', async () => {
+    if (!picker.currentKey) return;
+    try {
+      const data = await api('delete-group-image', { method: 'POST', body: JSON.stringify({ key: picker.currentKey }) });
+      state.productImages = state.productImages.filter(image => image.key !== picker.currentKey);
+      clearPdfImageCache();
+      $('#photoPickerDialog').close();
+      renderImageSettings(); renderLibrary();
+      if (state.active) renderTable();
+      toast(`Photo removed from ${picker.groupName}. It stays in the library.`);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  // --- Developer tools: floating panel for wiping test data (admins only, when enabled in config) ---
+  const devTools = $('#devTools');
+  const devPanel = $('#devToolsPanel');
+  const devToggle = $('#devToolsToggle');
+  function toggleDevTools(open) {
+    if (!devPanel) return;
+    devPanel.hidden = !open;
+    devToggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      const versions = (state.versions || []).length;
+      $('#devCountVersions').textContent = `${versions} saved version${versions === 1 ? '' : 's'}, pending and approved`;
+      $('#devCountAudit').textContent = `${(state.auditLogs || []).length} recorded event${(state.auditLogs || []).length === 1 ? '' : 's'}`;
+    }
+  }
+  devToggle?.addEventListener('click', event => { event.stopPropagation(); toggleDevTools(devPanel.hidden); });
+  $('#devToolsClose')?.addEventListener('click', () => toggleDevTools(false));
+  document.addEventListener('click', event => { if (devPanel && !devPanel.hidden && !event.target.closest('#devTools') && !event.target.closest('dialog')) toggleDevTools(false); });
+  $('#devToolsClear')?.addEventListener('click', async () => {
+    const selected = $$('.dev-tools-options input:checked').map(input => input.value);
+    if (!selected.length) return toast('Choose what to clear.');
+    const names = { draft: 'the uploaded file / draft in this browser', versions: 'all saved price lists', notifications: 'all notifications', audit: 'the audit logs', images: 'all product photos' };
+    const ok = await confirmModal({
+      kicker: 'Developer tools',
+      title: 'Clear test data?',
+      text: `This permanently deletes ${selected.map(key => names[key]).join(', ')}. This cannot be undone.`,
+      confirmLabel: 'Clear data',
+      cancelLabel: 'Cancel'
+    });
+    if (!ok) return;
+    const button = $('#devToolsClear');
+    button.disabled = true;
+    try {
+      const serverTargets = selected.filter(key => key !== 'draft');
+      let message = '';
+      if (selected.includes('draft')) {
+        await removeDraft(draftKey());
+        if (state.active?.isDraft) loadActive(null);
+        rememberCategory('');
+        message = 'Cleared the local draft.';
+      }
+      if (serverTargets.length) {
+        const data = await api('dev-reset', { method: 'POST', body: JSON.stringify({ targets: serverTargets }) });
+        if (serverTargets.includes('versions') && state.active && !state.active.isDraft) loadActive(null);
+        if (serverTargets.includes('images')) { state.productImages = []; clearPdfImageCache(); }
+        message = [message, data.message].filter(Boolean).join(' ');
+      }
+      await refreshState();
+      renderImageSettings();
+      if (state.active) renderTable();
+      toggleDevTools(false);
+      toast(message || 'Done.');
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   function initTheme() {
     let savedTheme = null;

@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260929-category-checkboxes-v13">
+    <link rel="stylesheet" href="assets/app.css?v=20260929-approval-workflow-v26">
     <script>
     (function() {
         try {
@@ -29,8 +29,9 @@ $user = current_user();
 
             var hash = (location.hash || '').replace(/^#/, '').toLowerCase();
             var panel = '';
-            if (hash === 'history' || hash === 'historypanel') panel = 'historyPanel';
-            else if (hash === 'settings' || hash === 'settingspanel') panel = 'settingsPanel';
+            if (hash === 'approvals' || hash === 'lists' || hash === 'listspanel') panel = 'listsPanel';
+            else if (hash === 'history' || hash === 'historypanel') panel = 'historyPanel';
+            else if (hash === 'config' || hash === 'settings' || hash === 'settingspanel') panel = 'settingsPanel';
             else if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') panel = 'workspacePanel';
             else panel = localStorage.getItem('pla_active_panel') || 'workspacePanel';
 
@@ -53,19 +54,20 @@ $user = current_user();
         <div class="brand-mark" aria-hidden="true">LRN</div>
         <p class="kicker">Export pricing operations</p>
         <h1 id="loginTitle">Price lists, without the spreadsheet drift.</h1>
-        <p class="muted">Import a workbook, adjust every selected price by one percentage, and publish a clean export.</p>
+        <p class="muted">Upload a price list, adjust prices by category, get it approved, then export it to Excel or PDF.</p>
         <form id="loginForm" class="login-form">
-            <label>Email<input id="email" name="email" type="email" value="admin@lrn.local" autocomplete="username" required></label>
-            <label>Password<input id="password" name="password" type="password" value="Admin123!" autocomplete="current-password" required></label>
+            <label>Email<input id="email" name="email" type="email" placeholder="name@lrn.local" autocomplete="username" required></label>
+            <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
             <button class="button primary" type="submit">Sign in</button>
             <p id="loginError" class="form-error" role="alert"></p>
         </form>
     </section>
     <aside class="login-art" aria-label="System capabilities">
         <div class="art-grid"></div>
-        <div class="capability"><span>01</span><strong>Import</strong><small>Excel workbooks</small></div>
-        <div class="capability"><span>02</span><strong>Adjust</strong><small>Bulk percentage</small></div>
-        <div class="capability"><span>03</span><strong>Export</strong><small>Excel or PDF</small></div>
+        <div class="capability"><span>01</span><strong>Upload</strong><small>Excel price list</small></div>
+        <div class="capability"><span>02</span><strong>Adjust</strong><small>By category or all</small></div>
+        <div class="capability"><span>03</span><strong>Approve</strong><small>Assigned approvers</small></div>
+        <div class="capability"><span>04</span><strong>Export</strong><small>Excel or PDF</small></div>
     </aside>
 </main>
 
@@ -76,9 +78,10 @@ $user = current_user();
             <a class="brand" href="#" aria-label="LRN Price List home"><span>LRN</span><b>Price List Automation</b></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
-            <button class="nav-item active" data-panel="workspacePanel"><span aria-hidden="true">▦</span><strong>Prices</strong></button>
-            <button class="nav-item" data-panel="historyPanel" id="auditLogsNav"><span aria-hidden="true">📋</span><strong>Audit Logs</strong></button>
-            <button id="settingsNav" class="nav-item admin-only" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Settings</strong></button>
+            <button class="nav-item active" data-panel="workspacePanel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg><strong>Prices</strong></button>
+            <button class="nav-item" data-panel="listsPanel" id="priceListsNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><strong>Approvals</strong><span id="pendingApprovalCount" class="nav-count" hidden>0</span></button>
+            <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
+            <button id="settingsNav" class="nav-item perm-manageImages" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
         </nav>
         <div class="topbar-right">
             <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
@@ -86,22 +89,21 @@ $user = current_user();
                 <svg class="theme-icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
             </button>
             <div class="notifications-wrapper">
-                <button id="notificationBtn" class="notification-bell-btn" type="button" aria-expanded="false" aria-controls="notificationsDropdown" aria-label="Activity & Audit Logs" title="Activity & Audit Logs">
+                <button id="notificationBtn" class="notification-bell-btn" type="button" aria-expanded="false" aria-controls="notificationsDropdown" aria-label="Notifications" title="Notifications">
                     <svg class="bell-icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                     </svg>
                     <span id="notificationBadge" class="notification-badge" hidden>0</span>
                 </button>
-                <div id="notificationsDropdown" class="notifications-dropdown" hidden role="region" aria-label="Activity & Audit Logs">
+                <div id="notificationsDropdown" class="notifications-dropdown" hidden role="region" aria-label="Notifications">
                     <div class="notifications-header">
                         <div class="notifications-title">
-                            <strong>Activity & Audit Logs</strong>
+                            <strong>Notifications</strong>
                             <span id="notificationsCountBadge" class="notifications-pill">0</span>
                         </div>
                         <div class="notifications-header-actions">
                             <button type="button" id="markAllReadBtn" class="text-button" title="Mark all notifications as read">Mark all as read</button>
-                            <button type="button" id="clearLogsBtn" class="text-button text-muted-button admin-only" title="Clear activity log history" hidden>Clear</button>
                         </div>
                     </div>
                     <div id="notificationsList" class="notifications-list" role="log" aria-live="polite">
@@ -109,11 +111,11 @@ $user = current_user();
                     </div>
                     <div id="notificationsEmpty" class="notifications-empty" hidden>
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>
-                        <p>No recent activity or notifications yet.</p>
+                        <p>No notifications yet.</p>
                     </div>
                     <div class="notifications-footer">
                         <button type="button" id="openAuditLogsFromBell" class="notifications-footer-btn">
-                            <span>Open complete audit logs & history</span>
+                            <span>Open approvals</span>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                         </button>
                     </div>
@@ -129,7 +131,7 @@ $user = current_user();
                 <div class="page-heading">
                     <div class="heading-left">
                         <p class="kicker">CURRENT FILE</p>
-                        <div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span></div>
+                        <div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span><button type="button" id="closeFileBtn" class="close-file-btn" title="Close this file" aria-label="Close this file" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close file</span></button></div>
                         <div class="meta-container">
                             <div class="file-identity-row">
                                 <svg class="file-badge-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -147,6 +149,19 @@ $user = current_user();
                                 </svg>
                                 <span id="savedMeta" class="saved-meta"></span>
                             </div>
+                            <div class="file-tags-row" id="listTagsRow" hidden>
+                                <span class="list-tag"><small>Price level</small><strong id="listPriceLevel">—</strong></span>
+                                <span class="list-tag list-tag-country"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><small>Country</small><strong id="listCountry">—</strong></span>
+                                <span class="list-tag" id="listRevisionTag" hidden><small>Revision</small><strong id="listRevision">1</strong></span>
+                                <span id="approvalBanner" class="workflow-note" role="status" aria-live="polite" hidden>
+                                    <span id="approvalBannerIcon" class="workflow-note-icon" aria-hidden="true"></span>
+                                    <span id="approvalBannerText" class="workflow-note-text"></span>
+                                </span>
+                                <span class="decision-actions">
+                                    <button type="button" id="bannerApproveBtn" class="mini-action approve" hidden>Approve</button>
+                                    <button type="button" id="bannerRejectBtn" class="mini-action reject" hidden>Reject</button>
+                                </span>
+                            </div>
                         </div>
                     </div>
                     <div id="metricGroup" class="metric-group" hidden>
@@ -156,7 +171,7 @@ $user = current_user();
                         <div class="metric-item"><strong id="currentAdjustment">0%</strong><span>Adjustment</span></div>
                     </div>
                     <div class="heading-actions">
-                        <div class="main edit-only" id="cloverActions">
+                        <div class="main" id="cloverActions" hidden>
                             <div class="up">
                                 <button id="editButton" class="card1 is-disabled" type="button" aria-expanded="false" aria-controls="adjustmentBar" title="Edit prices" aria-label="Edit prices" data-tooltip="Edit prices" aria-disabled="true">
                                     <svg class="icon-edit" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -196,7 +211,7 @@ $user = current_user();
                                 </button>
                             </div>
                         </div>
-                        <section id="adjustmentBar" class="adjustment-bar price-popover edit-only" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
+                        <section id="adjustmentBar" class="adjustment-bar price-popover" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
                             <div class="popover-header">
                                 <div class="edit-summary">
                                     <strong id="adjustmentTitle">Adjust Prices</strong>
@@ -263,19 +278,44 @@ $user = current_user();
                 <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
 
                 <section id="emptyState" class="empty-state">
-                    <div class="upload-icon-wrapper"><div class="upload-icon-glow"></div><div class="upload-icon">↗</div></div><h2>Import your current price list</h2><p>Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.</p><button id="emptyUploadButton" class="button primary edit-only">Choose Excel file</button>
+                    <div class="upload-icon-wrapper"><div class="upload-icon-glow"></div><div class="upload-icon">↗</div></div>
+                    <h2 id="emptyStateTitle">Import your current price list</h2>
+                    <p id="emptyStateText">Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.</p>
+                    <button id="emptyUploadButton" class="button primary edit-only">Choose Excel file</button>
+                    <button id="emptyBrowseListsButton" class="button secondary" type="button" hidden>Browse approved price lists</button>
+                    <div class="empty-open-saved" id="emptyOpenSaved" hidden>
+                        <span class="empty-open-label">or open a saved price list</span>
+                        <div class="nav-cascade" data-cascade="empty" role="group" aria-label="Open saved price list">
+                            <label class="filter-field cascade-country"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Country</span><select class="nav-country" aria-label="Country"></select></label>
+                            <span class="cascade-arrow" aria-hidden="true">›</span>
+                            <label class="filter-field"><span>Price Level</span><select class="nav-level" aria-label="Price level"></select></label>
+                            <span class="cascade-arrow" aria-hidden="true">›</span>
+                            <label class="filter-field cascade-list"><span>Price List</span><select class="nav-list" aria-label="Price list"></select></label>
+                        </div>
+                    </div>
                 </section>
 
                 <section id="dataView" hidden>
                     <div class="data-panel full-table">
                     <div class="table-tools">
-                        <div class="filter-group">
-                            <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search products, codes, prices..."><kbd class="search-kbd">/</kbd></label>
-                            <label class="select-control"><span>Category</span><select id="categorySelect"></select></label>
+                        <div class="filter-group filter-group-wide">
+                            <div class="nav-cascade" data-cascade="toolbar" role="group" aria-label="Choose saved price list">
+                                <label class="filter-field cascade-country"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Country</span><select class="nav-country" aria-label="Country"></select></label>
+                                <span class="cascade-arrow" aria-hidden="true">›</span>
+                                <label class="filter-field"><span>Level</span><select class="nav-level" aria-label="Price level"></select></label>
+                                <span class="cascade-arrow" aria-hidden="true">›</span>
+                                <label class="filter-field cascade-list"><span>List</span><select class="nav-list" aria-label="Price list"></select></label>
+                            </div>
+                            <span class="filter-sep" aria-hidden="true"></span>
+                            <label class="filter-field"><span>Category</span><select id="categorySelect"></select></label>
+                            <label class="filter-field"><span>LRN</span><input id="codeFilterInput" type="search" placeholder="Code" autocomplete="off" list="codeFilterOptions"><datalist id="codeFilterOptions"></datalist></label>
+                            <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search descriptions, prices..."><kbd class="search-kbd">/</kbd></label>
+                            <button type="button" id="clearFiltersBtn" class="text-button clear-filters-btn" hidden>Clear filters</button>
                         </div>
                         <div class="actions">
-                            <button id="excelButton" class="button secondary">Export Excel</button>
-                            <button id="pdfButton" class="button secondary">Export PDF</button>
+                            <span id="exportLockNote" class="export-lock-note" hidden></span>
+                            <button id="excelButton" class="button secondary"><span class="export-word">Export </span>Excel</button>
+                            <button id="pdfButton" class="button secondary"><span class="export-word">Export </span>PDF</button>
                         </div>
                     </div>
                     <div id="excelFormulaBar" class="excel-formula-bar edit-only">
@@ -297,12 +337,86 @@ $user = current_user();
                 </section>
             </section>
 
+            <section id="listsPanel" class="panel" hidden>
+                <div class="page-heading history-heading">
+                    <div class="heading-left">
+                        <p class="kicker history-kicker">APPROVAL WORKFLOW</p>
+                        <h1 class="history-title">Approvals</h1>
+                        <p class="muted history-subtitle" id="listsSubtitle">Saved price lists need approval from their assigned approvers before anyone can export them.</p>
+                    </div>
+                    <div class="heading-actions">
+                        <button id="listsBackBtn" class="button secondary history-back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg><span>Back to prices</span></button>
+                    </div>
+                </div>
+
+                <div class="audit-tab-bar" role="tablist" aria-label="Price list views" id="listTabBar">
+                    <button type="button" class="list-tab-btn audit-tab-btn active" data-list-tab="all" role="tab" aria-selected="true"><span>All</span><span id="listAllCount" class="audit-tab-count">0</span></button>
+                    <button type="button" class="list-tab-btn audit-tab-btn perm-approve" data-list-tab="mine" role="tab" aria-selected="false" hidden><span>Awaiting my approval</span><span id="listMineCount" class="audit-tab-count">0</span></button>
+                    <button type="button" class="list-tab-btn audit-tab-btn" data-list-tab="approved" role="tab" aria-selected="false"><span>Approved</span><span id="listApprovedCount" class="audit-tab-count">0</span></button>
+                </div>
+
+                <div class="history-card">
+                    <div class="history-tools">
+                        <div class="history-filter-group">
+                            <div class="history-search-control">
+                                <svg class="history-search-icon" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <input id="listSearchInput" type="search" placeholder="Search price lists..." autocomplete="off" aria-label="Search price lists">
+                            </div>
+                            <div class="history-select-control">
+                                <select id="listPriceLevelFilter" aria-label="Filter by price level"><option value="">All price levels</option></select>
+                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="history-select-control">
+                                <select id="listCountryFilter" aria-label="Filter by country"><option value="">All countries</option></select>
+                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="history-select-control perm-update" hidden>
+                                <select id="listStatusFilter" aria-label="Filter by status">
+                                    <option value="">All statuses</option>
+                                    <option value="pending">Pending approval</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="superseded">Superseded</option>
+                                </select>
+                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                        </div>
+                        <div class="history-tools-meta">
+                            <span id="listCount" class="history-count">0 price lists</span>
+                            <button type="button" id="refreshListsBtn" class="audit-refresh-btn" title="Refresh" aria-label="Refresh price lists">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="history-table-frame">
+                        <table id="listsTable" class="lists-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 27%;">Price list</th>
+                                    <th style="width: 11%;">Price level</th>
+                                    <th style="width: 10%;">Country</th>
+                                    <th style="width: 14%;">Saved</th>
+                                    <th style="width: 13%;">Adjustment</th>
+                                    <th style="width: 15%;">Status</th>
+                                    <th style="width: 10%;" class="col-actions"><span class="sr-only">Actions</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="listsTableBody"></tbody>
+                        </table>
+                        <div id="listsEmpty" class="history-empty-card" hidden>
+                            <h2 id="listsEmptyTitle">No price lists yet</h2>
+                            <p id="listsEmptyText">Saved price lists will appear here.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="historyPanel" class="panel" hidden>
                 <div class="page-heading history-heading">
                     <div class="heading-left">
                         <p class="kicker history-kicker">COMPLIANCE & AUDIT TRAIL</p>
-                        <h1 class="history-title">Audit Logs & Version History</h1>
-                        <p class="muted history-subtitle">Real-time audit log tracking price modifications, cell edits, category adjustments, and saved workbook releases.</p>
+                        <h1 class="history-title">Audit Logs</h1>
+                        <p class="muted history-subtitle">Every upload, price adjustment, cell edit, save, approval, rejection, and export, in chronological order.</p>
                     </div>
                     <div class="heading-actions">
                         <button id="backToPricesBtn" class="button secondary history-back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg><span>Back to prices</span></button>
@@ -320,9 +434,9 @@ $user = current_user();
                         <span>Price & Cell Edits</span>
                         <span id="auditEditsCountBadge" class="audit-tab-count">0</span>
                     </button>
-                    <button type="button" class="audit-tab-btn" data-audit-tab="versions" role="tab" aria-selected="false">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                        <span>Saved Versions</span>
+                    <button type="button" class="audit-tab-btn" data-audit-tab="workflow" role="tab" aria-selected="false">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <span>Saves, Approvals &amp; Exports</span>
                         <span id="auditVersionsCountBadge" class="audit-tab-count">0</span>
                     </button>
                 </div>
@@ -344,28 +458,24 @@ $user = current_user();
                             <div class="history-select-control" id="auditTypeSelectWrapper">
                                 <select id="auditTypeSelect" aria-label="Filter by event type">
                                     <option value="">All Event Types</option>
+                                    <option value="import_workbook">Uploads</option>
                                     <option value="price_adjust">Price Adjustments</option>
                                     <option value="cell_edit">Cell Edits</option>
-                                    <option value="save_version">Saved Versions</option>
-                                    <option value="row_add">Added Products</option>
-                                    <option value="row_delete">Deleted Products</option>
                                     <option value="reset_prices">Price Resets</option>
-                                    <option value="import_workbook">Workbook Imports</option>
+                                    <option value="save_version">Saves</option>
+                                    <option value="approve_version">Approvals</option>
+                                    <option value="reject_version">Rejections</option>
+                                    <option value="export_excel">Excel Exports</option>
+                                    <option value="export_pdf">PDF Exports</option>
+                                    <option value="delete_version">Deletions</option>
+                                    <option value="image_update">Photo Changes</option>
+                                    <option value="login">Sign-ins</option>
                                 </select>
                                 <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </div>
                             <div class="history-select-control" id="auditUserSelectWrapper">
                                 <select id="auditUserSelect" aria-label="Filter by user">
                                     <option value="">All Users</option>
-                                </select>
-                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </div>
-                            <div class="history-select-control" id="historyAdjustmentSelectWrapper" hidden>
-                                <select id="historyAdjustmentSelect" aria-label="Filter by adjustment">
-                                    <option value="">All adjustments</option>
-                                    <option value="positive">Positive (+)</option>
-                                    <option value="zero">Zero (0%)</option>
-                                    <option value="negative">Negative (-)</option>
                                 </select>
                                 <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </div>
@@ -382,23 +492,12 @@ $user = current_user();
                         <table id="historyTable">
                             <thead id="auditTableHead">
                                 <tr>
-                                    <th style="width: 14%;">Timestamp <span class="sort-arrow">↓</span></th>
-                                    <th style="width: 11%;">Actor</th>
-                                    <th style="width: 11%;">Event</th>
-                                    <th style="width: 20%;">Target File</th>
-                                    <th style="width: 23%;">Activity & Details</th>
-                                    <th style="width: 12%;">Diff / Change</th>
-                                    <th style="width: 9%;">Action</th>
-                                </tr>
-                            </thead>
-                            <thead id="versionsTableHead" hidden>
-                                <tr>
-                                    <th style="width: 11%;">Version</th>
-                                    <th style="width: 29.5%;">File name</th>
-                                    <th style="width: 12.5%;">Saved by</th>
-                                    <th style="width: 16.5%;">Saved on <span class="sort-arrow">↓</span></th>
-                                    <th style="width: 19%;">Adjustment</th>
-                                    <th style="width: 11.5%;">Actions</th>
+                                    <th style="width: 11%;">Time <span class="sort-arrow">↓</span></th>
+                                    <th style="width: 14%;">User</th>
+                                    <th style="width: 13%;">Event</th>
+                                    <th style="width: 38%;">Activity</th>
+                                    <th style="width: 13%;">Change</th>
+                                    <th style="width: 11%;"><span class="sr-only">Action</span></th>
                                 </tr>
                             </thead>
                             <tbody id="historyTableBody">
@@ -476,22 +575,43 @@ $user = current_user();
             <section id="settingsPanel" class="panel" hidden>
                 <div class="page-heading settings-heading">
                     <div class="heading-left">
-                        <p class="kicker">Admin settings</p>
-                        <h1>Product type images</h1>
-                        <p class="muted">Choose the image shown for each product type inside a category. Changes apply to the table and PDF exports.</p>
+                        <p class="kicker">Config</p>
+                        <h1>Product photos</h1>
+                        <p class="muted">Upload photos once into the library, then pick one for each product type. Photos appear in the price table and PDF exports.</p>
                     </div>
                     <div class="heading-actions"><button id="settingsBackButton" class="button secondary">Back to prices</button></div>
                 </div>
-                <div class="image-settings-card">
+
+                <div class="audit-tab-bar" role="tablist" aria-label="Photo settings">
+                    <button type="button" class="config-tab-btn audit-tab-btn active" data-config-tab="library" role="tab" aria-selected="true"><span>Photo library</span><span id="libraryCountBadge" class="audit-tab-count">0</span></button>
+                    <button type="button" class="config-tab-btn audit-tab-btn" data-config-tab="types" role="tab" aria-selected="false"><span>Product type photos</span><span id="typesCountBadge" class="audit-tab-count">0</span></button>
+                </div>
+
+                <div class="image-settings-card" id="libraryCard">
+                    <div id="libraryDropZone" class="library-drop-zone" tabindex="0" role="button" aria-label="Upload photos to the library">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <div><strong>Drop photos here or click to upload</strong><small>Select many at once · JPG, PNG or WebP · up to 6 MB each</small></div>
+                        <span id="libraryUploadStatus" class="library-upload-status"></span>
+                    </div>
+                    <div class="image-settings-toolbar">
+                        <label class="search settings-search"><span>Search photos</span><input id="librarySearchInput" type="search" placeholder="Search photos by name..."></label>
+                        <span id="libraryCount" class="history-count"></span>
+                    </div>
+                    <div id="libraryGrid" class="library-grid" aria-live="polite"></div>
+                    <div id="libraryEmpty" class="settings-empty" hidden><h2>The library is empty</h2><p>Upload product photos above. You can then pick them for any product type.</p></div>
+                </div>
+
+                <div class="image-settings-card" id="typesCard" hidden>
                     <div class="image-settings-toolbar">
                         <label class="select-control settings-category-control"><span>Category</span><select id="imageCategoryFilter" aria-label="Filter image settings by category"></select></label>
                         <label class="search settings-search"><span>Search product types</span><input id="imageSearchInput" type="search" placeholder="Search product types..."></label>
                         <span id="imageSettingsCount" class="history-count"></span>
                     </div>
                     <div id="imageSettingsList" class="image-settings-list" aria-live="polite"></div>
-                    <div id="imageSettingsEmpty" class="settings-empty" hidden><h2>No product types available</h2><p>Upload a workbook first. Its categories and product groups will appear here.</p></div>
+                    <div id="imageSettingsEmpty" class="settings-empty" hidden><h2>No product types available</h2><p>Open a price list first. Its categories and product groups will appear here.</p></div>
                 </div>
                 <input id="groupImageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+                <input id="libraryFileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
             </section>
         </main>
     </div>
@@ -577,6 +697,18 @@ $user = current_user();
             </div>
         </div>
 
+        <div class="upload-meta-grid">
+            <label class="form-field">Price level
+                <input id="uploadPriceLevel" type="text" maxlength="120" list="priceLevelOptions" placeholder="e.g. FOB Subic" autocomplete="off" required>
+            </label>
+            <label class="form-field">Country
+                <input id="uploadCountry" type="text" maxlength="120" list="countryOptions" placeholder="e.g. Philippines or All Countries" autocomplete="off" required>
+            </label>
+            <datalist id="priceLevelOptions"></datalist>
+            <datalist id="countryOptions"></datalist>
+            <p class="upload-meta-hint">Workbook rows with their own <em>Price Level</em> or <em>Country</em> column keep those values. Other rows use the values above.</p>
+        </div>
+
         <!-- File Upload Area -->
         <div id="modalDropZone" class="modal-drop-zone">
             <input id="modalFileInput" type="file" accept=".xlsx,.xls" hidden>
@@ -609,11 +741,76 @@ $user = current_user();
 
 <dialog id="saveDialog">
     <form method="dialog" class="dialog-card save-version-dialog" id="saveForm">
-        <div class="dialog-heading"><div><p class="kicker">Version control</p><h2>Save price list version</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p class="muted">Review your price adjustments and enter a version name to save to history.</p>
+        <div class="dialog-heading"><div><p class="kicker">Review before saving</p><h2>Review and save price list</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted">Check the adjustments and edits below. Saving sends this price list for approval. It can be exported once it is approved.</p>
         <div id="saveChangeSummary" class="save-change-summary" aria-label="Price adjustment summary"></div>
-        <label>Version name<input id="versionNameInput" type="text" maxlength="160" placeholder="e.g. Updated price list file" required></label>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmSave" value="default" class="button primary">Save version</button></div>
+        <div id="saveEditsSummary" class="save-edits-summary" hidden></div>
+        <label>Price list name<input id="versionNameInput" type="text" maxlength="160" placeholder="e.g. LRN Export PL - FOB Subic" required></label>
+        <div class="save-meta-readonly" id="saveMetaReadonly">
+            <span class="list-tag"><small>Price level</small><strong id="saveMetaPriceLevel">—</strong></span>
+            <span class="list-tag"><small>Country</small><strong id="saveMetaCountry">—</strong></span>
+            <button type="button" class="text-button" id="editSaveMetaBtn">Edit</button>
+        </div>
+        <div class="upload-meta-grid" id="saveMetaEdit" hidden>
+            <label class="form-field">Price level<input id="savePriceLevel" type="text" maxlength="120" list="priceLevelOptions" required></label>
+            <label class="form-field">Country<input id="saveCountry" type="text" maxlength="120" list="countryOptions" required></label>
+        </div>
+        <p id="saveApproversNote" class="save-approvers-note"></p>
+        <label class="confirm-check"><input type="checkbox" id="saveConfirmCheck"> I have reviewed the prices and confirm they are correct.</label>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmSave" value="default" class="button primary" disabled>Save &amp; submit for approval</button></div>
+    </form>
+</dialog>
+
+<dialog id="approveDialog">
+    <form method="dialog" class="dialog-card" id="approveForm">
+        <div class="dialog-heading"><div><p class="kicker">Approval</p><h2 id="approveDialogTitle">Approve price list?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted" id="approveDialogText">Once approved, this price list becomes available for export.</p>
+        <div id="approveDialogSummary" class="save-change-summary"></div>
+        <label>Remarks <small class="muted">(optional)</small><textarea id="approveRemarks" maxlength="500" rows="3"></textarea></label>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmApprove" value="default" class="button primary">Approve</button></div>
+    </form>
+</dialog>
+
+<dialog id="rejectDialog">
+    <form method="dialog" class="dialog-card" id="rejectForm">
+        <div class="dialog-heading"><div><p class="kicker">Approval</p><h2 id="rejectDialogTitle">Reject price list?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted">The person who saved it will be notified with your reason so they can correct and resubmit it.</p>
+        <label>Reason for rejection<textarea id="rejectRemarks" maxlength="500" rows="3" required></textarea></label>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmReject" value="default" class="button danger">Reject</button></div>
+    </form>
+</dialog>
+
+<dialog id="photoPickerDialog" class="photo-picker-dialog">
+    <div class="dialog-card photo-picker-card">
+        <div class="dialog-heading">
+            <div><p class="kicker">Photo library</p><h2 id="photoPickerTitle">Choose a photo</h2></div>
+            <button type="button" class="icon-button" id="photoPickerClose" aria-label="Close">×</button>
+        </div>
+        <div class="photo-picker-tools">
+            <label class="search"><span class="sr-only">Search photos</span><input id="photoPickerSearch" type="search" placeholder="Search photos..." autocomplete="off"></label>
+            <button type="button" id="photoPickerUpload" class="button secondary">+ Upload new photos</button>
+        </div>
+        <div id="photoPickerGrid" class="library-grid picker-grid" role="listbox" aria-label="Library photos"></div>
+        <div id="photoPickerEmpty" class="settings-empty" hidden><h2>No photos yet</h2><p>Use “Upload new photos” to add some to the library.</p></div>
+        <div class="dialog-actions">
+            <button type="button" id="photoPickerRemove" class="button danger picker-remove" hidden>Remove current photo</button>
+            <button type="button" id="photoPickerCancel" class="button secondary">Cancel</button>
+            <button type="button" id="photoPickerConfirm" class="button primary" disabled>Use this photo</button>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="confirmDialog">
+    <form method="dialog" class="dialog-card confirm-dialog" id="confirmDialogForm">
+        <div class="dialog-heading">
+            <div><p class="kicker" id="confirmDialogKicker">Unsaved changes</p><h2 id="confirmDialogTitle">Discard unsaved changes?</h2></div>
+            <button value="cancel" class="icon-button" aria-label="Close">×</button>
+        </div>
+        <p class="muted" id="confirmDialogText"></p>
+        <div class="dialog-actions">
+            <button value="cancel" class="button secondary" id="confirmDialogCancel">Keep editing</button>
+            <button value="confirm" class="button danger" id="confirmDialogOk">Discard changes</button>
+        </div>
     </form>
 </dialog>
 
@@ -649,11 +846,32 @@ $user = current_user();
     </form>
 </dialog>
 
+<div id="devTools" class="dev-tools" hidden>
+    <button type="button" id="devToolsToggle" class="dev-tools-toggle" aria-expanded="false" aria-controls="devToolsPanel" title="Developer tools">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>Dev tools</span>
+    </button>
+    <section id="devToolsPanel" class="dev-tools-panel" role="dialog" aria-labelledby="devToolsTitle" hidden>
+        <header class="dev-tools-head">
+            <div><strong id="devToolsTitle">Clear test data</strong><small>For testing only. Turn off before go-live in config.local.php:<br><code>'dev_tools' =&gt; false</code></small></div>
+            <button type="button" id="devToolsClose" class="icon-button" aria-label="Close developer tools">×</button>
+        </header>
+        <div class="dev-tools-options">
+            <label><input type="checkbox" value="draft" checked><span><strong>Uploaded file / draft</strong><small>Unsaved file open in this browser</small></span></label>
+            <label><input type="checkbox" value="versions" checked><span><strong>Saved price lists</strong><small id="devCountVersions">All versions, pending and approved</small></span></label>
+            <label><input type="checkbox" value="notifications" checked><span><strong>Notifications</strong><small>For every user</small></span></label>
+            <label><input type="checkbox" value="audit"><span><strong>Audit logs</strong><small id="devCountAudit">Every recorded event</small></span></label>
+            <label><input type="checkbox" value="images"><span><strong>Product photos</strong><small>Uploaded group images</small></span></label>
+        </div>
+        <button type="button" id="devToolsClear" class="button danger dev-tools-clear">Clear selected</button>
+    </section>
+</div>
+<div id="rowMenu" class="row-menu" role="menu" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => $_SESSION['csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260929-clean-save-v14"></script>
+<script src="assets/app.js?v=20260929-approval-workflow-v24"></script>
 </body>
 </html>

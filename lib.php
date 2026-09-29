@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/storage.php';
 
 function boot_session(): void
 {
@@ -27,23 +28,78 @@ function json_response(array $payload, int $status = 200): never
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
 function request_json(): array
 {
+    static $data = null;
+    if ($data !== null) return $data;
     $body = file_get_contents('php://input');
-    $data = json_decode($body ?: '{}', true);
-    if (!is_array($data)) {
+    $decoded = json_decode($body ?: '{}', true);
+    if (!is_array($decoded)) {
         json_response(['ok' => false, 'message' => 'Invalid JSON request.'], 400);
     }
-    return $data;
+    return $data = $decoded;
+}
+
+function clean_text(mixed $value, int $max = 180): string
+{
+    if (is_array($value) || is_object($value)) return '';
+    $value = trim((string) $value);
+    return mb_substr($value, 0, $max);
+}
+
+// ---------------------------------------------------------------------------
+// Users, roles and permissions
+// ---------------------------------------------------------------------------
+
+/** @return array{username:string,name:string,role:string,email:string}|null */
+function find_user_by_email(string $email): ?array
+{
+    $record = USERS[strtolower($email)] ?? null;
+    if (!is_array($record)) return null;
+    return ['email' => strtolower($email)] + $record;
+}
+
+function find_user_by_username(string $username): ?array
+{
+    foreach (USERS as $email => $record) {
+        if (($record['username'] ?? '') === $username) return ['email' => $email] + $record;
+    }
+    return null;
+}
+
+function user_display_name(string $username): string
+{
+    return find_user_by_username($username)['name'] ?? $username;
+}
+
+function verify_user_password(array $record, string $password): bool
+{
+    if (!empty($record['password_hash'])) return password_verify($password, (string) $record['password_hash']);
+    if (isset($record['password'])) return hash_equals((string) $record['password'], $password);
+    return false;
+}
+
+function public_user(array $record): array
+{
+    return [
+        'username' => (string) $record['username'],
+        'name' => (string) $record['name'],
+        'role' => (string) $record['role'],
+        'email' => (string) ($record['email'] ?? ''),
+    ];
 }
 
 function current_user(): ?array
 {
-    return isset($_SESSION['user']) && is_array($_SESSION['user']) ? $_SESSION['user'] : null;
+    $user = $_SESSION['user'] ?? null;
+    if (!is_array($user) || empty($user['username'])) return null;
+    // Re-read the account so role changes and removed accounts take effect immediately.
+    $record = find_user_by_username((string) $user['username']);
+    return $record ? public_user($record) : null;
 }
 
 function require_user(): array
@@ -63,142 +119,156 @@ function require_csrf(): void
     }
 }
 
-function can_edit(array $user): bool
+function user_permissions(array $user): array
 {
-    return in_array($user['role'] ?? '', EDIT_ROLES, true);
+    return ROLE_PERMISSIONS[$user['role'] ?? ''] ?? [];
 }
 
-function default_store(): array
+function user_can(array $user, string $permission): bool
 {
-    return ['active' => null, 'versions' => [], 'productImages' => [], 'auditLogs' => []];
+    return in_array($permission, user_permissions($user), true);
 }
 
-function record_audit_log(array &$store, string $type, string $title, string $details = '', array $metadata = []): array
+function require_permission(array $user, string $permission, string $message): void
 {
-    $user = current_user();
-    $actor = $user['name'] ?? 'System';
-    $role = $user['role'] ?? 'user';
-    if (empty($metadata['fileName']) && !empty($store['active']['name'])) {
-        $metadata['fileName'] = $store['active']['name'];
+    if (!user_can($user, $permission)) json_response(['ok' => false, 'message' => $message], 403);
+}
+
+/** Usernames of every account that holds a permission. */
+function usernames_with_permission(string $permission): array
+{
+    $names = [];
+    foreach (USERS as $record) {
+        if (in_array($permission, ROLE_PERMISSIONS[$record['role'] ?? ''] ?? [], true)) $names[] = (string) $record['username'];
     }
-    $store['auditLogs'] ??= [];
+    return $names;
+}
 
-    // For save_version, if an entry for this version/file already exists, update it in place so logs do not stack up
-    if ($type === 'save_version') {
-        $targetVerId = (string) ($metadata['versionId'] ?? '');
-        $targetFile = trim((string) ($metadata['fileName'] ?? $metadata['versionName'] ?? ''));
+function is_auto_approver(string $username): bool
+{
+    return in_array($username, AUTO_APPROVE_USERS, true);
+}
 
-        foreach ($store['auditLogs'] as $idx => $existingLog) {
-            $existingVerId = (string) ($existingLog['metadata']['versionId'] ?? '');
-            $existingFile = trim((string) ($existingLog['metadata']['fileName'] ?? $existingLog['metadata']['versionName'] ?? ''));
+/** Approvers for a submitter, never including the submitter. Auto-approving users need none. */
+function approvers_for(string $submitter): array
+{
+    if (is_auto_approver($submitter)) return [];
+    $configured = APPROVERS[$submitter] ?? null;
+    $list = is_array($configured) && $configured ? $configured : usernames_with_permission('approve');
+    $list = array_values(array_unique(array_filter(
+        array_map('strval', $list),
+        fn(string $name) => $name !== $submitter && ($record = find_user_by_username($name)) && in_array('approve', ROLE_PERMISSIONS[$record['role']] ?? [], true)
+    )));
+    return $list;
+}
 
-            $isSameVersion = ($targetVerId !== '' && $existingVerId === $targetVerId);
-            $isSameFile = ($targetFile !== '' && strcasecmp($existingFile, $targetFile) === 0);
+// ---------------------------------------------------------------------------
+// Price list versions
+// ---------------------------------------------------------------------------
 
-            if (($existingLog['type'] ?? '') === 'save_version' && ($isSameVersion || $isSameFile)) {
-                $existingLog['title'] = $title;
-                $existingLog['details'] = $details;
-                $existingLog['actor'] = $actor;
-                $existingLog['role'] = $role;
-                $existingLog['timestamp'] = gmdate('c');
-                $existingLog['metadata'] = array_replace($existingLog['metadata'] ?? [], $metadata);
-                // Move updated log to the top
-                array_splice($store['auditLogs'], $idx, 1);
-                array_unshift($store['auditLogs'], $existingLog);
-                return $existingLog;
-            }
-        }
+const VERSION_SUMMARY_KEYS = [
+    'id', 'name', 'priceLevel', 'country', 'revision', 'status', 'adjustment', 'categoryAdjustments', 'summary',
+    'savedAt', 'savedBy', 'savedByUser', 'requiredApprovers', 'approvals', 'approvedAt', 'approvedBy',
+    'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount',
+];
+
+function version_summary(array $version): array
+{
+    $summary = array_intersect_key($version, array_flip(VERSION_SUMMARY_KEYS));
+    if (!isset($summary['productCount'])) $summary['productCount'] = is_array($version['rows'] ?? null) ? count($version['rows']) : 0;
+    return $summary;
+}
+
+/** Normalises records written by older builds so every version has workflow fields. */
+function normalize_version(array $version): array
+{
+    $version['status'] = in_array($version['status'] ?? '', ['pending', 'approved', 'rejected', 'superseded'], true) ? $version['status'] : 'pending';
+    $version['revision'] = max(1, (int) ($version['revision'] ?? 1));
+    $version['priceLevel'] = (string) ($version['priceLevel'] ?? '');
+    $version['country'] = (string) ($version['country'] ?? '');
+    $version['savedByUser'] = (string) ($version['savedByUser'] ?? '');
+    $version['approvals'] = is_array($version['approvals'] ?? null) ? array_values($version['approvals']) : [];
+    if (!is_array($version['requiredApprovers'] ?? null) || !$version['requiredApprovers']) {
+        $version['requiredApprovers'] = $version['savedByUser'] !== '' ? approvers_for($version['savedByUser']) : usernames_with_permission('approve');
     }
+    if (!isset($version['productCount']) && is_array($version['rows'] ?? null)) $version['productCount'] = count($version['rows']);
+    return $version;
+}
 
+function can_user_approve(array $user, array $version): bool
+{
+    if (!user_can($user, 'approve')) return false;
+    if (($version['status'] ?? '') !== 'pending') return false;
+    if (($version['savedByUser'] ?? '') === $user['username']) return false;
+    if (!in_array($user['username'], $version['requiredApprovers'] ?? [], true)) return false;
+    foreach ($version['approvals'] ?? [] as $approval) {
+        if (($approval['username'] ?? '') === $user['username']) return false;
+    }
+    return true;
+}
+
+function approval_complete(array $version): bool
+{
+    $approved = array_map(fn($a) => (string) ($a['username'] ?? ''), $version['approvals'] ?? []);
+    $required = $version['requiredApprovers'] ?? [];
+    if (!$required) return count($approved) > 0;
+    if (APPROVAL_MODE === 'all') return !array_diff($required, $approved);
+    return (bool) array_intersect($required, $approved);
+}
+
+function version_visible_to(array $user, array $version): bool
+{
+    if (user_can($user, 'update')) return true;
+    return ($version['status'] ?? '') === 'approved';
+}
+
+// ---------------------------------------------------------------------------
+// Audit log and notifications
+// ---------------------------------------------------------------------------
+
+function record_audit(string $type, string $title, string $details = '', array $metadata = [], ?array $actor = null): array
+{
+    $actor ??= current_user();
     $log = [
-        'id' => bin2hex(random_bytes(6)),
-        'type' => $type,
-        'title' => $title,
-        'details' => $details,
-        'actor' => $actor,
-        'role' => $role,
+        'id' => bin2hex(random_bytes(8)),
+        'type' => clean_text($type, 40),
+        'title' => clean_text($title, 300),
+        'details' => clean_text($details, 1000),
+        'actor' => $actor['name'] ?? 'System',
+        'actorUser' => $actor['username'] ?? '',
+        'role' => $actor['role'] ?? 'system',
         'timestamp' => gmdate('c'),
         'metadata' => $metadata,
     ];
-    array_unshift($store['auditLogs'], $log);
-    if (count($store['auditLogs']) > 200) {
-        $store['auditLogs'] = array_slice($store['auditLogs'], 0, 200);
-    }
+    repo_add_audit($log);
     return $log;
 }
 
-function read_store(): array
+function notify(array $usernames, string $type, string $title, string $message, ?string $versionId = null): void
 {
-    if (database_enabled()) return database_read_store();
-    if (!is_file(STORAGE_FILE)) {
-        return default_store();
-    }
-    $decoded = json_decode((string) file_get_contents(STORAGE_FILE), true);
-    $store = is_array($decoded) ? array_replace(default_store(), $decoded) : default_store();
-
-    // Deduplicate versions so multiple saves of the same file do not stack up in history
-    if (!empty($store['versions']) && is_array($store['versions'])) {
-        $seen = [];
-        $unique = [];
-        for ($i = count($store['versions']) - 1; $i >= 0; $i--) {
-            $v = $store['versions'][$i];
-            $key = strtolower(trim((string) ($v['name'] ?? $v['id'] ?? '')));
-            if ($key !== '' && !isset($seen[$key])) {
-                $seen[$key] = true;
-                $unique[] = $v;
-            }
-        }
-        $store['versions'] = array_reverse($unique);
-    }
-
-    // Deduplicate save_version audit logs so multiple saves of the same file do not stack up
-    if (!empty($store['auditLogs']) && is_array($store['auditLogs'])) {
-        $seenLogs = [];
-        $uniqueLogs = [];
-        foreach ($store['auditLogs'] as $l) {
-            $type = (string) ($l['type'] ?? '');
-            if ($type === 'save_version') {
-                $targetFile = strtolower(trim((string) ($l['metadata']['fileName'] ?? $l['metadata']['versionName'] ?? $l['title'] ?? '')));
-                if ($targetFile !== '') {
-                    if (isset($seenLogs[$targetFile])) {
-                        continue; // Skip older stacked duplicate log
-                    }
-                    $seenLogs[$targetFile] = true;
-                }
-            }
-            $uniqueLogs[] = $l;
-        }
-        $store['auditLogs'] = $uniqueLogs;
-    }
-
-    return $store;
-}
-
-function write_store(array $store): void
-{
-    if (database_enabled()) {
-        database_write_store($store);
-        return;
-    }
-    $directory = dirname(STORAGE_FILE);
-    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Unable to create the storage directory.');
-    }
-    $temporary = STORAGE_FILE . '.' . bin2hex(random_bytes(6)) . '.tmp';
-    $json = json_encode($store, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false || file_put_contents($temporary, $json, LOCK_EX) === false) {
-        throw new RuntimeException('Unable to write application data.');
-    }
-    if (!rename($temporary, STORAGE_FILE)) {
-        @unlink($temporary);
-        throw new RuntimeException('Unable to finalize application data.');
+    $current = current_user()['username'] ?? '';
+    foreach (array_unique($usernames) as $username) {
+        if ($username === '' || $username === $current || !find_user_by_username($username)) continue;
+        repo_add_notification([
+            'id' => bin2hex(random_bytes(8)),
+            'recipient' => $username,
+            'type' => clean_text($type, 40),
+            'title' => clean_text($title, 300),
+            'message' => clean_text($message, 1000),
+            'versionId' => $versionId,
+            'createdAt' => gmdate('c'),
+            'read' => false,
+        ]);
     }
 }
 
-function clean_text(mixed $value, int $max = 180): string
+function version_label(array $version): string
 {
-    $value = trim((string) $value);
-    return mb_substr($value, 0, $max);
+    $parts = [$version['name'] ?? 'Price list'];
+    $meta = array_filter([$version['priceLevel'] ?? '', $version['country'] ?? '']);
+    if ($meta) $parts[] = '(' . implode(' · ', $meta) . ')';
+    if (($version['revision'] ?? 1) > 1) $parts[] = 'rev ' . $version['revision'];
+    return implode(' ', $parts);
 }
 
 boot_session();
