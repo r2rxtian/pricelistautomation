@@ -1044,6 +1044,22 @@
     const rowNumber = tr?.querySelector('.col-row-num')?.textContent.trim() || String(rowIdx + 1);
     return { letter: getColumnLetter(position >= 0 ? position : colIdx), position, rowNumber };
   }
+  /** Column hover: tints every cell in the hovered sheet column (and its letter), like the row hover. */
+  let hoveredColumn = -1;
+  function setColumnHover(position) {
+    if (position === hoveredColumn) return;
+    $$('#priceTable .col-hover').forEach(el => el.classList.remove('col-hover'));
+    hoveredColumn = position;
+    if (position < 0) return;
+    $$('#priceTable tr.excel-data-row').forEach(tr => tr.querySelectorAll('.excel-cell')[position]?.classList.add('col-hover'));
+    $$(`#priceTable th[data-col-letter="${position}"]`).forEach(th => th.classList.add('col-hover'));
+  }
+  dom.table?.addEventListener('mouseover', event => {
+    const td = event.target.closest('.excel-cell');
+    if (!td) return setColumnHover(-1);
+    setColumnHover([...td.closest('tr').querySelectorAll('.excel-cell')].indexOf(td));
+  });
+  dom.table?.addEventListener('mouseleave', () => setColumnHover(-1));
   /** Highlights the active cell's column letter and row number, like Excel's headings. */
   function highlightCellGuides(td) {
     $$('#priceTable .is-guide-active').forEach(el => el.classList.remove('is-guide-active'));
@@ -1910,6 +1926,8 @@
     if (dom.category) dom.category.title = dom.category.selectedOptions[0]?.textContent || '';
     const emptyOpen = $('#emptyOpenSaved');
     if (emptyOpen) emptyOpen.hidden = Boolean(active) || !lists.length;
+    renderSwitcherButton();
+    if (!$('#listSwitcherMenu')?.hidden) renderSwitcherMenu();
   }
   async function openFromNavigator(id) {
     if (!id || id === '__draft__') return renderNavigator();
@@ -1978,6 +1996,121 @@
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
   $('#filesUploadBtn')?.addEventListener('click', () => openUploadModal());
+
+  // --- Price list switcher: one pill that opens a Country › Price level › Price list cascade ---
+  const switcher = { country: '', level: '', query: '' };
+  const switcherMenu = $('#listSwitcherMenu');
+  const switcherButton = $('#listSwitcher');
+  function switcherCountries(lists) {
+    const countries = [];
+    lists.forEach(version => {
+      const text = String(version.country || '').trim();
+      const existing = countries.find(entry => sameText(entry.name, text));
+      if (existing) existing.count++;
+      else if (text) countries.push({ name: canonicalCountry(text) || text, count: 1 });
+    });
+    return countries.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function renderSwitcherButton() {
+    if (!switcherButton) return;
+    const active = state.active;
+    const isDraft = Boolean(active && (active.isDraft || !active.id));
+    const country = active?.country || '—';
+    const level = active?.priceLevel || '—';
+    const list = active ? `${active.name}${active.revision > 1 ? ` (rev ${active.revision})` : ''}${isDraft ? ' · unsaved' : ''}` : '—';
+    $('#lsCountry').textContent = country;
+    $('#lsLevel').textContent = level;
+    $('#lsList').textContent = list;
+    switcherButton.title = `${country} › ${level} › ${list}. Click to switch price list.`;
+  }
+  function renderSwitcherMenu() {
+    if (!switcherMenu) return;
+    const lists = navigableVersions();
+    const query = switcher.query.trim().toLowerCase();
+    // Search matches the country name, a price level, or a price list name.
+    const matches = version => !query || [version.country, version.priceLevel, version.name].some(value => String(value || '').toLowerCase().includes(query));
+    const visibleLists = lists.filter(matches);
+    const countries = switcherCountries(visibleLists);
+    if (!countries.some(entry => sameText(entry.name, switcher.country))) switcher.country = countries[0]?.name || '';
+    const forCountry = visibleLists.filter(version => sameText(version.country, switcher.country));
+    const levels = uniqueValues(forCountry.map(version => version.priceLevel));
+    if (!levels.some(level => sameText(level, switcher.level))) switcher.level = levels[0] || '';
+    const files = forCountry.filter(version => sameText(version.priceLevel, switcher.level));
+    const active = state.active;
+    const item = (kind, value, label, { meta = '', highlight = false, current = false, arrow = false } = {}) =>
+      `<button type="button" class="lsm-item ${highlight ? 'is-highlight' : ''} ${current ? 'is-current' : ''}" data-kind="${kind}" data-value="${escapeHtml(value)}" role="option" aria-selected="${highlight || current}">
+        <span class="lsm-label">${escapeHtml(label)}</span>${meta ? `<span class="lsm-meta">${escapeHtml(meta)}</span>` : ''}${arrow ? '<span class="lsm-arrow" aria-hidden="true">›</span>' : ''}</button>`;
+    $('#lsmCountries').innerHTML = countries.map(entry => item('country', entry.name, entry.name, {
+      meta: String(entry.count), highlight: sameText(entry.name, switcher.country), current: sameText(entry.name, active?.country), arrow: true
+    })).join('') || '<p class="lsm-empty">No matches</p>';
+    $('#lsmLevels').innerHTML = levels.map(level => item('level', level, level, {
+      meta: String(forCountry.filter(version => sameText(version.priceLevel, level)).length),
+      highlight: sameText(level, switcher.level),
+      current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: true
+    })).join('') || '<p class="lsm-empty">—</p>';
+    $('#lsmLists').innerHTML = files.map(version => item('list', version.id, `${version.name}${version.revision > 1 ? ` (rev ${version.revision})` : ''}`, {
+      meta: statusLabel(version.status), current: String(version.id) === String(active?.id)
+    })).join('') || '<p class="lsm-empty">—</p>';
+  }
+  function positionSwitcherMenu() {
+    const rect = switcherButton.getBoundingClientRect();
+    const width = Math.min(680, window.innerWidth - 32);
+    switcherMenu.style.width = `${width}px`;
+    switcherMenu.style.top = `${Math.round(rect.bottom + 6)}px`;
+    switcherMenu.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
+  }
+  function toggleSwitcher(open) {
+    if (!switcherMenu || !switcherButton) return;
+    if (open) {
+      switcher.country = state.active?.country || '';
+      switcher.level = state.active?.priceLevel || '';
+      switcher.query = '';
+      $('#lsmSearch').value = '';
+      renderSwitcherMenu();
+      switcherMenu.hidden = false;
+      positionSwitcherMenu();
+      requestAnimationFrame(() => $('#lsmSearch').focus());
+    } else {
+      switcherMenu.hidden = true;
+    }
+    switcherButton.setAttribute('aria-expanded', String(open));
+    switcherButton.classList.toggle('is-open', open);
+  }
+  switcherButton?.addEventListener('click', event => {
+    event.stopPropagation();
+    toggleSwitcher(switcherMenu.hidden);
+  });
+  // Hovering a country or level previews the next column; clicking works too (touch, keyboard).
+  const pickSwitcherItem = (button, fromHover) => {
+    const { kind, value } = button.dataset;
+    if (kind === 'country' && !sameText(switcher.country, value)) { switcher.country = value; switcher.level = ''; renderSwitcherMenu(); }
+    else if (kind === 'level' && !sameText(switcher.level, value)) { switcher.level = value; renderSwitcherMenu(); }
+    else if (kind === 'list' && !fromHover) { toggleSwitcher(false); openFromNavigator(value); }
+  };
+  switcherMenu?.addEventListener('mouseover', event => {
+    const button = event.target.closest('.lsm-item');
+    if (button && button.dataset.kind !== 'list') pickSwitcherItem(button, true);
+  });
+  switcherMenu?.addEventListener('click', event => {
+    event.stopPropagation();
+    const button = event.target.closest('.lsm-item');
+    if (button) pickSwitcherItem(button, false);
+  });
+  $('#lsmSearch')?.addEventListener('input', event => { switcher.query = event.target.value; renderSwitcherMenu(); });
+  $('#lsmSearch')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const first = $('#lsmLists .lsm-item');
+      if (first) pickSwitcherItem(first, false);
+    }
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && switcherMenu && !switcherMenu.hidden) { event.preventDefault(); toggleSwitcher(false); switcherButton.focus(); }
+  });
+  document.addEventListener('click', event => {
+    if (switcherMenu && !switcherMenu.hidden && !event.target.closest('#listSwitcherMenu') && !event.target.closest('#listSwitcher')) toggleSwitcher(false);
+  });
+  window.addEventListener('resize', () => { if (!switcherMenu?.hidden) toggleSwitcher(false); });
 
   // --- Approvals panel ---
   function statusPill(status) {

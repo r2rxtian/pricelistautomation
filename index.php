@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260929-approval-workflow-v53">
+    <link rel="stylesheet" href="assets/app.css?v=20260929-approval-workflow-v57">
     <script>
     (function() {
         try {
@@ -288,13 +288,13 @@ $user = current_user();
                     <div class="data-panel full-table">
                     <div class="table-tools">
                         <div class="filter-group filter-group-wide">
-                            <div class="nav-cascade" data-cascade="toolbar" role="group" aria-label="Choose saved price list">
-                                <label class="filter-field cascade-country"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Country</span><select class="nav-country" aria-label="Country"></select></label>
-                                <span class="cascade-arrow" aria-hidden="true">›</span>
-                                <label class="filter-field"><span>Level</span><select class="nav-level" aria-label="Price level"></select></label>
-                                <span class="cascade-arrow" aria-hidden="true">›</span>
-                                <label class="filter-field cascade-list"><span>List</span><select class="nav-list" aria-label="Price list"></select></label>
-                            </div>
+                            <button type="button" id="listSwitcher" class="list-switcher" aria-haspopup="dialog" aria-expanded="false" aria-controls="listSwitcherMenu" title="Switch price list">
+                                <svg class="ls-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                <span class="ls-country" id="lsCountry">—</span><span class="ls-sep" aria-hidden="true">›</span>
+                                <span class="ls-level" id="lsLevel">—</span><span class="ls-sep" aria-hidden="true">›</span>
+                                <span class="ls-list" id="lsList">—</span>
+                                <svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
                             <span class="filter-sep" aria-hidden="true"></span>
                             <label class="filter-field"><span>Category</span><select id="categorySelect"></select></label>
                             <label class="filter-field"><span>LRN</span><input id="codeFilterInput" type="search" placeholder="Code" autocomplete="off" list="codeFilterOptions"><datalist id="codeFilterOptions"></datalist></label>
@@ -902,12 +902,20 @@ $user = current_user();
         <button type="button" id="devToolsClear" class="button danger dev-tools-clear">Clear selected</button>
     </section>
 </div>
+<div id="listSwitcherMenu" class="list-switcher-menu" role="dialog" aria-label="Switch price list" hidden>
+    <div class="lsm-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="lsmSearch" placeholder="Search country or price list…" autocomplete="off" aria-label="Search country or price list"></div>
+    <div class="lsm-columns">
+        <div class="lsm-col"><p class="lsm-heading">Country</p><div id="lsmCountries" role="listbox" aria-label="Countries"></div></div>
+        <div class="lsm-col"><p class="lsm-heading">Price level</p><div id="lsmLevels" role="listbox" aria-label="Price levels"></div></div>
+        <div class="lsm-col lsm-col-lists"><p class="lsm-heading">Price list</p><div id="lsmLists" role="listbox" aria-label="Price lists"></div></div>
+    </div>
+</div>
 <div id="rowMenu" class="row-menu" role="menu" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => $_SESSION['csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260929-approval-workflow-v54"></script>
+<script src="assets/app.js?v=20260929-approval-workflow-v58"></script>
 </body>
 </html>
