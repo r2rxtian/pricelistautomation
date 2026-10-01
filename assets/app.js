@@ -301,7 +301,8 @@
   /** The adjust / reset / upload / save cluster only appears once a price list is open. */
   function updateEditorActions() {
     const cluster = $('#cloverActions');
-    if (cluster) cluster.hidden = !can('update') || !state.active;
+    // Header icons: export (anyone with export access) plus upload/save (editors only, via .perm-update).
+    if (cluster) cluster.hidden = !state.active || (!can('update') && !can('export'));
     const closeButton = $('#closeFileBtn');
     if (closeButton) closeButton.hidden = !state.active;
     renderNavigator();
@@ -322,13 +323,14 @@
     state.adjustment = 0; state.categoryAdjustments = {};
     loadActive(null);
     renderLists();
+    renderFiles();
     toast(`Closed ${name}.`);
   }
   function userName(username) {
     return state.directory.find(entry => entry.username === username)?.name || username || '';
   }
   function statusLabel(status) {
-    return { pending: 'Pending approval', approved: 'Approved', rejected: 'Rejected', superseded: 'Superseded', draft: 'Draft (unsaved)' }[status] || 'Draft (unsaved)';
+    return { uploaded: 'Uploaded', pending: 'Pending approval', approved: 'Approved', rejected: 'Rejected', superseded: 'Superseded', draft: 'Draft (unsaved)' }[status] || 'Draft (unsaved)';
   }
   function activeStatus() {
     if (!state.active) return null;
@@ -336,7 +338,7 @@
     return state.active.status || 'pending';
   }
   function canExportActive() {
-    return can('export') && activeStatus() === 'approved';
+    return can('export') && ['approved', 'uploaded'].includes(activeStatus());
   }
   function versionSummaryById(id) {
     return (state.versions || []).find(version => String(version.id) === String(id)) || null;
@@ -363,7 +365,7 @@
     return copy;
   }
   function uniqueValues(values) {
-    return [...new Set(values.map(value => String(value ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return [...new Set(values.map(value => String(value ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }
   function fillSelect(select, values, allLabel, current) {
     if (!select) return '';
@@ -373,17 +375,27 @@
     return next;
   }
   function fillDatalists() {
-    const levels = uniqueValues([...(state.versions || []).map(v => v.priceLevel), state.active?.priceLevel, 'FOB Subic', 'FOB Manila', 'Ex-Works', 'CIF', 'CFR']);
-    const countries = uniqueValues([...(state.versions || []).map(v => v.country), state.active?.country, 'All Countries']);
-    if (dom.priceLevelOptions) dom.priceLevelOptions.innerHTML = levels.map(value => `<option value="${escapeHtml(value)}"></option>`).join('');
-    if (dom.countryOptions) dom.countryOptions.innerHTML = countries.map(value => `<option value="${escapeHtml(value)}"></option>`).join('');
+    // Country and price level are fixed dropdown lists now; nothing to suggest.
+    if (dom.priceLevelOptions) dom.priceLevelOptions.innerHTML = '';
+    if (dom.countryOptions) dom.countryOptions.innerHTML = '';
   }
+  /** "1", "level 2", "PL3" or "Price Level 4" → "Price Level 4" when it is a configured level, else ''. */
+  function canonicalPriceLevel(value) {
+    const match = String(value || '').match(/^\s*(?:price\s*level|level|pl|lvl)?\s*#?\s*(\d{1,3})\s*$/i);
+    const level = match ? `Price Level ${Number(match[1])}` : '';
+    return (state.priceLevels || []).includes(level) ? level : '';
+  }
+  function priceLevelOptionsHtml(selected, placeholder = 'Select level…') {
+    const current = canonicalPriceLevel(selected) || String(selected || '').trim();
+    const list = state.priceLevels || [];
+    const extra = current && !list.includes(current) ? [current] : [];
+    return `<option value="">${escapeHtml(placeholder)}</option>`
+      + [...extra, ...list].map(level => `<option value="${escapeHtml(level)}"${level === current ? ' selected' : ''}>${escapeHtml(level)}${extra.includes(level) ? ' (not in list)' : ''}</option>`).join('');
+  }
+  /** Picks up "Price Level 2", "Level 2" or "PL2" from a file name. */
   function guessPriceLevel(fileName) {
-    const match = String(fileName || '').match(/\b(FOB|FCA|EXW|Ex-?Works|CIF|CFR|CPT|CIP|DAP|DDP)\b[\s-]*([A-Za-z]+)?/i);
-    if (!match) return '';
-    const term = match[1].toUpperCase().replace('EX-WORKS', 'Ex-Works').replace('EXWORKS', 'Ex-Works');
-    const place = match[2] && !/^(port|price|list|pl)$/i.test(match[2]) ? ` ${match[2][0].toUpperCase()}${match[2].slice(1).toLowerCase()}` : '';
-    return `${term}${place}`;
+    const match = String(fileName || '').match(/\b(?:price\s*level|level|pl)\s*[-_ #]?\s*(\d{1,2})\b/i);
+    return match ? canonicalPriceLevel(match[1]) : '';
   }
   function setAppLoading(loading) { document.body.classList.toggle('is-booting', loading); document.body.classList.toggle('is-ready', !loading); }
   function showApp() {
@@ -400,6 +412,11 @@
     button.setAttribute('data-tooltip', open ? 'Close editor' : 'Edit prices');
     button.title = open ? 'Close editor' : 'Edit prices';
     if (open) {
+      // The table panel clips overflow, so the popover is placed (fixed) right under the toolbar button.
+      const rect = button.getBoundingClientRect();
+      popover.style.position = 'fixed';
+      popover.style.top = `${Math.round(rect.bottom + 8)}px`;
+      popover.style.right = `${Math.max(16, Math.round(window.innerWidth - rect.right))}px`;
       const allCategories = getPriceCategories();
       const cat = String(state.category || '').trim();
       selectedAdjustmentCategories.clear();
@@ -423,7 +440,7 @@
   function applyStatePayload(data) {
     Object.assign(state, {
       user: data.user, csrf: data.csrf, permissions: data.permissions || [], directory: data.directory || [],
-      approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove),
+      approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], priceLevels: data.priceLevels || [],
       versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
@@ -448,7 +465,7 @@
     } else {
       renderWorkflowState();
     }
-    fillDatalists(); renderLists(); renderHistory(); renderNotifications();
+    fillDatalists(); renderLists(); renderFiles(); renderHistory(); renderNotifications();
   }
   async function loadState(skipDraftCheck = false) {
     const data = await api('state');
@@ -469,7 +486,7 @@
         try { targetActive = (await api('open', { method: 'POST', body: JSON.stringify({ id: remembered.id }) })).active; } catch { targetActive = null; }
       }
     }
-    showApp(); fillDatalists(); loadActive(targetActive); renderLists(); renderHistory(); renderImageSettings(); renderNotifications();
+    showApp(); fillDatalists(); loadActive(targetActive); renderLists(); renderFiles(); renderHistory(); renderImageSettings(); renderNotifications();
     setAppLoading(false);
     if (isRestoredDraft) toast('Restored your unsaved draft.');
   }
@@ -576,8 +593,8 @@
     const active = state.active;
     const status = activeStatus();
     if (!active || !status) return;
-    const badgeClass = { draft: 'draft-badge', pending: 'pending-badge', approved: '', rejected: 'rejected-badge', superseded: 'superseded-badge' }[status] ?? '';
-    const dotClass = status === 'approved' ? '' : 'warning';
+    const badgeClass = { draft: 'draft-badge', uploaded: 'uploaded-badge', pending: 'pending-badge', approved: '', rejected: 'rejected-badge', superseded: 'superseded-badge' }[status] ?? '';
+    const dotClass = status === 'approved' || status === 'uploaded' ? '' : 'warning';
     dom.activeBadge.className = `status-badge ${badgeClass}`.trim();
     dom.activeBadge.innerHTML = `<span class="pulse-dot ${dotClass}" aria-hidden="true"><span class="pulse-ring"></span></span>${escapeHtml(statusLabel(status))}`;
 
@@ -599,6 +616,8 @@
           ? 'Waiting for your approval'
           : `Awaiting approval${waiting.length ? ` from ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}`;
         if (approved.length) text += ` · approved by ${approved.join(', ')}`;
+      } else if (status === 'uploaded') {
+        text = `Uploaded by ${active.savedBy || 'a user'}${active.savedAt ? ` · ${displayDate(active.savedAt)}` : ''} · original prices`;
       } else if (status === 'approved') {
         text = `Approved by ${active.approvedBy || approved.join(' & ')}${active.approvedAt ? ` · ${displayDate(active.approvedAt)}` : ''}`;
       } else if (status === 'rejected') {
@@ -609,23 +628,28 @@
       note.hidden = !text;
       note.dataset.tone = status;
       note.title = text;
-      dom.approvalBannerIcon.textContent = { pending: '⏳', approved: '✓', rejected: '✕', superseded: '↻' }[status] || '';
+      dom.approvalBannerIcon.textContent = { uploaded: '⬆', pending: '⏳', approved: '✓', rejected: '✕', superseded: '↻' }[status] || '';
       dom.approvalBannerText.textContent = text;
       dom.bannerApproveBtn.hidden = !canDecide;
       dom.bannerRejectBtn.hidden = !canDecide;
     }
 
     const exportable = canExportActive();
+    // Why export is locked, worded for the user's role (top approvers like Ms. Gen just need to save).
+    const lockReason = status === 'draft' ? (state.autoApprove ? 'Save your changes to make them exportable' : 'Save your changes and get approval to export them')
+      : status === 'pending' ? 'Export unlocks after approval'
+      : status === 'rejected' ? 'Rejected lists cannot be exported'
+      : status === 'superseded' ? 'Superseded by a newer approved list' : '';
     ['#excelButton', '#pdfButton'].forEach(selector => {
       const button = $(selector);
       if (!button) return;
       button.hidden = !can('export');
       button.disabled = !exportable;
-      button.title = exportable ? '' : 'Only approved price lists can be exported.';
+      button.title = exportable ? '' : lockReason || 'Only approved price lists can be exported.';
     });
     if (dom.exportLockNote) {
       dom.exportLockNote.hidden = exportable || !can('export');
-      dom.exportLockNote.textContent = status === 'draft' ? 'Save and get approval to export' : status === 'pending' ? 'Export unlocks after approval' : status === 'rejected' ? 'Rejected lists cannot be exported' : status === 'superseded' ? 'Superseded by a newer approved list' : '';
+      dom.exportLockNote.textContent = lockReason;
     }
   }
 
@@ -719,7 +743,7 @@
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
-          <span class="group-add-photo-label">+ Add photo</span>
+          <span class="group-add-photo-label">Add</span>
         </button>
       ` : `
         <div class="group-no-photo-readonly" title="No photo uploaded">
@@ -818,7 +842,8 @@
         <th>Large Pallet<br>(16 pallets)</th>
         <th>Small Pallet<br>(2 pallets)</th>
         <th>Large Pallet<br>(8 pallets)</th>
-      </tr>`;
+      </tr>
+      <tr class="excel-header col-letter-row"><th class="col-row-num"></th><th></th>${Array.from({ length: 11 }, (_, i) => `<th data-col-letter="${i}">${getColumnLetter(i)}</th>`).join('')}</tr>`;
     const presentationHeader = () => `
       <tr class="excel-header excel-header-primary presentation-header">
         <th class="col-row-num">#</th>
@@ -833,7 +858,8 @@
         <th>Box size</th>
         <th>MOQ</th>
         <th>Total Price Based on MOQ</th>
-      </tr>`;
+      </tr>
+      <tr class="excel-header col-letter-row"><th class="col-row-num"></th><th></th>${Array.from({ length: 10 }, (_, i) => `<th data-col-letter="${i}"${i === 1 ? ' colspan="2"' : ''}>${getColumnLetter(i)}</th>`).join('')}</tr>`;
     const standardRow = (row, actualIndex, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
       const formatPallet = val => {
         const s = String(val ?? '').trim();
@@ -903,7 +929,8 @@
     $('thead', dom.table).innerHTML = firstIsPresentation ? presentationHeader() : standardHeader();
     let currentLayoutIsPresentation = firstIsPresentation;
     let previousCategory = null;
-    const showCategoryDividers = !state.category && new Set(groups.map(group => group.category)).size > 1;
+    // Every view shows the category strip, including a single selected category.
+    const showCategoryDividers = groups.length > 0;
     $('tbody', dom.table).innerHTML = groups.map(group => {
       const isPresentation = String(group.category || '').toLowerCase() === 'presentation stands';
       const columnCount = 13;
@@ -1009,10 +1036,27 @@
     updateFormulaBar();
   }
 
+  /** Excel-style reference for a cell as shown: columns count only the sheet columns (not # or Photo), rows use the # column. */
+  function cellReference(td, rowIdx, colIdx) {
+    const tr = td?.closest('tr');
+    const cells = tr ? [...tr.querySelectorAll('.excel-cell')] : [];
+    const position = cells.indexOf(td);
+    const rowNumber = tr?.querySelector('.col-row-num')?.textContent.trim() || String(rowIdx + 1);
+    return { letter: getColumnLetter(position >= 0 ? position : colIdx), position, rowNumber };
+  }
+  /** Highlights the active cell's column letter and row number, like Excel's headings. */
+  function highlightCellGuides(td) {
+    $$('#priceTable .is-guide-active').forEach(el => el.classList.remove('is-guide-active'));
+    if (!td) return;
+    const { position } = cellReference(td, 0, 0);
+    if (position >= 0) $$(`#priceTable th[data-col-letter="${position}"]`).forEach(th => th.classList.add('is-guide-active'));
+    td.closest('tr')?.querySelector('.col-row-num')?.classList.add('is-guide-active');
+  }
   function updateFormulaBar(force = false) {
     const ind = dom.formulaCellIndicator;
     const input = dom.formulaInput;
     if (!ind || !input) return;
+    highlightCellGuides(state.activeCell.td);
     if (!state.activeCell.td) {
       ind.textContent = '–';
       input.value = '';
@@ -1022,10 +1066,10 @@
     input.disabled = !state.canEdit;
     const rowIdx = state.activeCell.rowIdx;
     const colIdx = state.activeCell.colIdx;
-    const letter = getColumnLetter(colIdx);
-    const colName = state.headers[colIdx] || '';
-    ind.textContent = `${letter}${rowIdx + 1}`;
-    ind.title = `${colName ? colName + ' · ' : ''}Cell ${letter}${rowIdx + 1}`;
+    const { letter, rowNumber } = cellReference(state.activeCell.td, rowIdx, colIdx);
+    const colName = String(state.headers[colIdx] || '').replace(/\s+/g, ' ').trim();
+    ind.textContent = `${letter}${rowNumber}`;
+    ind.title = `${colName ? colName + ' · ' : ''}Cell ${letter}${rowNumber}`;
 
     if (!force && document.activeElement === input) {
       return;
@@ -1424,7 +1468,7 @@
       const cats = Array.isArray(meta.adjustedCategories) ? meta.adjustedCategories.length : 0;
       const edits = Number(meta.changeCount || 0);
       const parts = [cats ? `${cats} categor${cats === 1 ? 'y' : 'ies'} adjusted` : '', edits ? `${edits} edit${edits === 1 ? '' : 's'}` : ''].filter(Boolean);
-      return `<span class="diff-chip neutral">${escapeHtml(parts.join(' · ') || 'No price changes')}</span>`;
+      return `<span class="diff-chip neutral">${escapeHtml(parts.join(' · ') || 'Original prices')}</span>`;
     }
     if (log.type === 'row_add') {
       return `<span class="diff-chip new">+ Added product</span>`;
@@ -1433,7 +1477,7 @@
       return `<span class="diff-chip old">- Removed product</span>`;
     }
     if (log.type === 'reset_prices') {
-      return `<span class="diff-chip neutral">Reset to 0%</span>`;
+      return `<span class="diff-chip neutral">Reset to original</span>`;
     }
     if (log.type === 'import_workbook') {
       return `<span class="diff-chip neutral">${Number(meta.rowCount || meta.productCount || 0).toLocaleString()} products</span>`;
@@ -1610,7 +1654,7 @@
             </div>
             <div class="audit-modal-field">
               <span class="audit-modal-label">Resulting State</span>
-              <span class="history-adj-pill neutral">0% Baseline Prices</span>
+              <span class="history-adj-pill neutral">Original prices</span>
             </div>
           </div>
           <div class="audit-modal-note">${escapeHtml(log.details || 'All category and product percentage adjustments cleared.')}</div>
@@ -1824,6 +1868,9 @@
     }).join('');
   }
   // --- Country › Price level › Price list navigator (one saved price list per country) ---
+  function sameText(a, b) {
+    return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+  }
   function navigableVersions() {
     return (state.versions || []).filter(version => version.status !== 'superseded' && version.country);
   }
@@ -1832,7 +1879,13 @@
     const active = state.active;
     const isDraft = Boolean(active && (active.isDraft || !active.id));
     const option = (value, label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
-    const countries = uniqueValues([...lists.map(version => version.country), active?.country]);
+    // Group countries case-insensitively so older lists with different spelling share one entry.
+    const countries = [];
+    [...lists.map(version => version.country), active?.country].forEach(value => {
+      const text = String(value || '').trim();
+      if (text && !countries.some(country => sameText(country, text))) countries.push(canonicalCountry(text) || text);
+    });
+    countries.sort((a, b) => a.localeCompare(b));
     $$('.nav-cascade').forEach(box => {
       const countrySelect = box.querySelector('.nav-country');
       const levelSelect = box.querySelector('.nav-level');
@@ -1840,12 +1893,12 @@
       const country = box.dataset.cascade === 'empty' ? '' : (active?.country || '');
       const level = country ? (active?.priceLevel || '') : '';
       countrySelect.innerHTML = (country ? '' : option('', 'Choose country…')) + countries.map(value => option(value, value)).join('');
-      countrySelect.value = country;
-      const levels = uniqueValues([...lists.filter(version => version.country === country).map(version => version.priceLevel), level]);
+      countrySelect.value = countries.find(value => sameText(value, country)) || country;
+      const levels = uniqueValues([...lists.filter(version => sameText(version.country, country)).map(version => version.priceLevel), level]);
       levelSelect.innerHTML = levels.length ? levels.map(value => option(value, value)).join('') : option('', '—');
       levelSelect.value = level;
       levelSelect.disabled = !country;
-      const files = lists.filter(version => version.country === country && version.priceLevel === level);
+      const files = lists.filter(version => sameText(version.country, country) && sameText(version.priceLevel, level));
       listSelect.innerHTML = (isDraft && country ? option('__draft__', `Unsaved: ${active.name}`) : '')
         + files.map(version => option(version.id, `${version.name}${version.revision > 1 ? ` (rev ${version.revision})` : ''}${box.dataset.cascade === 'empty' ? ` · ${statusLabel(version.status)}` : ''}`)).join('')
         || option('', '—');
@@ -1876,16 +1929,55 @@
     const lists = navigableVersions();
     if (select.classList.contains('nav-country')) {
       // Newest list for that country, keeping the current price level when that country has it.
-      const forCountry = lists.filter(version => version.country === select.value);
+      const forCountry = lists.filter(version => sameText(version.country, select.value));
       const target = forCountry.find(version => version.priceLevel === state.active?.priceLevel) || forCountry[0];
       openFromNavigator(target?.id);
     } else if (select.classList.contains('nav-level')) {
       const country = box.querySelector('.nav-country').value;
-      openFromNavigator(lists.find(version => version.country === country && version.priceLevel === select.value)?.id);
+      openFromNavigator(lists.find(version => sameText(version.country, country) && sameText(version.priceLevel, select.value))?.id);
     } else if (select.classList.contains('nav-list')) {
       openFromNavigator(select.value);
     }
   });
+
+  // --- Files panel: every uploaded price list (no approval needed) ---
+  const filesView = { search: '', country: '', level: '' };
+  function renderFiles() {
+    const body = $('#filesTableBody');
+    if (!body) return;
+    const files = (state.versions || []).filter(version => version.source === 'upload');
+    filesView.country = fillSelect($('#filesCountryFilter'), uniqueValues(files.map(v => v.country)), 'All countries', filesView.country);
+    filesView.level = fillSelect($('#filesLevelFilter'), uniqueValues(files.map(v => v.priceLevel)), 'All price levels', filesView.level);
+    const query = filesView.search.trim().toLowerCase();
+    const visible = files.filter(version =>
+      (!filesView.country || version.country === filesView.country) &&
+      (!filesView.level || version.priceLevel === filesView.level) &&
+      (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))));
+    $('#filesCount').textContent = `${visible.length} file${visible.length === 1 ? '' : 's'}`;
+    $('#filesEmpty').hidden = visible.length > 0;
+    $('#filesEmptyText').textContent = files.length ? 'No files match these filters.' : (can('upload') ? 'Use “Upload files” to add price lists. Uploads need no approval.' : 'Uploaded price lists will appear here.');
+    body.innerHTML = visible.map(version => {
+      const vid = escapeHtml(version.id);
+      const isOpen = String(state.active?.id) === String(version.id);
+      const live = version.status === 'uploaded';
+      // A newer revision (another upload or approved price changes) replaces this one.
+      const newer = live ? null : (state.versions || []).find(other => other.id !== version.id && ['approved', 'uploaded'].includes(other.status)
+        && sameText(other.name, version.name) && sameText(other.country, version.country) && sameText(other.priceLevel, version.priceLevel));
+      const statusDetail = live ? 'Original prices · exportable' : newer ? (newer.source === 'upload' ? `Replaced by a newer upload (rev ${newer.revision})` : `Price changes approved (rev ${newer.revision})`) : 'Replaced by a newer revision';
+      return `<tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
+        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${version.revision > 1 ? `Revision ${version.revision} · ` : ''}${Number(version.productCount || 0).toLocaleString()} products</div></td>
+        <td>${escapeHtml(version.country || '—')}</td>
+        <td>${escapeHtml(version.priceLevel || '—')}</td>
+        <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
+        <td><span class="list-status-pill status-${live ? 'uploaded' : 'superseded'}">${live ? 'Uploaded' : 'Replaced'}</span><div class="list-sub">${escapeHtml(statusDetail)}</div></td>
+        <td class="col-actions"><div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${vid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div></td>
+      </tr>`;
+    }).join('');
+  }
+  $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; renderFiles(); });
+  $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
+  $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
+  $('#filesUploadBtn')?.addEventListener('click', () => openUploadModal());
 
   // --- Approvals panel ---
   function statusPill(status) {
@@ -1893,14 +1985,21 @@
   }
   function adjustmentPill(version) {
     const adjusted = version.summary?.adjustedCategories || [];
-    if (!adjusted.length) return '<span class="history-adj-pill neutral">No adjustment</span>';
+    if (!adjusted.length) return '<span class="history-adj-pill neutral" title="Prices as uploaded, no percentage adjustment">Original prices</span>';
     const rates = [...new Set(adjusted.map(item => Number(item.adjustment || 0)))];
     const text = rates.length === 1 ? `${rates[0] > 0 ? '+' : ''}${rates[0]}% · ${adjusted.length} categor${adjusted.length === 1 ? 'y' : 'ies'}` : `Varies · ${adjusted.length} categories`;
     return `<span class="history-adj-pill has-adj ${rates.every(rate => rate < 0) ? 'neg' : ''}">${escapeHtml(text)}</span>`;
   }
+  /** Saved by a top approver (e.g. Ms. Gen) and approved on the spot, so it never went through the approval workflow. */
+  function isAutoApproved(version) {
+    return (version.approvals || []).some(approval => approval.auto);
+  }
   function renderLists() {
     if (!dom.listsTableBody) return;
-    const versions = state.versions || [];
+    // The Approvals page only shows price lists that go through approval. Auto-approved lists are
+    // opened from Prices › Country and recorded in the Audit Logs.
+    // Approvals = price changes only. Uploads live on the Files page; Ms. Gen's changes are approved on save.
+    const versions = (state.versions || []).filter(version => version.source !== 'upload' && !isAutoApproved(version));
     const awaitingMine = versions.filter(version => version.canApprove);
     const approved = versions.filter(version => version.status === 'approved');
     dom.listAllCount.textContent = String(versions.length);
@@ -1912,8 +2011,8 @@
     }
     if (dom.listsSubtitle) {
       dom.listsSubtitle.textContent = can('update')
-        ? 'Saved price lists need approval from their assigned approvers before anyone can export them.'
-        : 'Approved price lists you can view and export.';
+        ? 'Price changes saved by Chelsea or Margaret wait here for their approvers. Uploads are on the Files page; Ms. Gen’s changes are approved on save.'
+        : 'Approved price changes you can view and export. Uploaded files are on the Files page.';
     }
     $$('.list-tab-btn').forEach(button => {
       const active = button.dataset.listTab === state.listTab;
@@ -1934,8 +2033,13 @@
     dom.listCount.textContent = `${visible.length} price list${visible.length === 1 ? '' : 's'}`;
     dom.listsEmpty.hidden = visible.length > 0;
     if (!visible.length) {
-      dom.listsEmptyTitle.textContent = state.listTab === 'mine' ? 'Nothing waiting for your approval' : versions.length ? 'No matching price lists' : (can('update') ? 'No saved price lists yet' : 'No approved price lists yet');
-      dom.listsEmptyText.textContent = state.listTab === 'mine' ? 'New approval requests will appear here and in your notifications.' : versions.length ? 'Try different filters.' : (can('update') ? 'Upload a workbook, adjust prices, then save it to send it for approval.' : 'Approved price lists will appear here once an approver signs off.');
+      dom.listsEmptyTitle.textContent = state.listTab === 'mine' ? 'Nothing waiting for your approval' : versions.length ? 'No matching price lists' : 'No price lists in approval';
+      dom.listsEmptyText.textContent = state.listTab === 'mine'
+        ? 'New approval requests will appear here and in your notifications.'
+        : versions.length ? 'Try different filters.'
+        : state.autoApprove ? 'Your saves are approved immediately, so they don’t appear here. Open them from Prices › Country; every change is in the Audit Logs.'
+        : can('update') ? 'Lists saved by Chelsea or Margaret appear here while they wait for approval.'
+        : 'Approved price lists appear here once an approver signs off. Ms. Gen’s lists are under Prices › Country.';
     }
     dom.listsTableBody.innerHTML = visible.map(version => {
       const { approved: approvedBy, waiting } = approvalProgress(version);
@@ -1948,12 +2052,12 @@
       // One contextual action per row; everything else lives in the kebab menu.
       const primary = version.canApprove
         ? `<button type="button" class="row-primary is-approve" data-action="approve" data-id="${vid}">Approve</button>`
-        : `<button type="button" class="row-primary" data-action="open" data-id="${vid}">${isOpen ? 'View' : 'Open'}</button>`;
+        : `<button type="button" class="row-primary" data-action="open" data-id="${vid}">${isOpen ? 'Go to editor' : 'Open'}</button>`;
       const actions = `${primary}<button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>`;
       return `
         <tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
           <td class="history-name-cell">
-            <strong class="list-name">${escapeHtml(version.name)}</strong>
+            <strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong>
             <div class="list-sub">${version.revision > 1 ? `Revision ${version.revision} · ` : ''}${Number(version.productCount || 0).toLocaleString()} products${version.changeCount ? ` · ${Number(version.changeCount).toLocaleString()} cell edits` : ''}</div>
           </td>
           <td>${escapeHtml(version.priceLevel || '—')}</td>
@@ -1968,7 +2072,10 @@
 
   function openFilePicker() { dom.fileInput.value = ''; dom.fileInput.click(); }
 
-  let stagedUploadFile = null;
+  // Files waiting in the upload modal: [{ file, name, country, priceLevel, status, message }]
+  let stagedFiles = [];
+  let bulkImporting = false;
+  const MAX_BULK_FILES = 5;
 
   function formatBytes(bytes) {
     if (!bytes || bytes === 0) return '0 B';
@@ -1978,26 +2085,145 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  function stageFileForUpload(file) {
-    if (!file) return;
-    if (!/\.(xlsx|xls)$/i.test(file.name)) {
-      return toast('Please select a valid Excel workbook (.xlsx or .xls).');
-    }
-    stagedUploadFile = file;
-    if (dom.uploadPriceLevel && !dom.uploadPriceLevel.value.trim()) dom.uploadPriceLevel.value = guessPriceLevel(file.name);
-    if (dom.selectedFileName) dom.selectedFileName.textContent = file.name;
-    if (dom.selectedFileSize) dom.selectedFileSize.textContent = formatBytes(file.size);
-    if (dom.selectedFileInfo) dom.selectedFileInfo.hidden = false;
-    if (dom.dropZonePrompt) dom.dropZonePrompt.hidden = true;
-    if (dom.submitUploadBtn) dom.submitUploadBtn.disabled = false;
+  /** Country <option>s from the configured list; a legacy value not in the list is kept so it can be seen and changed. */
+  function canonicalCountry(value) {
+    const key = String(value || '').trim().toLowerCase();
+    if (!key) return '';
+    return (state.countries || []).find(country => country.toLowerCase() === key) || '';
+  }
+  function countryOptionsHtml(selected, placeholder = 'Select country…') {
+    const current = canonicalCountry(selected) || String(selected || '').trim();
+    const list = state.countries || [];
+    const extra = current && !list.includes(current) ? [current] : [];
+    return `<option value="">${escapeHtml(placeholder)}</option>`
+      + [...extra, ...list].map(country => `<option value="${escapeHtml(country)}"${country === current ? ' selected' : ''}>${escapeHtml(country)}${extra.includes(country) ? ' (not in list)' : ''}</option>`).join('');
   }
 
+  /** Adds Excel files to the upload list (accepts a FileList, an array or a single file). */
+  function stageFilesForUpload(input) {
+    const files = input instanceof File ? [input] : [...(input || [])];
+    const excel = files.filter(file => /\.(xlsx|xls)$/i.test(file.name));
+    if (files.length && !excel.length) return toast('Please select Excel workbooks (.xlsx or .xls).');
+    if (excel.length < files.length) toast(`${files.length - excel.length} non-Excel file(s) skipped.`);
+    if (stagedFiles.some(item => item.status)) stagedFiles = []; // start fresh after a finished batch
+    let overLimit = 0;
+    excel.forEach(file => {
+      if (stagedFiles.some(item => item.file.name === file.name && item.file.size === file.size)) return;
+      if (stagedFiles.length >= MAX_BULK_FILES) { overLimit++; return; }
+      stagedFiles.push({ file, name: file.name.replace(/\.(xlsx|xls)$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '' });
+    });
+    if (overLimit) toast(`Up to ${MAX_BULK_FILES} files per batch. ${overLimit} file${overLimit === 1 ? ' was' : 's were'} not added.`);
+    renderStagedFiles();
+  }
+  function renderStagedFiles() {
+    const panel = $('#stagedFilesPanel');
+    const list = $('#stagedFilesList');
+    if (!panel || !list) return;
+    panel.hidden = !stagedFiles.length;
+    // The batch counts as finished only once the import loop is over (not when the first file completes).
+    const finished = !bulkImporting && stagedFiles.some(item => item.status === 'saved' || item.status === 'failed');
+    list.innerHTML = stagedFiles.map((item, index) => {
+      const locked = bulkImporting || finished;
+      const statusMarkup = item.status
+        ? `<span class="staged-status status-${item.status}" title="${escapeHtml(item.message)}">${{ working: '…', saved: '✓', failed: '✕' }[item.status] || ''}</span>`
+        : `<button type="button" class="icon-button staged-remove" data-index="${index}" aria-label="Remove ${escapeHtml(item.file.name)}" title="Remove">×</button>`;
+      return `<div class="staged-row ${item.status ? `is-${item.status}` : ''}" role="row" data-index="${index}">
+        <span class="staged-file" role="cell" title="${escapeHtml(item.file.name)}"><strong>${escapeHtml(item.file.name)}</strong><small>${formatBytes(item.file.size)}${item.message ? ` · ${escapeHtml(item.message)}` : ''}</small></span>
+        <span role="cell"><input type="text" maxlength="160" data-field="name" value="${escapeHtml(item.name)}" aria-label="Price list name" ${locked ? 'disabled' : ''}></span>
+        <span role="cell"><select data-field="country" aria-label="Country" ${locked ? 'disabled' : ''}>${countryOptionsHtml(item.country, 'Select country…')}</select></span>
+        <span role="cell"><select data-field="priceLevel" aria-label="Price level" ${locked ? 'disabled' : ''}>${priceLevelOptionsHtml(item.priceLevel)}</select></span>
+        <span role="cell" class="staged-action">${statusMarkup}</span>
+      </div>`;
+    }).join('');
+    const count = stagedFiles.length;
+    const button = dom.submitUploadBtn;
+    if (button) {
+      button.disabled = !count || bulkImporting;
+      button.textContent = finished ? 'Close' : bulkImporting ? 'Uploading…' : count > 1 ? `Upload ${count} files` : 'Upload & open';
+    }
+    $('.staged-apply-all')?.toggleAttribute('hidden', count < 2 || finished);
+    const hint = $('#stagedFilesHint');
+    if (hint) {
+      hint.textContent = finished
+        ? `${stagedFiles.filter(item => item.status === 'saved').length} of ${count} saved. Fix the files marked ✕ and upload them again; the saved ones are under Approvals.`
+        : count > 1
+          ? 'Each file is uploaded as its own price list with its original prices. No approval is needed; only later price changes go for approval.'
+          : 'The file is uploaded with its original prices and opened. Price changes you save later go for approval.';
+    }
+    if (dom.cancelUploadBtn) dom.cancelUploadBtn.hidden = finished;
+    if (dom.modalDropZone) dom.modalDropZone.hidden = finished;
+    if (dom.dropZonePrompt) {
+      const full = count >= MAX_BULK_FILES;
+      dom.dropZonePrompt.firstChild.textContent = full
+        ? `Limit reached: ${MAX_BULK_FILES} files per batch. Remove one to add another.`
+        : count ? `Add more Excel files (${count} of ${MAX_BULK_FILES}), or ` : 'Drag & drop one or more Excel files here, or ';
+      if (dom.browseFileBtn) dom.browseFileBtn.hidden = full;
+      dom.modalDropZone?.classList.toggle('is-full', full);
+    }
+  }
   function clearStagedFile() {
-    stagedUploadFile = null;
+    stagedFiles = [];
+    bulkImporting = false;
     if (dom.modalFileInput) dom.modalFileInput.value = '';
-    if (dom.selectedFileInfo) dom.selectedFileInfo.hidden = true;
-    if (dom.dropZonePrompt) dom.dropZonePrompt.hidden = false;
-    if (dom.submitUploadBtn) dom.submitUploadBtn.disabled = true;
+    if ($('#applyAllCountry')) $('#applyAllCountry').value = '';
+    if ($('#applyAllPriceLevel')) $('#applyAllPriceLevel').value = '';
+    renderStagedFiles();
+  }
+  /** Returns the first validation problem in the upload list (and marks the field), or ''. */
+  function validateStagedFiles() {
+    $$('#stagedFilesList [data-field]').forEach(input => input.classList.remove('is-invalid'));
+    const seen = new Map();
+    for (const [index, item] of stagedFiles.entries()) {
+      for (const field of ['name', 'country', 'priceLevel']) {
+        if (!String(item[field] || '').trim()) {
+          const input = $(`#stagedFilesList .staged-row[data-index="${index}"] [data-field="${field}"]`);
+          input?.classList.add('is-invalid');
+          input?.focus();
+          return `Enter the ${field === 'priceLevel' ? 'price level' : field === 'name' ? 'price list name' : 'country'} for ${item.file.name}.`;
+        }
+      }
+      // Same rule as the server: one price list per name + country + price level.
+      const key = [item.name, item.country, item.priceLevel].map(value => value.trim().toLowerCase()).join('|');
+      if (seen.has(key)) {
+        $(`#stagedFilesList .staged-row[data-index="${index}"] input[data-field="name"]`)?.classList.add('is-invalid');
+        return `Two files are both "${item.name.trim()}" for ${item.country} · ${item.priceLevel.trim()}. Change the name or price level of one.`;
+      }
+      seen.set(key, index);
+    }
+    return '';
+  }
+  /** Reads and saves every staged file as its own price list, showing a status per row. */
+  async function importStagedFiles() {
+    bulkImporting = true;
+    renderStagedFiles();
+    for (const item of stagedFiles) {
+      item.status = 'working'; item.message = 'Reading…';
+      renderStagedFiles();
+      try {
+        const list = await readWorkbook(item.file, { name: item.name, country: item.country, priceLevel: item.priceLevel });
+        item.message = `Uploading ${list.rows.length.toLocaleString()} products…`;
+        renderStagedFiles();
+        const data = await uploadList(item.file, list);
+        item.status = 'saved';
+        item.message = `${list.rows.length.toLocaleString()} products · ${statusLabel(data.active?.status)}`;
+      } catch (error) {
+        item.status = 'failed';
+        item.message = error.message || 'Could not import this file.';
+      }
+      renderStagedFiles();
+    }
+    bulkImporting = false;
+    renderStagedFiles();
+    await refreshState();
+    const saved = stagedFiles.filter(item => item.status === 'saved').length;
+    if (saved === stagedFiles.length) {
+      // Everything saved: close the window and show the new lists, no extra click needed.
+      closeUploadModal();
+      switchPanel('filesPanel', true);
+      toast(`${saved} file${saved === 1 ? '' : 's'} uploaded.`);
+      return;
+    }
+    toast(`${saved} of ${stagedFiles.length} files uploaded. Check the files marked ✕.`);
   }
 
   async function openUploadModal() {
@@ -2005,13 +2231,14 @@
     if (state.active?.isDraft && !(await confirmDiscardDraft('Uploading a new file'))) return false;
     clearStagedFile();
     fillDatalists();
-    if (dom.uploadPriceLevel) dom.uploadPriceLevel.value = '';
-    if (dom.uploadCountry) dom.uploadCountry.value = '';
+    if ($('#applyAllCountry')) $('#applyAllCountry').innerHTML = countryOptionsHtml('', 'Country…');
+    if ($('#applyAllPriceLevel')) $('#applyAllPriceLevel').innerHTML = priceLevelOptionsHtml('', 'Price level…');
     if (!dom.uploadModal?.open) dom.uploadModal?.showModal();
     return true;
   }
 
   function closeUploadModal() {
+    if (bulkImporting) return toast('Please wait until the files finish saving.');
     clearStagedFile();
     dom.uploadModal?.close();
   }
@@ -2103,7 +2330,8 @@
     toast('Downloaded official Excel template: LRN_Price_List_Template.xlsx');
   }
 
-  async function parseWorkbook(file, meta = {}) {
+  /** Reads one workbook into the normalised price list layout (no side effects). */
+  async function readWorkbook(file, meta = {}) {
     if (!can('upload')) throw new Error('Your role cannot upload price lists.');
     const listPriceLevel = String(meta.priceLevel || '').trim();
     const listCountry = String(meta.country || '').trim();
@@ -2240,38 +2468,29 @@
     const finalHeaders = Array.from({ length: width }, (_, index) => String(rawHeaders[index] || `Column ${index + 1}`).trim());
     const priceColumns = finalHeaders.map((header, index) => /price\s*\/\s*(pc|box)/i.test(header) ? index : -1).filter(index => index >= 0);
     const rows = normalized.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
+    const name = String(meta.name || '').trim() || file.name.replace(/\.(xlsx|xls)$/i, '');
+    return { name, priceLevel: listPriceLevel, country: listCountry, headers: finalHeaders, rows, priceColumns, categoryCount: new Set(rows.map(row => row[COL.category])).size };
+  }
+  /** Stores a read workbook as an uploaded file (original prices, no approval). The server logs the upload. */
+  function uploadList(file, list) {
+    return api('save', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'upload', sourceFile: file.name, name: list.name, priceLevel: list.priceLevel, country: list.country, headers: list.headers, rows: list.rows, priceColumns: list.priceColumns, adjustment: 0, categoryAdjustments: {}, changes: [] })
+    });
+  }
 
-    const listName = file.name.replace(/\.(xlsx|xls)$/i, '');
-    state.active = {
-      id: '',
-      name: listName,
-      priceLevel: listPriceLevel,
-      country: listCountry,
-      revision: 1,
-      headers: finalHeaders,
-      rows,
-      priceColumns,
-      adjustment: 0,
-      categoryAdjustments: {},
-      savedAt: null,
-      savedBy: state.user.name,
-      isDraft: true,
-      pendingChanges: []
-    };
-    state.adjustment = 0;
-    state.categoryAdjustments = {};
+  /** Reads one workbook, uploads it (no approval needed) and opens it in the editor. */
+  async function parseWorkbook(file, meta = {}) {
+    const list = await readWorkbook(file, meta);
+    const data = await uploadList(file, list);
+    if (can('update')) await removeDraft(draftKey());
     resetFilters();
     state.category = '';
     rememberCategory('');
-
-    loadActive(state.active);
-    await setDraft(draftKey(), state.active);
-    const categoryCount = new Set(rows.map(row => row[COL.category])).size;
-    logActivity('import_workbook', `Uploaded "${listName}"`, `${rows.length.toLocaleString()} products across ${categoryCount} categories · ${listPriceLevel} · ${listCountry}.`, {
-      fileName: listName, rowCount: rows.length, categoryCount, priceLevel: listPriceLevel, country: listCountry, sourceFile: file.name
-    });
-
-    toast(`${rows.length.toLocaleString()} products loaded into the editor.`);
+    loadActive(data.active);
+    switchPanel('workspacePanel', true);
+    refreshState().catch(() => { });
+    toast(`Uploaded ${list.name} (${list.rows.length.toLocaleString()} products). Price changes you save will go for approval.`);
   }
   function resetFilters() {
     state.search = ''; state.codeFilter = ''; state.priceLevelFilter = ''; state.countryFilter = '';
@@ -2318,10 +2537,10 @@
             <span class="save-summary-icon" aria-hidden="true">ℹ</span>
             <strong>Price Adjustment Summary</strong>
           </div>
-          <span class="save-summary-badge neutral">No adjustments (0%)</span>
+          <span class="save-summary-badge neutral">Original prices (0%)</span>
         </div>
         <div class="save-summary-empty">
-          All <strong>${summary.totalProducts.toLocaleString()}</strong> products across <strong>${summary.items.length}</strong> categories will be saved with baseline prices (0% adjustment).
+          All <strong>${summary.totalProducts.toLocaleString()}</strong> products across <strong>${summary.items.length}</strong> categories will be saved at their original prices (0% adjustment).
         </div>`;
       return;
     }
@@ -2969,11 +3188,11 @@
   dom.emptyState.addEventListener('drop', async event => {
     event.preventDefault();
     dom.emptyState.classList.remove('dragover');
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
+    const files = [...(event.dataTransfer?.files || [])];
+    if (!files.length) return;
     if (!can('upload')) return toast('Your role cannot upload price lists.');
-    if (!/\.(xlsx|xls)$/i.test(file.name)) return toast('Please drop an Excel file (.xlsx or .xls).');
-    if (await openUploadModal()) stageFileForUpload(file);
+    if (!files.some(file => /\.(xlsx|xls)$/i.test(file.name))) return toast('Please drop Excel files (.xlsx or .xls).');
+    if (await openUploadModal()) stageFilesForUpload(files);
   });
   $('#editButton').addEventListener('click', event => {
     event.stopPropagation();
@@ -2985,11 +3204,10 @@
     event.stopPropagation();
   });
   dom.fileInput.addEventListener('change', async () => {
-    const file = dom.fileInput.files[0];
-    if (!file) return;
+    const files = [...(dom.fileInput.files || [])];
     dom.fileInput.value = '';
-    if (!/\.(xlsx|xls)$/i.test(file.name)) return toast('Please select a valid Excel file (.xlsx or .xls).');
-    if (await openUploadModal()) stageFileForUpload(file);
+    if (!files.length) return;
+    if (await openUploadModal()) stageFilesForUpload(files);
   });
 
   async function applyPriceAdjustment() {
@@ -3038,7 +3256,7 @@
     logActivity('price_adjust', `Applied ${sign}${value}% to ${scopeText}`, `${sign}${value}% applied to ${affectedProducts.toLocaleString()} products (${selectedCats.join(', ')}). Calculated from the uploaded prices.`, {
       percentage: value, applyAll: isAll, categories: selectedCats, category: selectedCats.length === 1 ? selectedCats[0] : '', adjustedProducts: affectedProducts
     });
-    toast(`Applied ${sign}${value}% to ${scopeText}. Save to submit for approval.`);
+    toast(`Applied ${sign}${value}% to ${scopeText}. ${state.autoApprove ? 'Save to approve it and make it exportable.' : 'Save to submit for approval.'}`);
   }
 
   $('#previewButton')?.addEventListener('click', event => {
@@ -3110,10 +3328,12 @@
     if (!can('save')) return toast('You do not have permission to save price lists.');
     if (!state.active) return toast('Please upload or open a price list first before saving.');
     if (!state.active.isDraft && state.active.status === 'pending') return toast('This price list is already saved and waiting for approval. Make changes first to save a new version.');
-    if (!state.active.isDraft && state.active.status === 'approved') return toast('No changes to save. Edit prices first to create a new revision.');
+    if (!state.active.isDraft && ['approved', 'uploaded'].includes(state.active.status)) return toast('No changes to save. Adjust prices or edit cells first, then save to send the changes for approval.');
     dom.versionNameInput.value = state.active.name || '';
-    dom.savePriceLevel.value = state.active.priceLevel || '';
-    dom.saveCountry.value = state.active.country || '';
+    dom.savePriceLevel.innerHTML = priceLevelOptionsHtml(state.active.priceLevel);
+    dom.savePriceLevel.value = canonicalPriceLevel(state.active.priceLevel) || '';
+    dom.saveCountry.innerHTML = countryOptionsHtml(state.active.country, 'Select country…');
+    dom.saveCountry.value = canonicalCountry(state.active.country) || '';
     // Price level and country are chosen at upload; show them read-only unless one is missing (older lists).
     const metaMissing = !dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim();
     $('#saveMetaPriceLevel').textContent = state.active.priceLevel || 'Not set';
@@ -3190,7 +3410,7 @@
       const adjusted = summary.summary?.adjustedCategories || [];
       dom.approveDialogSummary.innerHTML = (adjusted.length
         ? adjusted.map(item => `<div class="save-summary-row"><div class="save-summary-cat-info"><strong class="save-summary-cat-name">${escapeHtml(item.category)}</strong><span class="save-summary-cat-count">${Number(item.productCount || 0).toLocaleString()} products</span></div><span class="adjustment-pill ${item.adjustment > 0 ? 'pos' : 'neg'}">${item.adjustment > 0 ? '+' : ''}${item.adjustment}%</span></div>`).join('')
-        : '<div class="save-summary-empty">No percentage adjustments (baseline prices).</div>')
+        : '<div class="save-summary-empty">Original prices (no percentage adjustment).</div>')
         + (summary.changeCount ? `<div class="save-summary-unchanged"><strong>${Number(summary.changeCount).toLocaleString()}</strong> individual cell edit(s). Open the price list to review them.</div>` : '');
       dom.approveRemarks.value = '';
       dom.approveDialog.showModal();
@@ -3267,7 +3487,7 @@
     const version = versionSummaryById(trigger.dataset.id);
     if (!rowMenu || !version) return;
     const isOpen = String(state.active?.id) === String(version.id);
-    const exportable = version.status === 'approved' && can('export');
+    const exportable = ['approved', 'uploaded'].includes(version.status) && can('export');
     const item = (action, label, { danger = false, disabled = false, hint = '' } = {}) =>
       `<button type="button" role="menuitem" class="row-menu-item ${danger ? 'danger' : ''}" data-action="${action}" ${disabled ? 'disabled' : ''}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${menuIcons[action]}</svg>
@@ -3294,7 +3514,7 @@
     trigger.classList.add('is-open');
     rowMenu.querySelector('.row-menu-item:not([disabled])')?.focus();
   }
-  $('#listsTable')?.addEventListener('click', async event => {
+  ['#listsTable', '#filesTable'].forEach(selector => $(selector)?.addEventListener('click', async event => {
     const kebab = event.target.closest('.kebab-btn');
     if (kebab) {
       event.stopPropagation();
@@ -3305,7 +3525,7 @@
     }
     const primary = event.target.closest('.row-primary');
     if (primary && !primary.disabled) await runListAction(primary.dataset.action, primary.dataset.id);
-  });
+  }));
   rowMenu?.addEventListener('click', async event => {
     const itemButton = event.target.closest('.row-menu-item');
     if (!itemButton || itemButton.disabled) return;
@@ -3324,6 +3544,7 @@
   });
   document.addEventListener('click', event => { if (!event.target.closest('#rowMenu')) closeRowMenu(); });
   window.addEventListener('resize', closeRowMenu);
+  window.addEventListener('resize', () => { if (!$('#adjustmentBar')?.hidden) setPriceEditor(false); });
   document.addEventListener('scroll', closeRowMenu, true);
   $$('.list-tab-btn').forEach(button => button.addEventListener('click', () => { state.listTab = button.dataset.listTab; renderLists(); }));
   dom.listSearchInput?.addEventListener('input', () => { state.listSearch = dom.listSearchInput.value; renderLists(); });
@@ -3339,12 +3560,13 @@
   function getInitialPanelId() {
     const hash = (location.hash || '').replace(/^#/, '').toLowerCase();
     if (hash === 'approvals' || hash === 'lists' || hash === 'listspanel') return 'listsPanel';
+    if (hash === 'files' || hash === 'filespanel') return 'filesPanel';
     if (hash === 'history' || hash === 'historypanel') return 'historyPanel';
     if (hash === 'config' || hash === 'settings' || hash === 'settingspanel') return 'settingsPanel';
     if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') return 'workspacePanel';
     try {
       const saved = localStorage.getItem('pla_active_panel');
-      if (saved && ['workspacePanel', 'listsPanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
+      if (saved && ['workspacePanel', 'filesPanel', 'listsPanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
         return saved;
       }
     } catch { }
@@ -3368,11 +3590,12 @@
       panel.hidden = !isTarget;
       panel.classList.toggle('active', isTarget);
     });
-    document.querySelector('.content')?.classList.toggle('history-active', finalPanelId === 'historyPanel' || finalPanelId === 'listsPanel');
+    document.querySelector('.content')?.classList.toggle('history-active', ['historyPanel', 'listsPanel', 'filesPanel'].includes(finalPanelId));
 
     if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || 'library');
     if (finalPanelId === 'historyPanel') renderHistory();
     if (finalPanelId === 'listsPanel') renderLists();
+    if (finalPanelId === 'filesPanel') renderFiles();
 
     try {
       localStorage.setItem('pla_active_panel', finalPanelId);
@@ -3382,6 +3605,7 @@
       const hashMap = {
         workspacePanel: 'prices',
         listsPanel: 'approvals',
+        filesPanel: 'files',
         historyPanel: 'history',
         settingsPanel: 'config'
       };
@@ -3974,14 +4198,36 @@
   dom.downloadTemplateBtn?.addEventListener('click', downloadExcelTemplate);
   dom.browseFileBtn?.addEventListener('click', () => dom.modalFileInput?.click());
   dom.modalDropZone?.addEventListener('click', event => {
-    if (event.target !== dom.removeSelectedFileBtn && !event.target.closest('#removeSelectedFileBtn') && event.target !== dom.browseFileBtn) {
-      dom.modalFileInput?.click();
-    }
+    if (event.target !== dom.browseFileBtn && !bulkImporting && stagedFiles.length < MAX_BULK_FILES) dom.modalFileInput?.click();
   });
   dom.modalFileInput?.addEventListener('change', () => {
-    const file = dom.modalFileInput.files?.[0];
-    if (file) stageFileForUpload(file);
+    stageFilesForUpload(dom.modalFileInput.files);
+    dom.modalFileInput.value = '';
   });
+  $('#stagedFilesList')?.addEventListener('input', event => {
+    const input = event.target.closest('[data-field]');
+    const row = event.target.closest('.staged-row');
+    if (!input || !row) return;
+    stagedFiles[Number(row.dataset.index)][input.dataset.field] = input.value;
+    input.classList.remove('is-invalid');
+  });
+  $('#stagedFilesList')?.addEventListener('click', event => {
+    const remove = event.target.closest('.staged-remove');
+    if (!remove) return;
+    stagedFiles.splice(Number(remove.dataset.index), 1);
+    renderStagedFiles();
+  });
+  $('#applyAllBtn')?.addEventListener('click', () => {
+    const country = $('#applyAllCountry').value.trim();
+    const priceLevel = $('#applyAllPriceLevel').value.trim();
+    if (!country && !priceLevel) return toast('Enter a country or price level to apply to every file.');
+    stagedFiles.forEach(item => {
+      if (country) item.country = country;
+      if (priceLevel) item.priceLevel = priceLevel;
+    });
+    renderStagedFiles();
+  });
+  dom.uploadModal?.addEventListener('cancel', event => { if (bulkImporting) event.preventDefault(); });
   dom.modalDropZone?.addEventListener('dragover', event => {
     event.preventDefault();
     dom.modalDropZone.classList.add('dragover');
@@ -3992,25 +4238,28 @@
   dom.modalDropZone?.addEventListener('drop', event => {
     event.preventDefault();
     dom.modalDropZone.classList.remove('dragover');
-    const file = event.dataTransfer?.files?.[0];
-    if (file) stageFileForUpload(file);
-  });
-  dom.removeSelectedFileBtn?.addEventListener('click', event => {
-    event.stopPropagation();
-    clearStagedFile();
+    if (!bulkImporting) stageFilesForUpload(event.dataTransfer?.files);
   });
   dom.submitUploadBtn?.addEventListener('click', async () => {
-    if (!stagedUploadFile) return;
-    const meta = { priceLevel: dom.uploadPriceLevel.value.trim(), country: dom.uploadCountry.value.trim() };
-    if (!meta.priceLevel) { dom.uploadPriceLevel.focus(); return toast('Enter the price level for this price list.'); }
-    if (!meta.country) { dom.uploadCountry.focus(); return toast('Enter the country for this price list.'); }
-    const fileToParse = stagedUploadFile;
-    closeUploadModal();
-    try {
-      await parseWorkbook(fileToParse, meta);
-    } catch (err) {
-      toast(err.message || 'Failed to process Excel workbook.');
+    if (!stagedFiles.length || bulkImporting) return;
+    if (stagedFiles.every(item => item.status === 'saved' || item.status === 'failed')) {
+      closeUploadModal();
+      switchPanel('listsPanel', true);
+      return;
     }
+    const problem = validateStagedFiles();
+    if (problem) return toast(problem);
+    if (stagedFiles.length === 1) {
+      const [item] = stagedFiles;
+      closeUploadModal();
+      try {
+        await parseWorkbook(item.file, { name: item.name, country: item.country, priceLevel: item.priceLevel });
+      } catch (err) {
+        toast(err.message || 'Failed to process Excel workbook.');
+      }
+      return;
+    }
+    await importStagedFiles();
   });
 
   // --- Audit Logs & Notification System ---

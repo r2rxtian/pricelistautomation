@@ -166,10 +166,38 @@ function approvers_for(string $submitter): array
 // Price list versions
 // ---------------------------------------------------------------------------
 
+/** Maps "1", "level 1", "PL1" or "Price Level 1" to "Price Level 1"; null when it isn't a configured level. */
+function canonical_price_level(string $input): ?string
+{
+    if (!preg_match('/^\s*(?:price\s*level|level|pl|lvl)?\s*#?\s*(\d{1,3})\s*$/i', $input, $match)) return null;
+    $level = 'Price Level ' . (int) $match[1];
+    return in_array($level, PRICE_LEVELS, true) ? $level : null;
+}
+
+/** Maps a country (any case/spacing) to its entry in the configured list, or null when it isn't listed. */
+function canonical_country(string $input): ?string
+{
+    $key = mb_strtolower(preg_replace('/\s+/u', ' ', trim($input)));
+    if ($key === '') return null;
+    foreach (COUNTRIES as $country) {
+        if (mb_strtolower($country) === $key) return $country;
+    }
+    return COUNTRIES ? null : trim($input);
+}
+
+/** A price list is identified by name + country + price level, so one country can hold several price levels. */
+function same_price_list(array $a, array $b): bool
+{
+    $norm = fn($value) => mb_strtolower(preg_replace('/\s+/u', ' ', trim((string) $value)));
+    return $norm($a['name'] ?? '') === $norm($b['name'] ?? '')
+        && $norm($a['country'] ?? '') === $norm($b['country'] ?? '')
+        && $norm($a['priceLevel'] ?? '') === $norm($b['priceLevel'] ?? '');
+}
+
 const VERSION_SUMMARY_KEYS = [
     'id', 'name', 'priceLevel', 'country', 'revision', 'status', 'adjustment', 'categoryAdjustments', 'summary',
     'savedAt', 'savedBy', 'savedByUser', 'requiredApprovers', 'approvals', 'approvedAt', 'approvedBy',
-    'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount',
+    'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount', 'source', 'basedOn',
 ];
 
 function version_summary(array $version): array
@@ -182,13 +210,25 @@ function version_summary(array $version): array
 /** Normalises records written by older builds so every version has workflow fields. */
 function normalize_version(array $version): array
 {
-    $version['status'] = in_array($version['status'] ?? '', ['pending', 'approved', 'rejected', 'superseded'], true) ? $version['status'] : 'pending';
+    $version['status'] = in_array($version['status'] ?? '', ['uploaded', 'pending', 'approved', 'rejected', 'superseded'], true) ? $version['status'] : 'pending';
+    // 'upload' = a file as uploaded (no approval needed); 'change' = edited prices that go through approval.
+    if (($version['source'] ?? '') !== 'upload') {
+        // Records saved before uploads and changes were separated: a list with no parent, no adjustments
+        // and no cell edits is an unmodified upload.
+        $adjusted = $version['summary']['adjustedCategories'] ?? [];
+        $isUpload = !$adjusted && empty($version['basedOn']) && (int) ($version['changeCount'] ?? 0) === 0 && (float) ($version['adjustment'] ?? 0) === 0.0;
+        $version['source'] = $isUpload ? 'upload' : 'change';
+        if ($isUpload && in_array($version['status'], ['pending', 'approved', 'rejected'], true)) $version['status'] = 'uploaded';
+    }
+    $version['source'] = $version['source'] === 'upload' ? 'upload' : 'change';
     $version['revision'] = max(1, (int) ($version['revision'] ?? 1));
     $version['priceLevel'] = (string) ($version['priceLevel'] ?? '');
     $version['country'] = (string) ($version['country'] ?? '');
     $version['savedByUser'] = (string) ($version['savedByUser'] ?? '');
     $version['approvals'] = is_array($version['approvals'] ?? null) ? array_values($version['approvals']) : [];
-    if (!is_array($version['requiredApprovers'] ?? null) || !$version['requiredApprovers']) {
+    if ($version['source'] === 'upload') {
+        $version['requiredApprovers'] = [];
+    } elseif (!is_array($version['requiredApprovers'] ?? null) || !$version['requiredApprovers']) {
         $version['requiredApprovers'] = $version['savedByUser'] !== '' ? approvers_for($version['savedByUser']) : usernames_with_permission('approve');
     }
     if (!isset($version['productCount']) && is_array($version['rows'] ?? null)) $version['productCount'] = count($version['rows']);
@@ -219,7 +259,13 @@ function approval_complete(array $version): bool
 function version_visible_to(array $user, array $version): bool
 {
     if (user_can($user, 'update')) return true;
-    return ($version['status'] ?? '') === 'approved';
+    // Export-only users see live lists: approved changes and uploaded files.
+    return in_array($version['status'] ?? '', ['approved', 'uploaded'], true);
+}
+
+function is_exportable(array $version): bool
+{
+    return in_array($version['status'] ?? '', ['approved', 'uploaded'], true);
 }
 
 // ---------------------------------------------------------------------------

@@ -42,6 +42,25 @@ const DEFAULT_APPROVERS = [
 const DEFAULT_AUTO_APPROVE = ['gen'];
 
 /*
+ * Countries a price list can be assigned to (upload and save dropdowns).
+ * PLACEHOLDER: replace with the official list of 44 countries when it is provided,
+ * either here or via 'countries' in config.local.php.
+ */
+/*
+ * Price levels are numbered (Price Level 1, Price Level 2, …). Change the count here or set
+ * 'price_levels' => 8 in config.local.php.
+ */
+const DEFAULT_PRICE_LEVEL_COUNT = 5;
+
+const DEFAULT_COUNTRIES = [
+    'Australia', 'Bahrain', 'Bangladesh', 'Belgium', 'Brunei', 'Cambodia', 'Canada', 'China', 'Egypt', 'France', 'Germany',
+    'Hong Kong', 'India', 'Indonesia', 'Israel', 'Italy', 'Japan', 'Jordan', 'Kuwait', 'Lebanon', 'Malaysia', 'Maldives',
+    'Mexico', 'Myanmar', 'Netherlands', 'New Zealand', 'Oman', 'Pakistan', 'Philippines', 'Qatar', 'Saudi Arabia', 'Singapore',
+    'South Africa', 'South Korea', 'Spain', 'Sri Lanka', 'Switzerland', 'Taiwan', 'Thailand', 'Turkey', 'United Arab Emirates',
+    'United Kingdom', 'United States', 'Vietnam',
+];
+
+/*
  * 'any' – one approval from the listed approvers makes the price list exportable.
  * 'all' – every listed approver must approve.
  */
@@ -54,6 +73,14 @@ if (!is_array($localConfiguration)) $localConfiguration = [];
 
 define('USERS', is_array($localConfiguration['users'] ?? null) ? $localConfiguration['users'] : DEFAULT_USERS);
 define('APPROVERS', is_array($localConfiguration['approvers'] ?? null) ? $localConfiguration['approvers'] : DEFAULT_APPROVERS);
+define('PRICE_LEVELS', array_map(
+    fn(int $number) => "Price Level {$number}",
+    range(1, max(1, min(50, (int) ($localConfiguration['price_levels'] ?? DEFAULT_PRICE_LEVEL_COUNT))))
+));
+define('COUNTRIES', array_values(array_unique(array_filter(array_map(
+    fn($country) => trim((string) $country),
+    is_array($localConfiguration['countries'] ?? null) ? $localConfiguration['countries'] : DEFAULT_COUNTRIES
+)))));
 define('AUTO_APPROVE_USERS', is_array($localConfiguration['auto_approve'] ?? null) ? array_map('strval', $localConfiguration['auto_approve']) : DEFAULT_AUTO_APPROVE);
 define('APPROVAL_MODE', in_array($localConfiguration['approval_mode'] ?? '', ['any', 'all'], true) ? $localConfiguration['approval_mode'] : DEFAULT_APPROVAL_MODE);
 

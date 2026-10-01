@@ -8025,3 +8025,318 @@ tbody .excel-header th { position: static; }
 
 /* (ID-level specificity so it beats "#workspacePanel.has-file .filter-field > span") */
 #workspacePanel .data-panel .table-tools .nav-cascade .cascade-country > span { font-size: 0; gap: 0; }
+
+/* ---- Bulk upload: staged files table ---- */
+.upload-modal-dialog:has(#stagedFilesPanel:not([hidden])) { width: min(900px, calc(100vw - 32px)); }
+.staged-files { margin-top: 14px; }
+.staged-apply-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-th);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+}
+.staged-apply-label { color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.staged-apply-all input { flex: 1 1 0; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--line-th); border-radius: 8px; background: var(--surface); color: var(--text-heading); font: inherit; font-size: 0.82rem; }
+.staged-apply-all .button { height: 32px; min-height: 32px; padding: 0 14px; }
+.staged-table { border: 1px solid var(--line-panel); border-radius: 10px; overflow: hidden; }
+#stagedFilesList { max-height: 280px; overflow-y: auto; }
+.staged-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.staged-row.staged-head {
+  border-top: 0;
+  background: var(--surface-elevated);
+  color: var(--text-subtle);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.staged-row input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--line-th);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.staged-row input:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+.staged-row input.is-invalid { border-color: var(--danger); background: var(--danger-bg); }
+.staged-row input:disabled { opacity: .7; background: var(--surface-elevated); }
+.staged-file { min-width: 0; }
+.staged-file strong { display: block; color: var(--text-heading); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.staged-file small { display: block; color: var(--text-muted); font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.staged-action { display: flex; justify-content: center; }
+.staged-remove { width: 28px; height: 28px; }
+.staged-status { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 0.8rem; font-weight: 800; }
+.staged-status.status-working { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.staged-status.status-saved { color: #fff; background: var(--good); }
+.staged-status.status-failed { color: #fff; background: var(--danger); }
+.staged-row.is-failed .staged-file small { color: var(--danger); white-space: normal; }
+.staged-row.is-saved .staged-file small { color: var(--good); }
+@media (max-width: 720px) {
+  .staged-row { grid-template-columns: 1fr 1fr 34px; }
+  .staged-row .staged-file { grid-column: 1 / -1; }
+  .staged-row.staged-head { display: none; }
+}
+
+/* Once files are staged, focus the modal on them: hide the template help and shrink the drop zone */
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .template-download-card,
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .template-structure-preview,
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .upload-modal-desc { display: none !important; }
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .modal-drop-zone { padding: 10px 14px; min-height: 0; }
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .modal-drop-zone .drop-zone-icon { display: none; }
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .modal-drop-zone .drop-zone-content { flex-direction: row; gap: 8px; }
+.upload-modal-card:has(#stagedFilesPanel:not([hidden])) .modal-drop-zone small { display: none; }
+
+#stagedFilesHint { margin-top: 10px; }
+
+.modal-drop-zone.is-full { cursor: default; opacity: .75; border-style: solid; }
+.modal-drop-zone.is-full #dropZonePrompt { color: var(--text-muted); font-weight: 600; }
+
+/* Country dropdowns (upload rows, Apply to all, save dialog) match the text inputs beside them */
+.staged-row select,
+.staged-apply-all select,
+.upload-meta-grid select {
+  width: 100%;
+  height: 32px;
+  padding: 0 26px 0 9px;
+  border: 1px solid var(--line-th);
+  border-radius: 7px;
+  background-color: var(--surface);
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.staged-apply-all select { flex: 1 1 0; min-width: 0; border-radius: 8px; }
+.upload-meta-grid select { height: 38px; border-radius: 8px; }
+.staged-row select:focus,
+.staged-apply-all select:focus,
+.upload-meta-grid select:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+.staged-row select.is-invalid { border-color: var(--danger); background-color: var(--danger-bg); }
+.staged-row select:disabled { opacity: .7; background-color: var(--surface-elevated); }
+
+/* ---- Button swap: export icons in the header row, Edit/Reset prices in the table toolbar ---- */
+.heading-actions .export-icon svg { transform: none; }
+.heading-actions .card1.export-excel svg { stroke: #107c41; }
+.heading-actions .card1.export-excel:hover:not(:disabled) { background-color: #107c41; border-color: #107c41; box-shadow: 0 6px 18px rgba(16, 124, 65, 0.3); }
+.heading-actions .card2.export-pdf svg { stroke: #b52042; }
+.heading-actions .card2.export-pdf:hover:not(:disabled) { background-color: #b52042; border-color: #b52042; box-shadow: 0 6px 18px rgba(181, 32, 66, 0.3); }
+.heading-actions .export-icon:disabled { opacity: .38; filter: grayscale(35%); cursor: not-allowed; scale: 1 !important; }
+[data-theme="dark"] .heading-actions .card1.export-excel svg { stroke: #34d399; }
+[data-theme="dark"] .heading-actions .card2.export-pdf svg { stroke: #eb97ae; }
+.table-tools .toolbar-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.table-tools .toolbar-action.is-disabled { opacity: .45; cursor: not-allowed; }
+.table-tools #editButton[aria-expanded="true"] { background: var(--pink-strong); }
+.adjustment-bar.price-popover::after { display: none; }
+
+/* ---- Uploaded files (no approval) ---- */
+html[data-initial-panel="filesPanel"] #workspacePanel { display: none !important; }
+html[data-initial-panel="filesPanel"] #filesPanel { display: block !important; }
+.content.history-active #filesPanel { padding: 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; width: 100%; }
+.status-badge.uploaded-badge { border-color: color-mix(in srgb, #2563eb 40%, transparent); background: color-mix(in srgb, #2563eb 10%, transparent); color: #1d4ed8; }
+.status-badge.uploaded-badge .pulse-dot { background: #2563eb; }
+.workflow-note[data-tone="uploaded"] { background: color-mix(in srgb, #2563eb 9%, transparent); border-color: color-mix(in srgb, #2563eb 30%, transparent); color: #1d4ed8; }
+.list-status-pill.status-uploaded { background: color-mix(in srgb, #2563eb 12%, transparent); color: #1d4ed8; }
+[data-theme="dark"] .status-badge.uploaded-badge,
+[data-theme="dark"] .workflow-note[data-tone="uploaded"],
+[data-theme="dark"] .list-status-pill.status-uploaded { color: #93c5fd; }
+
+#filesSearchInput { width: 100%; height: 38px; padding: 0 14px 0 36px; border: 1px solid var(--line-panel); border-radius: 8px; background: var(--surface-card); color: var(--text-heading); font-size: 0.82rem; font-family: var(--sans); outline: none; }
+#filesSearchInput:focus { border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+
+.open-now-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); font-size: 0.66rem; font-weight: 700; vertical-align: middle; white-space: nowrap; }
+.open-now-tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.lists-table .row-primary { min-width: 104px; }
+
+/* Toolbar pills: labels vertically centred with their values */
+#workspacePanel .data-panel .table-tools .filter-field > span {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+.data-panel .table-tools .filter-field select,
+.data-panel .table-tools .filter-field input { line-height: normal; align-self: center; }
+.data-panel .table-tools .nav-cascade .filter-field:not(.cascade-country):not(.cascade-list) { width: 180px; }
+@media (max-width: 1440px) { .data-panel .table-tools .nav-cascade .filter-field:not(.cascade-country):not(.cascade-list) { width: 160px; } }
+
+/* Audit Logs header matches the Files / Approvals tables */
+#historyTable thead th {
+  background: var(--surface-elevated) !important;
+  color: var(--text-subtle) !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left !important;
+  padding: 12px 18px !important;
+  height: auto !important;
+  border-right: 0 !important;
+  border-bottom: 1px solid var(--line-panel) !important;
+}
+#historyTable thead th .sort-arrow { color: var(--text-subtle) !important; }
+[data-theme="dark"] #historyTable thead th { background: #1e1518 !important; color: #d49fa8 !important; border-bottom-color: #382329 !important; }
+
+#historyTable thead th, #historyTable thead th * { text-transform: uppercase !important; letter-spacing: 0.06em !important; font-family: var(--sans) !important; }
+#historyTable thead th { padding: 14px 18px !important; }
+
+/* ==========================================================================
+   Prices table: compact rows, light header (matches the other tables),
+   fixed column widths with a wide left-aligned description.
+   ========================================================================== */
+/* Column widths (table-layout: fixed reads the first header row) */
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(1) { width: 36px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(2) { width: 84px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(3) { width: 112px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(5) { width: 84px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(6) { width: 70px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(7) { width: 58px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(8) { width: 92px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(9),
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(10) { width: 88px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(11) { width: 300px; }
+#priceTable thead tr.presentation-header th:nth-child(1) { width: 36px; }
+#priceTable thead tr.presentation-header th:nth-child(2) { width: 84px; }
+#priceTable thead tr.presentation-header th:nth-child(3) { width: 112px; }
+#priceTable thead tr.presentation-header th:nth-child(n+5) { width: 84px; }
+
+/* Header: light, small uppercase labels */
+#priceTable thead,
+#priceTable thead th,
+#priceTable tbody tr.excel-header th {
+  background: var(--surface-elevated) !important;
+}
+#priceTable thead th,
+#priceTable tbody tr.excel-header th {
+  color: var(--text-subtle) !important;
+  font-size: 0.64rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.25 !important;
+  padding: 6px 8px !important;
+  border: 1px solid var(--line-soft) !important;
+  height: auto !important;
+}
+#priceTable thead th.col-desc-th,
+#priceTable thead tr.excel-header-primary th:nth-child(4) { text-align: left !important; padding-left: 12px !important; }
+#priceTable thead { box-shadow: 0 1px 0 var(--line-panel) !important; }
+
+/* Body rows */
+#priceTable tbody tr.excel-data-row { height: auto !important; }
+#priceTable tbody td { padding: 6px 10px !important; font-size: 0.76rem; line-height: 1.3; }
+#priceTable tbody td.full-description { text-align: left !important; white-space: normal; }
+#priceTable tbody td.code-cell { text-align: left !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#priceTable tbody td.price-cell { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#priceTable tbody td.col-pallet { white-space: nowrap; }
+#priceTable tbody td.col-row-num { color: var(--text-subtle); font-size: 0.68rem; }
+
+/* Photo cell: small thumbnail instead of a 120px block */
+#priceTable td.group-photo-cell { padding: 4px !important; }
+#priceTable .group-photo-wrap,
+#priceTable .group-photo-empty-container { min-height: 0 !important; padding: 0 !important; }
+#priceTable .group-photo-img { width: 100%; max-width: 72px; max-height: 72px; height: auto; object-fit: contain; }
+#priceTable .group-add-photo-btn { min-height: 0 !important; width: 100%; max-width: 72px; padding: 6px 4px !important; gap: 3px; font-size: 0.62rem; border-width: 1px; }
+#priceTable .group-add-photo-icon-box { width: 22px; height: 22px; }
+#priceTable .group-add-photo-icon-box svg { width: 13px; height: 13px; }
+#priceTable .group-photo-change-btn { bottom: 2px; right: 2px; padding: 2px 5px; font-size: 0.6rem; }
+#priceTable .group-no-photo-readonly { padding: 4px; font-size: 0.62rem; }
+
+/* Category strip and product-group row: slim and quiet */
+#priceTable tbody tr.category-divider-row td {
+  padding: 7px 12px !important;
+  background: var(--surface-elevated) !important;
+  color: var(--pink) !important;
+  font-size: 0.68rem !important;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-align: left !important;
+  border-top: 2px solid var(--line-th) !important;
+  border-bottom: 1px solid var(--line-soft) !important;
+}
+.full-table .table-frame tbody tr.product-group-row { height: auto !important; background: var(--surface) !important; }
+.full-table .product-group-row td.group-title-cell {
+  padding: 6px 12px !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-left: 3px solid var(--pink) !important;
+}
+.product-group-row .group-title-text { font-family: var(--sans) !important; font-size: 0.78rem !important; font-weight: 700 !important; letter-spacing: 0 !important; }
+
+/* Dark mode equivalents */
+[data-theme="dark"] #priceTable thead,
+[data-theme="dark"] #priceTable thead th,
+[data-theme="dark"] #priceTable tbody tr.excel-header th { background: #1e1518 !important; color: #d49fa8 !important; border-color: #2a1d22 !important; }
+[data-theme="dark"] #priceTable tbody tr.category-divider-row td { background: #16171b !important; color: #eb97ae !important; border-top-color: #382329 !important; border-bottom-color: #26292e !important; }
+[data-theme="dark"] .full-table .table-frame tbody tr.product-group-row,
+[data-theme="dark"] .full-table .product-group-row td.group-title-cell { background: #0c0d10 !important; border-color: #1c1d22 !important; border-left-color: #eb97ae !important; }
+[data-theme="dark"] .product-group-row .group-title-text { color: #f4f4f6 !important; }
+
+#priceTable .group-add-photo-btn { flex-direction: row; max-width: 64px; height: 30px; padding: 0 6px !important; gap: 4px; }
+#priceTable .group-add-photo-icon-box { width: auto; height: auto; background: transparent; box-shadow: none; }
+#priceTable .group-add-photo-label { font-size: 0.6rem; }
+#priceTable tbody td { white-space: nowrap; }
+#priceTable tbody td.full-description { white-space: normal; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(8) { width: 104px; }
+#priceTable thead th, #priceTable tbody tr.excel-header th { padding: 5px 6px !important; }
+
+[data-theme="dark"] .full-table .product-group-row .group-title-text, [data-theme="dark"] #priceTable .product-group-row .group-title-text { font-family: var(--sans) !important; font-size: 0.78rem !important; font-weight: 700 !important; }
+
+/* Narrower description, taller rows (~72px) */
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(4) { width: 240px; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(11) { width: auto; }
+#priceTable thead tr.presentation-header th:nth-child(4) { width: 240px; }
+#priceTable tbody tr.excel-data-row { height: 72px !important; }
+#priceTable tbody td { font-size: 0.8rem; padding: 8px 10px !important; }
+#priceTable tbody td.full-description { line-height: 1.35; }
+#priceTable .group-photo-img { max-width: 64px; max-height: 64px; }
+
+#priceTable tbody td.full-description { font-size: 0.8rem !important; }
+
+/* Excel-style guides: column letters above the data, highlighted heading for the active cell */
+#priceTable tr.col-letter-row th {
+  height: 20px !important;
+  padding: 2px 4px !important;
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle) !important;
+  background: var(--surface) !important;
+  text-align: center !important;
+  border: 1px solid var(--line-soft) !important;
+}
+#priceTable th.is-guide-active,
+#priceTable tr.col-letter-row th.is-guide-active {
+  background: var(--pink-subtle) !important;
+  color: var(--pink) !important;
+  font-weight: 800 !important;
+  box-shadow: inset 0 -2px 0 var(--pink);
+}
+#priceTable td.col-row-num.is-guide-active {
+  background: var(--pink-subtle) !important;
+  color: var(--pink) !important;
+  font-weight: 800;
+  box-shadow: inset -2px 0 0 var(--pink);
+}
+[data-theme="dark"] #priceTable tr.col-letter-row th { background: #111216 !important; color: #8c8d94 !important; border-color: #1c1d22 !important; }
+[data-theme="dark"] #priceTable th.is-guide-active,
+[data-theme="dark"] #priceTable td.col-row-num.is-guide-active { background: #2a161e !important; color: #eb97ae !important; }
+
+/* Category strips: a slightly deeper pink than the header/rows */
+#priceTable tbody tr.category-divider-row td { background: #fbe4ea !important; border-top-color: #efc3cf !important; border-bottom-color: #f3d3dc !important; }
+[data-theme="dark"] #priceTable tbody tr.category-divider-row td { background: #2a161e !important; border-top-color: #4e2a36 !important; border-bottom-color: #3a2029 !important; }

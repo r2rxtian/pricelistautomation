@@ -50,7 +50,9 @@ The server enforces export access, not just the UI. `api.php?action=export` only
 
 ## Countries and saved price lists
 
-Each uploaded price list belongs to one country and price level, chosen at upload (e.g. PH · FOB Subic). Saving creates that country's record, so uploading and saving a Dubai list adds a Dubai record next to PH.
+Each uploaded price list belongs to one country and price level, chosen at upload (e.g. Philippines · Price Level 1). Price levels are numbered (**Price Level 1, 2, …**; 5 by default, set `price_levels` in `config.local.php` to change). Countries are picked from a fixed list (`countries` in `config.php` or `config.local.php`). The current list is a **placeholder**; replace it with the official 44 countries when they're provided.
+
+A price list is identified by **name + country + price level**. Uploading another Philippines file with a different price level adds a second Philippines price level; it doesn't replace the first, and Philippines still appears once in the Country filter.
 
 The editor toolbar filters in this order: **Country → Level → List**, then **Category → LRN code → Search**. Choosing a country opens its most recent saved list, and Level/List switch between that country's saved files. With no file open, the same navigator appears on the start screen.
 

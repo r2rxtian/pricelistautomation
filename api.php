@@ -87,11 +87,14 @@ function delete_library_file(string $relativePath): void
     if (is_file($target)) @unlink($target);
 }
 
-/** Marks earlier approved revisions of the same price list as superseded once a newer one is approved. */
+/**
+ * Once a newer revision is live (approved changes or a fresh upload), earlier live revisions of the same
+ * price list (approved or uploaded) are marked superseded.
+ */
 function supersede_older_approved(array $version): void
 {
     foreach (repo_list_version_summaries() as $other) {
-        if ($other['id'] !== $version['id'] && $other['status'] === 'approved' && strcasecmp(trim($other['name']), trim($version['name'])) === 0) {
+        if ($other['id'] !== $version['id'] && in_array($other['status'], ['approved', 'uploaded'], true) && same_price_list($other, $version)) {
             $previous = repo_get_version($other['id']);
             if ($previous) {
                 $previous['status'] = 'superseded';
@@ -99,7 +102,7 @@ function supersede_older_approved(array $version): void
             }
         }
     }
-    repo_prune_superseded($version['name']);
+    repo_prune_superseded($version);
 }
 
 function directory_payload(): array
@@ -181,6 +184,8 @@ try {
             'approvalMode' => APPROVAL_MODE,
             'approvers' => user_can($user, 'save') ? array_map('user_display_name', approvers_for($user['username'])) : [],
             'autoApprove' => user_can($user, 'save') && is_auto_approver($user['username']),
+            'countries' => COUNTRIES,
+            'priceLevels' => PRICE_LEVELS,
             'directory' => directory_payload(),
             'versions' => $versions,
             'productImages' => repo_list_images(),
@@ -223,10 +228,20 @@ try {
         require_permission($user, 'save', 'Your role cannot save price lists.');
         $data = request_json();
         $name = clean_text($data['name'] ?? '', 160);
-        $priceLevel = clean_text($data['priceLevel'] ?? '', 120);
-        $country = clean_text($data['country'] ?? '', 120);
-        if ($name === '' || $priceLevel === '' || $country === '') {
+        $priceLevelInput = clean_text($data['priceLevel'] ?? '', 120);
+        $countryInput = clean_text($data['country'] ?? '', 120);
+        if ($name === '' || $priceLevelInput === '' || $countryInput === '') {
             json_response(['ok' => false, 'message' => 'Enter the price list name, price level, and country.'], 422);
+        }
+        // Countries come from the configured list, so "philippines" and "Philippines" are the same record.
+        $country = canonical_country($countryInput);
+        if ($country === null) {
+            json_response(['ok' => false, 'message' => "\"{$countryInput}\" is not in the country list. Choose a country from the dropdown."], 422);
+        }
+        // Price levels are numbered (Price Level 1, 2, …).
+        $priceLevel = canonical_price_level($priceLevelInput);
+        if ($priceLevel === null) {
+            json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not a valid price level. Choose Price Level 1 to " . count(PRICE_LEVELS) . '.'], 422);
         }
 
         $headers = $data['headers'] ?? [];
@@ -289,9 +304,58 @@ try {
             ];
         }
 
-        // Decide whether this save updates an unapproved record in place or opens a new revision.
         $summaries = repo_list_version_summaries();
-        $sameName = array_values(array_filter($summaries, fn($v) => strcasecmp(trim((string) $v['name']), $name) === 0));
+        // Same price list = same name, country and price level (one country can have several price levels).
+        $identity = ['name' => $name, 'country' => $country, 'priceLevel' => $priceLevel];
+        $sameName = array_values(array_filter($summaries, fn($v) => same_price_list($v, $identity)));
+
+        // Uploads are stored as-is (original prices) and need no approval; only later price changes do.
+        if (($data['kind'] ?? '') === 'upload') {
+            $revision = 1;
+            foreach ($sameName as $summary) $revision = max($revision, (int) $summary['revision'] + 1);
+            $version = [
+                'id' => bin2hex(random_bytes(8)),
+                'source' => 'upload',
+                'name' => $name,
+                'priceLevel' => $priceLevel,
+                'country' => $country,
+                'revision' => $revision,
+                'status' => 'uploaded',
+                'headers' => $headers,
+                'rows' => $cleanRows,
+                'priceColumns' => $priceColumns,
+                'adjustment' => 0.0,
+                'categoryAdjustments' => [],
+                'summary' => ['totalProducts' => count($cleanRows), 'totalAdjustedProducts' => 0, 'adjustedCategories' => []],
+                'changes' => [],
+                'changeCount' => 0,
+                'productCount' => count($cleanRows),
+                'categories' => array_keys($categories),
+                'savedAt' => gmdate('c'),
+                'savedBy' => $user['name'],
+                'savedByUser' => $user['username'],
+                'requiredApprovers' => [],
+                'approvals' => [],
+                'approvedAt' => null,
+                'approvedBy' => null,
+                'rejectedAt' => null,
+                'rejectedBy' => null,
+                'rejectionRemarks' => null,
+                'basedOn' => null,
+            ];
+            repo_save_version($version);
+            supersede_older_approved($version);
+            $label = version_label($version);
+            record_audit('import_workbook', "Uploaded '{$name}'", "{$user['name']} uploaded {$label}: " . count($cleanRows) . ' products across ' . count($categories) . ' categories.', [
+                'versionId' => $version['id'], 'versionName' => $name, 'fileName' => $name, 'revision' => $revision,
+                'priceLevel' => $priceLevel, 'country' => $country, 'rowCount' => count($cleanRows), 'categoryCount' => count($categories),
+                'sourceFile' => clean_text($data['sourceFile'] ?? '', 200),
+            ]);
+            notify(usernames_with_permission('export'), 'available', "New price list: {$name}", "{$user['name']} uploaded {$label}. It is available to open and export.", $version['id']);
+            json_response(['ok' => true, 'active' => version_for_client($user, $version), 'message' => "Uploaded {$name}."]);
+        }
+
+        // Price changes: update an unapproved change in place, or open a new revision for approval.
         $targetId = clean_text($data['id'] ?? '', 32);
         $base = null;
         foreach ($summaries as $summary) {
@@ -306,6 +370,7 @@ try {
 
         $version = [
             'id' => $inPlace ? $base['id'] : bin2hex(random_bytes(8)),
+            'source' => 'change',
             'name' => $name,
             'priceLevel' => $priceLevel,
             'country' => $country,
@@ -351,7 +416,7 @@ try {
         $label = version_label($version);
         $adjustText = $adjustedCategories
             ? implode(', ', array_map(fn($c) => "{$c['category']} " . ($c['adjustment'] > 0 ? '+' : '') . "{$c['adjustment']}%", $adjustedCategories))
-            : 'no percentage adjustments';
+            : 'original prices';
         $auditMeta = [
             'versionId' => $version['id'], 'versionName' => $name, 'fileName' => $name, 'revision' => $revision,
             'priceLevel' => $priceLevel, 'country' => $country, 'adjustedCategories' => $adjustedCategories,
@@ -441,8 +506,8 @@ try {
         $format = in_array($data['format'] ?? '', ['excel', 'pdf'], true) ? $data['format'] : null;
         if (!$format) json_response(['ok' => false, 'message' => 'Choose Excel or PDF.'], 422);
         $version = find_open_version($user, clean_text($data['id'] ?? '', 32));
-        if ($version['status'] !== 'approved') {
-            json_response(['ok' => false, 'message' => 'Only approved price lists can be exported.'], 403);
+        if (!is_exportable($version)) {
+            json_response(['ok' => false, 'message' => 'Only uploaded files and approved price changes can be exported.'], 403);
         }
         $scope = clean_text($data['scope'] ?? '', 200);
         record_audit('export_' . $format, "Exported '{$version['name']}' to " . ($format === 'pdf' ? 'PDF' : 'Excel'),

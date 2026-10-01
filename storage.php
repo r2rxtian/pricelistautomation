@@ -119,13 +119,12 @@ function repo_delete_version(string $id): bool
     });
 }
 
-/** Removes the oldest superseded revisions of a price list beyond the retention limit. */
-function repo_prune_superseded(string $name): void
+/** Removes the oldest superseded revisions of a price list (same name, country and price level) beyond the retention limit. */
+function repo_prune_superseded(array $version): void
 {
-    $key = mb_strtolower(trim($name));
     $superseded = array_filter(
         repo_list_version_summaries(),
-        fn($v) => ($v['status'] ?? '') === 'superseded' && mb_strtolower(trim((string) ($v['name'] ?? ''))) === $key
+        fn($v) => ($v['status'] ?? '') === 'superseded' && same_price_list($v, $version)
     );
     foreach (array_slice(array_values($superseded), SUPERSEDED_KEEP_PER_LIST) as $old) {
         repo_delete_version((string) $old['id']);
