@@ -17,7 +17,7 @@
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    loginView: $('#loginView'), appView: $('#appView'), loginForm: $('#loginForm'), loginError: $('#loginError'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
+    appView: $('#appView'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
     auditLogsNav: $('#auditLogsNav'), openAuditLogsFromBell: $('#openAuditLogsFromBell'), auditAllCountBadge: $('#auditAllCountBadge'), auditEditsCountBadge: $('#auditEditsCountBadge'), auditVersionsCountBadge: $('#auditVersionsCountBadge'), auditFileSelect: $('#auditFileSelect'), auditFileSelectWrapper: $('#auditFileSelectWrapper'), auditTypeSelect: $('#auditTypeSelect'), auditTypeSelectWrapper: $('#auditTypeSelectWrapper'), auditUserSelect: $('#auditUserSelect'), auditUserSelectWrapper: $('#auditUserSelectWrapper'), historyAdjustmentSelectWrapper: $('#historyAdjustmentSelectWrapper'), refreshAuditLogsBtn: $('#refreshAuditLogsBtn'), auditTableHead: $('#auditTableHead'), versionsTableHead: $('#versionsTableHead'), historyEmptyTitle: $('#historyEmptyTitle'), historyEmptySubtitle: $('#historyEmptySubtitle'), historyChangesKicker: $('#historyChangesKicker'), historyChangesActions: $('#historyChangesActions'),
     notificationBtn: $('#notificationBtn'), notificationBadge: $('#notificationBadge'), notificationsDropdown: $('#notificationsDropdown'), notificationsList: $('#notificationsList'), notificationsEmpty: $('#notificationsEmpty'), notificationsCountBadge: $('#notificationsCountBadge'), markAllReadBtn: $('#markAllReadBtn'), clearLogsBtn: $('#clearLogsBtn'),
     uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn'),
@@ -30,7 +30,7 @@
     approveDialog: $('#approveDialog'), approveForm: $('#approveForm'), approveDialogTitle: $('#approveDialogTitle'), approveDialogText: $('#approveDialogText'), approveDialogSummary: $('#approveDialogSummary'), approveRemarks: $('#approveRemarks'),
     rejectDialog: $('#rejectDialog'), rejectForm: $('#rejectForm'), rejectDialogTitle: $('#rejectDialogTitle'), rejectRemarks: $('#rejectRemarks'),
     listsTableBody: $('#listsTableBody'), listsEmpty: $('#listsEmpty'), listsEmptyTitle: $('#listsEmptyTitle'), listsEmptyText: $('#listsEmptyText'), listCount: $('#listCount'), listSearchInput: $('#listSearchInput'), listPriceLevelFilter: $('#listPriceLevelFilter'), listCountryFilter: $('#listCountryFilter'), listStatusFilter: $('#listStatusFilter'), listAllCount: $('#listAllCount'), listMineCount: $('#listMineCount'), listApprovedCount: $('#listApprovedCount'), pendingApprovalCount: $('#pendingApprovalCount'), listsSubtitle: $('#listsSubtitle'),
-    categoryCheckboxesList: $('#categoryCheckboxesList'), categoryAdjustSearch: $('#categoryAdjustSearch'), selectAllCategoriesBtn: $('#selectAllCategoriesBtn'), deselectAllCategoriesBtn: $('#deselectAllCategoriesBtn'), selectedCategoryCountBadge: $('#selectedCategoryCountBadge'), applyButtonText: $('#applyButtonText'), adjPreviewSummary: $('#adjPreviewSummary'), closeAdjustmentBarBtn: $('#closeAdjustmentBarBtn')
+    categoryCheckboxesList: $('#categoryCheckboxesList'), categoryAdjustSearch: $('#categoryAdjustSearch'), categoryAdjustSearchBox: $('#categoryAdjustSearchBox'), adjAllCategories: $('#adjAllCategories'), adjAllLabel: $('#adjAllLabel'), adjCategoryTotal: $('#adjCategoryTotal'), applyButtonText: $('#applyButtonText'), adjPreviewSummary: $('#adjPreviewSummary'), closeAdjustmentBarBtn: $('#closeAdjustmentBarBtn')
   };
 
   const selectedAdjustmentCategories = new Set();
@@ -92,11 +92,17 @@
       if (selectedAdjustmentCategories.has(c.name)) affectedProducts += c.count;
     });
 
-    if (dom.selectedCategoryCountBadge) {
-      dom.selectedCategoryCountBadge.textContent = `${selectedCount} of ${totalCategories} selected`;
-      dom.selectedCategoryCountBadge.classList.toggle('has-selection', selectedCount > 0);
+    // The "All" checkbox covers whatever the list shows: every category, or the search matches.
+    if (dom.adjAllCategories) {
+      const listed = listedAdjustmentCategories();
+      const listedChecked = listed.filter(c => selectedAdjustmentCategories.has(c.name)).length;
+      dom.adjAllCategories.checked = listed.length > 0 && listedChecked === listed.length;
+      dom.adjAllCategories.indeterminate = listedChecked > 0 && listedChecked < listed.length;
+      dom.adjAllCategories.disabled = !listed.length;
+      if (dom.adjAllLabel) dom.adjAllLabel.textContent = adjustmentSearchQuery() ? 'All matches' : 'All categories';
     }
 
+    dom.percentage?.closest('.percentage-input')?.setAttribute('data-sign', isValidPct && pct > 0 ? 'pos' : isValidPct && pct < 0 ? 'neg' : 'zero');
     $$('.adj-preset-chip').forEach(chip => {
       const presetVal = Number(chip.dataset.preset);
       chip.classList.toggle('active', isValidPct && pct === presetVal);
@@ -105,81 +111,92 @@
     const btn = $('#previewButton');
     const btnText = $('#applyButtonText');
     const summary = $('#adjPreviewSummary');
-
-    if (selectedCount === 0) {
-      if (btnText) btnText.textContent = 'Select categories to apply';
-      if (btn) {
-        btn.disabled = true;
-        btn.classList.add('is-disabled');
-      }
-      if (summary) summary.textContent = 'Please check at least one category above.';
-    } else {
-      if (btn) {
-        btn.disabled = !isValidPct;
-        btn.classList.toggle('is-disabled', !isValidPct);
-      }
-      const pctDisplay = isValidPct ? `${sign}${pct}%` : '%';
-      if (selectedCount === totalCategories) {
-        if (btnText) btnText.textContent = `Apply ${pctDisplay} to all categories`;
-        if (summary) summary.textContent = `Will update all ${totalCategories} categories (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
-      } else if (selectedCount === 1) {
-        const singleCat = [...selectedAdjustmentCategories][0];
-        if (btnText) btnText.textContent = `Apply ${pctDisplay} to ${singleCat}`;
-        if (summary) summary.textContent = `Will update ${singleCat} (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
-      } else {
-        if (btnText) btnText.textContent = `Apply ${pctDisplay} to ${selectedCount} categories`;
-        if (summary) summary.textContent = `Will update ${selectedCount} categories (${affectedProducts.toLocaleString()} products) by ${pctDisplay}.`;
-      }
+    const canApply = selectedCount > 0 && isValidPct;
+    if (btn) {
+      btn.disabled = !canApply;
+      btn.classList.toggle('is-disabled', !canApply);
+    }
+    if (btnText) btnText.textContent = canApply ? `Apply ${sign}${pct}%` : 'Apply';
+    if (summary) {
+      const products = `${affectedProducts.toLocaleString()} ${affectedProducts === 1 ? 'product' : 'products'}`;
+      const scope = selectedCount === 1 ? [...selectedAdjustmentCategories][0]
+        : selectedCount === totalCategories ? `All ${totalCategories} categories`
+        : `${selectedCount} categories`;
+      summary.textContent = selectedCount ? `${scope} · ${products}` : 'No categories selected';
+      summary.title = summary.textContent;
     }
   }
 
-  function renderCategoryAdjustmentList(filterQuery = '') {
+  // The category search only shows once the list is long enough to scroll.
+  const ADJUST_SEARCH_MIN_CATEGORIES = 8;
+  function adjustmentSearchQuery() {
+    return dom.categoryAdjustSearchBox?.hidden ? '' : String(dom.categoryAdjustSearch?.value || '').trim().toLowerCase();
+  }
+  function listedAdjustmentCategories() {
+    const query = adjustmentSearchQuery();
+    return getPriceCategories().filter(c => !query || c.name.toLowerCase().includes(query));
+  }
+
+  function renderCategoryAdjustmentList() {
     if (!dom.categoryCheckboxesList) return;
     const categories = getPriceCategories();
-    const query = String(filterQuery || '').trim().toLowerCase();
-    const filtered = query ? categories.filter(c => c.name.toLowerCase().includes(query)) : categories;
+    if (dom.categoryAdjustSearchBox) dom.categoryAdjustSearchBox.hidden = categories.length < ADJUST_SEARCH_MIN_CATEGORIES;
+    const filtered = listedAdjustmentCategories();
+    const listedItems = filtered.reduce((sum, c) => sum + c.count, 0);
+    if (dom.adjCategoryTotal) dom.adjCategoryTotal.textContent = categories.length ? `${listedItems} ${listedItems === 1 ? 'item' : 'items'}` : '';
 
     if (!categories.length) {
-      dom.categoryCheckboxesList.innerHTML = '<div class="category-checkboxes-empty">No categories available in this workbook.</div>';
-      updateAdjustmentUI();
-      return;
-    }
-
-    if (!filtered.length) {
-      dom.categoryCheckboxesList.innerHTML = `<div class="category-checkboxes-empty">No categories match "${escapeHtml(filterQuery)}"</div>`;
-      return;
-    }
-
-    dom.categoryCheckboxesList.innerHTML = filtered.map(cat => {
-      const isChecked = selectedAdjustmentCategories.has(cat.name);
-      const num = Number(cat.adjustment || 0);
-      const sign = num > 0 ? '+' : '';
-      const adjCls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
-      return `
-        <label class="category-checkbox-item ${isChecked ? 'checked' : ''}" data-category="${escapeHtml(cat.name)}">
-          <input type="checkbox" class="category-adjust-checkbox" value="${escapeHtml(cat.name)}" ${isChecked ? 'checked' : ''}>
-          <span class="cat-custom-checkbox" aria-hidden="true">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
-          <div class="cat-checkbox-content">
+      dom.categoryCheckboxesList.innerHTML = '<div class="category-checkboxes-empty">No categories in this price list.</div>';
+    } else if (!filtered.length) {
+      dom.categoryCheckboxesList.innerHTML = `<div class="category-checkboxes-empty">No categories match "${escapeHtml(dom.categoryAdjustSearch.value.trim())}"</div>`;
+    } else {
+      dom.categoryCheckboxesList.innerHTML = filtered.map(cat => {
+        const isChecked = selectedAdjustmentCategories.has(cat.name);
+        const num = Number(cat.adjustment || 0);
+        const sign = num > 0 ? '+' : '';
+        // Only categories that already carry an adjustment get a pill, so the list stays quiet.
+        const pill = num ? `<span class="cat-adj-pill ${num > 0 ? 'pos' : 'neg'}" title="Currently ${sign}${num}%">${sign}${num}%</span>` : '';
+        return `
+          <label class="adj-cat-row ${isChecked ? 'checked' : ''}" data-category="${escapeHtml(cat.name)}">
+            <input type="checkbox" class="category-adjust-checkbox" value="${escapeHtml(cat.name)}" ${isChecked ? 'checked' : ''}>
+            <span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
             <span class="cat-name" title="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</span>
-            <div class="cat-meta-pills">
-              <span class="cat-count-pill">${cat.count} ${cat.count === 1 ? 'item' : 'items'}</span>
-              <span class="cat-adj-pill ${adjCls}" title="Current adjustment: ${sign}${num}%">${sign}${num}%</span>
-            </div>
-          </div>
-        </label>
-      `;
-    }).join('');
+            ${pill}
+            <span class="cat-count">${cat.count} ${cat.count === 1 ? 'item' : 'items'}</span>
+          </label>`;
+      }).join('');
+    }
 
     updateAdjustmentUI();
   }
 
+  // Each action is its own endpoint under api/ (paths are relative to pages/dashboard.php).
+  const API_ROUTES = {
+    'state': 'app/state',
+    'open': 'versions/open', 'save': 'versions/save', 'approve': 'versions/approve', 'reject': 'versions/reject',
+    'export': 'versions/export', 'delete-version': 'versions/delete',
+    'audit-logs': 'audit/list', 'log-activity': 'audit/log_activity',
+    'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
+    'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
+    'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
+    'dev-reset': 'dev/reset'
+  };
   async function api(action, options = {}) {
-    const response = await fetch(`api.php?action=${encodeURIComponent(action)}`, { headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf || '' }, ...options });
+    const route = API_ROUTES[action];
+    if (!route) throw new Error(`Unknown action: ${action}`);
+    const response = await fetch(`../api/${route}.php`, { headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf || '' }, ...options });
+    if (response.status === 401) {
+      window.location.href = 'login.php';
+      throw new Error('Please sign in again.');
+    }
     const data = await response.json().catch(() => ({ ok: false, message: 'Invalid server response.' }));
     if (!response.ok || !data.ok) throw new Error(data.message || 'Request failed.');
     return data;
+  }
+  /** Stored file paths (storage/…) are relative to the project root; this page lives in pages/. */
+  function mediaUrl(path) {
+    const value = String(path || '');
+    return !value || /^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(value) ? value : `../${value}`;
   }
   function toast(message) { dom.toast.textContent = message; dom.toast.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => dom.toast.classList.remove('show'), 2600); }
   function escapeHtml(value) { const node = document.createElement('div'); node.textContent = String(value ?? ''); return node.innerHTML; }
@@ -399,7 +416,6 @@
   }
   function setAppLoading(loading) { document.body.classList.toggle('is-booting', loading); document.body.classList.toggle('is-ready', !loading); }
   function showApp() {
-    dom.loginView.hidden = true; dom.appView.hidden = false;
     dom.userName.textContent = state.user.name; dom.roleBadge.textContent = can('update') ? 'Admin' : 'Export only'; applyPermissions();
     switchPanel(getInitialPanelId(), true);
   }
@@ -428,7 +444,7 @@
         dom.percentage.value = state.adjustment || 0;
       }
       if (dom.categoryAdjustSearch) dom.categoryAdjustSearch.value = '';
-      renderCategoryAdjustmentList('');
+      renderCategoryAdjustmentList();
       requestAnimationFrame(() => {
         dom.percentage.focus();
         dom.percentage.select();
@@ -726,7 +742,7 @@
     if (custom?.imagePath) {
       const label = custom.altText || groupName || category || 'Product group';
       return `<div class="group-photo-wrap has-photo">
-        <img class="group-photo-img" src="${escapeHtml(custom.imagePath)}" alt="${escapeHtml(label)}" loading="lazy">
+        <img class="group-photo-img" src="${escapeHtml(mediaUrl(custom.imagePath))}" alt="${escapeHtml(label)}" loading="lazy">
         ${state.canEdit ? `<button type="button" class="group-photo-change-btn edit-only choose-group-image" data-category="${escapeHtml(category)}" data-group="${escapeHtml(groupName)}" title="Change photo for ${escapeHtml(groupName)}">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           Change
@@ -791,7 +807,7 @@
     dom.imageSettingsList.innerHTML = visible.map(group => {
       const custom = imageOverride(group.category, group.groupName);
       const previewMarkup = custom?.imagePath
-        ? `<img class="image-setting-preview" src="${escapeHtml(custom.imagePath)}" alt="${escapeHtml(group.groupName)} preview">`
+        ? `<img class="image-setting-preview" src="${escapeHtml(mediaUrl(custom.imagePath))}" alt="${escapeHtml(group.groupName)} preview">`
         : `<div class="image-setting-preview empty-preview" title="No photo set">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -818,6 +834,7 @@
     return (state.photoLibrary || []).find(photo => photo.id === id)?.name || '';
   }
   function renderTable() {
+    renderCategoryPicker();
     const visible = filteredRows();
     const valueMarkup = (row, column) => { const raw = row[column] ?? '', price = state.priceColumns.includes(column) && isNumeric(raw), value = price ? adjusted(numeric(raw), String(row[0] ?? '')) : raw; return price ? money.format(value) : escapeHtml(raw).replace(/\r?\n/g, '<br>'); };
     const standardHeader = () => `
@@ -2062,6 +2079,7 @@
   function toggleSwitcher(open) {
     if (!switcherMenu || !switcherButton) return;
     if (open) {
+      if (typeof toggleCategoryMenu === 'function') toggleCategoryMenu(false);
       switcher.country = state.active?.country || '';
       switcher.level = state.active?.priceLevel || '';
       switcher.query = '';
@@ -2111,6 +2129,92 @@
     if (switcherMenu && !switcherMenu.hidden && !event.target.closest('#listSwitcherMenu') && !event.target.closest('#listSwitcher')) toggleSwitcher(false);
   });
   window.addEventListener('resize', () => { if (!switcherMenu?.hidden) toggleSwitcher(false); });
+
+  // --- Category picker: styled button + menu; the hidden #categorySelect stays the source of truth ---
+  const categoryMenu = $('#categoryMenu');
+  const categoryPicker = $('#categoryPicker');
+  let categoryQuery = '';
+  function categoryCounts() {
+    const counts = new Map();
+    (state.rows || []).forEach(row => {
+      const name = String(row[COL.category] ?? '').trim();
+      if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }
+  function renderCategoryPicker() {
+    if (!categoryPicker) return;
+    const counts = categoryCounts();
+    const current = state.category || '';
+    const count = current ? (counts.find(([name]) => name === current)?.[1] || 0) : (state.rows || []).length;
+    $('#cpLabel').textContent = current || 'All categories';
+    $('#cpCount').textContent = String(count);
+    categoryPicker.classList.toggle('is-filtered', Boolean(current));
+    categoryPicker.title = `${current || 'All categories'} · ${count} product${count === 1 ? '' : 's'}`;
+    if (!categoryMenu?.hidden) renderCategoryMenu();
+  }
+  function renderCategoryMenu() {
+    const counts = categoryCounts();
+    const query = categoryQuery.trim().toLowerCase();
+    const current = state.category || '';
+    const entries = [['', 'All categories', (state.rows || []).length], ...counts.map(([name, count]) => [name, name, count])]
+      .filter(([value, label]) => !query || !value || label.toLowerCase().includes(query));
+    $('#categoryMenuSearchWrap').hidden = counts.length < 7;
+    $('#categoryMenuList').innerHTML = entries.map(([value, label, count]) =>
+      `<button type="button" class="lsm-item ${value === current ? 'is-highlight is-current' : ''} ${value ? '' : 'cm-all'}" data-category="${escapeHtml(value)}" role="option" aria-selected="${value === current}">
+        <span class="lsm-label">${escapeHtml(label)}</span><span class="lsm-meta">${count}</span></button>`).join('')
+      || '<p class="lsm-empty">No matching categories</p>';
+  }
+  function toggleCategoryMenu(open) {
+    if (!categoryMenu || !categoryPicker) return;
+    if (open) {
+      if (typeof toggleSwitcher === 'function') toggleSwitcher(false);
+      categoryQuery = '';
+      $('#categoryMenuSearch').value = '';
+      renderCategoryMenu();
+      categoryMenu.hidden = false;
+      const rect = categoryPicker.getBoundingClientRect();
+      const width = Math.max(rect.width, 260);
+      categoryMenu.style.width = `${width}px`;
+      categoryMenu.style.top = `${Math.round(rect.bottom + 6)}px`;
+      categoryMenu.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
+      requestAnimationFrame(() => ($('#categoryMenuSearchWrap').hidden ? categoryMenu.querySelector('.lsm-item.is-current, .lsm-item') : $('#categoryMenuSearch'))?.focus());
+    } else {
+      categoryMenu.hidden = true;
+    }
+    categoryPicker.setAttribute('aria-expanded', String(open));
+    categoryPicker.classList.toggle('is-open', open);
+  }
+  function chooseCategory(value) {
+    toggleCategoryMenu(false);
+    if (value === (state.category || '')) return;
+    dom.category.value = value;
+    dom.category.dispatchEvent(new Event('change'));
+  }
+  categoryPicker?.addEventListener('click', event => { event.stopPropagation(); toggleCategoryMenu(categoryMenu.hidden); });
+  categoryMenu?.addEventListener('click', event => {
+    event.stopPropagation();
+    const item = event.target.closest('.lsm-item');
+    if (item) chooseCategory(item.dataset.category || '');
+  });
+  categoryMenu?.addEventListener('keydown', event => {
+    const items = [...categoryMenu.querySelectorAll('.lsm-item')];
+    const index = items.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); items[Math.min(items.length - 1, index + 1)]?.focus(); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); (index <= 0 ? $('#categoryMenuSearch') : items[index - 1])?.focus(); }
+  });
+  $('#categoryMenuSearch')?.addEventListener('input', event => { categoryQuery = event.target.value; renderCategoryMenu(); });
+  $('#categoryMenuSearch')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); const first = [...categoryMenu.querySelectorAll('.lsm-item')].find(item => item.dataset.category) || categoryMenu.querySelector('.lsm-item'); if (first) chooseCategory(first.dataset.category || ''); }
+    else if (event.key === 'ArrowDown') { event.preventDefault(); categoryMenu.querySelector('.lsm-item')?.focus(); }
+  });
+  document.addEventListener('click', event => {
+    if (categoryMenu && !categoryMenu.hidden && !event.target.closest('#categoryMenu') && !event.target.closest('#categoryPicker')) toggleCategoryMenu(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && categoryMenu && !categoryMenu.hidden) { event.preventDefault(); toggleCategoryMenu(false); categoryPicker.focus(); }
+  });
+  window.addEventListener('resize', () => { if (!categoryMenu?.hidden) toggleCategoryMenu(false); });
 
   // --- Approvals panel ---
   function statusPill(status) {
@@ -2914,7 +3018,7 @@
   async function loadPdfImages() {
     const urls = {};
     state.productImages.forEach(image => {
-      if (image.key && image.imagePath) urls[`custom:${image.key}`] = image.imagePath;
+      if (image.key && image.imagePath) urls[`custom:${image.key}`] = mediaUrl(image.imagePath);
     });
     for (const [key, url] of Object.entries(urls)) {
       if (!pdfImageCache[key]) {
@@ -3257,58 +3361,14 @@
     }
   }
 
-  dom.loginForm.addEventListener('submit', async event => { event.preventDefault(); dom.loginError.textContent = ''; try { const data = await api('login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) }); state.user = data.user; state.csrf = data.csrf; state.category = ''; rememberCategory(''); setAppLoading(true); await loadState(); } catch (error) { setAppLoading(false); dom.loginError.textContent = error.message; } });
   $('#logoutButton').addEventListener('click', () => dom.logoutDialog.showModal());
-  dom.logoutForm.addEventListener('submit', async event => {
+  dom.logoutForm.addEventListener('submit', event => {
     event.preventDefault();
-    if (event.submitter && event.submitter.value === 'cancel') {
-      dom.logoutDialog.close();
-      return;
-    }
     dom.logoutDialog.close();
-
-    // Immediately hide the workspace and reveal the login view smoothly
-    dom.appView.hidden = true;
-    dom.loginView.hidden = false;
-    document.body.dataset.authenticated = 'false';
-    document.body.classList.remove('is-booting');
-    document.body.classList.add('is-ready');
-
-    const csrf = state.csrf;
-    state.user = null;
-    state.csrf = '';
-    state.permissions = [];
-    state.canEdit = false;
-    state.devTools = false;
-    if ($('#devTools')) $('#devTools').hidden = true;
-    state.notifications = [];
-    state.unreadCount = 0;
-    state.auditLogs = [];
-    lastSeenNotificationId = null;
-    state.category = '';
+    if (event.submitter && event.submitter.value === 'cancel') return;
+    // A fresh sign-in starts on "All categories".
     rememberCategory('');
-    state.active = null;
-    state.rows = [];
-    state.headers = [];
-    state.versions = [];
-    state.productImages = [];
-    state.imageCategory = '';
-    state.imageSearch = '';
-    state.pendingImageGroup = null;
-    state.pendingImageDelete = null;
-    if (dom.imageSearchInput) dom.imageSearchInput.value = '';
-    $$('.nav-item')[0]?.click();
-    window.__BOOT__ = { user: null, csrf: '' };
-
-    try {
-      await fetch('api.php?action=logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf || '' },
-        body: '{}'
-      });
-    } catch {
-      // Session destroyed on server
-    }
+    window.location.href = '../auth/logout.php';
   });
   $('#uploadButton').addEventListener('click', openUploadModal); $('#emptyUploadButton').addEventListener('click', openUploadModal);
   dom.emptyState.addEventListener('dragover', event => {
@@ -3407,6 +3467,13 @@
       event.preventDefault();
       event.stopPropagation();
       applyPriceAdjustment();
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      // The field accepts cents (step 0.01), but arrows step by whole percents.
+      event.preventDefault();
+      const delta = (event.key === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 10 : 1);
+      const next = Math.round(((Number(dom.percentage.value) || 0) + delta) * 100) / 100;
+      dom.percentage.value = Math.min(10000, Math.max(-100, next));
+      updateAdjustmentUI();
     }
   });
   dom.percentage?.addEventListener('input', () => {
@@ -3424,19 +3491,17 @@
     } else {
       selectedAdjustmentCategories.delete(cat);
     }
-    cb.closest('.category-checkbox-item')?.classList.toggle('checked', cb.checked);
+    cb.closest('.adj-cat-row')?.classList.toggle('checked', cb.checked);
     updateAdjustmentUI();
   });
-  dom.selectAllCategoriesBtn?.addEventListener('click', () => {
-    getPriceCategories().forEach(c => selectedAdjustmentCategories.add(c.name));
-    renderCategoryAdjustmentList(dom.categoryAdjustSearch?.value || '');
-  });
-  dom.deselectAllCategoriesBtn?.addEventListener('click', () => {
-    selectedAdjustmentCategories.clear();
-    renderCategoryAdjustmentList(dom.categoryAdjustSearch?.value || '');
+  dom.adjAllCategories?.addEventListener('change', () => {
+    const listed = listedAdjustmentCategories();
+    const selectAll = listed.some(c => !selectedAdjustmentCategories.has(c.name));
+    listed.forEach(c => selectAll ? selectedAdjustmentCategories.add(c.name) : selectedAdjustmentCategories.delete(c.name));
+    renderCategoryAdjustmentList();
   });
   dom.categoryAdjustSearch?.addEventListener('input', () => {
-    renderCategoryAdjustmentList(dom.categoryAdjustSearch.value);
+    renderCategoryAdjustmentList();
   });
   $$('.adj-preset-chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -4181,10 +4246,6 @@
       logActivity('reset_prices', 'Reset price adjustments to 0%', previous.length ? `Cleared: ${previous.join(', ')}.` : 'All adjustments cleared.', { cleared: previous });
     }
     dom.percentage.value = 0;
-    const title = $('#adjustmentTitle');
-    const subtitle = document.querySelector('#adjustmentBar .edit-summary span');
-    if (title && state.category) title.textContent = `Adjust ${state.category} prices`;
-    if (subtitle) subtitle.textContent = state.category ? `Adjust ${state.category} or apply globally to all categories.` : 'Adjust prices for current category or apply globally.';
     updateMetrics();
     renderTable();
     toast('All price adjustments reset to original (0%). Uploaded file retained.');
@@ -4571,7 +4632,7 @@
   function photoCardMarkup(photo, { selected = false, current = false, deletable = false } = {}) {
     const usage = photoUsage(photo.id).length;
     return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-photo-id="${escapeHtml(photo.id)}" role="option" tabindex="0" aria-selected="${selected}" title="${escapeHtml(photo.name)}">
-      <div class="library-thumb"><img src="${escapeHtml(photo.imagePath)}" alt="${escapeHtml(photo.name)}" loading="lazy"></div>
+      <div class="library-thumb"><img src="${escapeHtml(mediaUrl(photo.imagePath))}" alt="${escapeHtml(photo.name)}" loading="lazy"></div>
       <div class="library-meta">
         <strong>${escapeHtml(photo.name)}</strong>
         <small>${current ? 'Current photo' : usage ? `Used by ${usage} product type${usage === 1 ? '' : 's'}` : 'Not used yet'}</small>
@@ -4828,49 +4889,6 @@
       button.disabled = false;
     }
   });
-
-  function initTheme() {
-    let savedTheme = null;
-    try {
-      savedTheme = localStorage.getItem('pla_theme');
-    } catch { }
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const currentTheme = savedTheme || (prefersDark ? 'dark' : 'light');
-    applyTheme(currentTheme);
-
-    $$('.theme-toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const nextTheme = isDark ? 'light' : 'dark';
-        applyTheme(nextTheme);
-        try {
-          localStorage.setItem('pla_theme', nextTheme);
-        } catch { }
-      });
-    });
-  }
-
-  function applyTheme(theme) {
-    const isDark = theme === 'dark';
-    if (isDark) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.body.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      document.body.removeAttribute('data-theme');
-    }
-
-    $$('.theme-toggle-btn').forEach(btn => {
-      const sun = btn.querySelector('.theme-icon-sun');
-      const moon = btn.querySelector('.theme-icon-moon');
-      if (sun) sun.hidden = !isDark;
-      if (moon) moon.hidden = isDark;
-      btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
-      btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
-    });
-  }
-
-  initTheme();
 
   if (state.user) loadState().catch(error => { setAppLoading(false); toast(error.message); });
 })();

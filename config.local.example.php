@@ -4,6 +4,7 @@ declare(strict_types=1);
 // Copy this file to config.local.php. The copied file is ignored by Git.
 // Never commit database passwords to source control.
 return [
+    // App storage in SQL Server (leave out to keep storage/app.json).
     'database' => [
         'host' => '10.2.0.167',
         'database' => 'LRNPH_OJT',
@@ -12,10 +13,20 @@ return [
         'trust_certificate' => true,
     ],
 
-    // Optional: replace the default accounts. Generate hashes with
+    // Employee master list for biometrics sign-in (read only). Settings left out fall back to 'database'.
+    'master_list' => [
+        'host' => '10.2.0.167',
+        'database' => 'LRNPH_OJT',
+        'username' => 'your_sql_username',
+        'password' => 'your_sql_password',
+        // 'table' => 'dbo.lrn_master_list',
+    ],
+
+    // Optional: replace the default accounts. Employees are linked to the master list by employee_id
+    // and sign in with their BiometricsID from it. Other accounts sign in with email + password_hash:
     //   php -r "echo password_hash('NewPassword!', PASSWORD_DEFAULT);"
     // 'users' => [
-    //     'gen@lrn.local' => ['username' => 'gen', 'name' => 'Gen Ong', 'role' => 'admin', 'password_hash' => '...'],
+    //     'gen@lrn.local' => ['username' => 'gen', 'name' => 'Gen Ong', 'role' => 'admin', 'employee_id' => '2015-1652'],
     //     'gemma@lrn.local' => ['username' => 'gemma', 'name' => 'Gemma Comission', 'role' => 'user', 'password_hash' => '...'],
     // ],
 

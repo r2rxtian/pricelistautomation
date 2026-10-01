@@ -8,13 +8,14 @@ A PHP 8.2 application for uploading an Excel price list, adjusting prices by cat
 2. Open `http://localhost/pricelistautomation/`.
 3. Sign in with one of the accounts below.
 
-| User | Email | Initial password | Access |
-|---|---|---|---|
-| Ms. Gen (Gen Ong) | `gen@lrn.local` | `Gen@2026!` | Upload · Update · Save · Approve · Export |
-| Chelsea Favila | `chelsea@lrn.local` | `Chelsea@2026!` | Upload · Update · Save · Approve · Export |
-| Margaret Santos | `margaret@lrn.local` | `Margaret@2026!` | Upload · Update · Save · Approve · Export |
-| Gemma Comission | `gemma@lrn.local` | `Gemma@2026!` | Export approved price lists only |
+| User | Employee no. (LRNPH_OJT master list) | Sign in with (biometrics ID) | Password | Access |
+|---|---|---|---|---|
+| Ms. Gen (Gen Ong) | 2015-1652 | `1652` | `1652` | Upload · Update · Save · Approve (instant) · Export |
+| Chelsea Favila | 2012-00077 | `10079` | `10079` | Upload · Update · Save · Approve · Export |
+| Margaret Santos | 2014-00446 | `1857` | `1857` | Upload · Update · Save · Approve · Export |
+| Gemma Comission | not yet known | `gemma@lrn.local` | `Gemma@2026!` | Export only |
 
+Employee sign-in is checked live against `dbo.lrn_master_list` (LRNPH_OJT): the app finds the active row (`IsActive = '1'`) with that `BiometricsID`, and its `EmployeeID` must belong to an account in `config.php`. The password is the same biometrics ID. No biometrics IDs or passwords are stored in this project, so a changed ID in the master list takes effect at once and an employee who leaves loses access. The IDs above are what the master list holds today. The connection goes in `config.local.php` under `master_list` (see `config.local.example.php`); if the master list can't be reached, employees can't sign in. Gemma keeps the email login until her employee number is added to `config.php`.
 Change the passwords before going live by overriding `users` in `config.local.php` (see `config.local.example.php`). Passwords are stored as bcrypt hashes.
 
 ## Workflow

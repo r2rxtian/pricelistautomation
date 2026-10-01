@@ -1,33 +1,30 @@
 <?php
 declare(strict_types=1);
+/**
+ * SQL Server storage for price lists, audit logs, notifications and photos (dbo.PLA_ACD_* tables).
+ * Used when conn/config.php sets PLA_STORAGE_DRIVER to 'sqlserver'.
+ */
+
+require_once __DIR__ . '/../rules/constants.php';
 
 function database_enabled(): bool
 {
-    return DATABASE_CONFIG['host'] !== ''
-        && DATABASE_CONFIG['database'] !== ''
-        && DATABASE_CONFIG['username'] !== ''
-        && DATABASE_CONFIG['password'] !== '';
+    return STORAGE_DRIVER === 'sqlserver';
 }
 
+/** The shared connection (conn/db.php), with the storage tables created on first use. */
 function database_connection(): PDO
 {
-    static $connection = null;
-    if ($connection instanceof PDO) return $connection;
-
-    $config = DATABASE_CONFIG;
-    $server = str_replace([';', "\0", "\r", "\n"], '', $config['host']);
-    $database = str_replace([';', "\0", "\r", "\n"], '', $config['database']);
-    $trust = $config['trust_certificate'] ? 'yes' : 'no';
-    $dsn = "sqlsrv:Server={$server};Database={$database};TrustServerCertificate={$trust};LoginTimeout=5";
-    $connection = new PDO($dsn, $config['username'], $config['password'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
-    ensure_database_schema($connection);
+    static $ready = false;
+    $connection = db();
+    if (!$ready) {
+        ensure_database_schema($connection);
+        $ready = true;
+    }
     return $connection;
 }
 
-/** Idempotent DDL, kept in sync with database/schema.sql. */
+/** Idempotent DDL for the storage tables, kept in sync with sql/schema.sql. */
 function ensure_database_schema(PDO $connection): void
 {
     $statements = [

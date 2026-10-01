@@ -4,4 +4,4 @@
 /storage/sessions/
 /storage/product-images/
 /storage/product-library/
-/config.local.php
+/conn/config.php

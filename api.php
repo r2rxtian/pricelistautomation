@@ -149,11 +149,17 @@ function find_open_version(array $user, string $id): array
 try {
     if ($action === 'login') {
         $data = request_json();
-        $email = strtolower(clean_text($data['email'] ?? '', 120));
+        // Biometrics ID from the master list (e.g. 1652) for employees; email for other accounts.
+        $login = clean_text($data['login'] ?? $data['email'] ?? '', 120);
         $password = (string) ($data['password'] ?? '');
-        $record = find_user_by_email($email);
-        if (!$record || !verify_user_password($record, $password)) {
-            json_response(['ok' => false, 'message' => 'Incorrect email or password.'], 422);
+        try {
+            $record = authenticate_login($login, $password);
+        } catch (MasterListUnavailable $error) {
+            error_log('Sign-in: ' . $error->getMessage());
+            json_response(['ok' => false, 'message' => "Can't reach the employee master list right now, so biometrics sign-in is unavailable. Please try again shortly."], 503);
+        }
+        if (!$record) {
+            json_response(['ok' => false, 'message' => 'Incorrect biometrics ID or password.'], 422);
         }
         session_regenerate_id(true);
         $user = public_user($record);

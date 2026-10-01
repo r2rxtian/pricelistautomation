@@ -15,7 +15,7 @@ $user = current_user();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/app.css?v=20260929-approval-workflow-v57">
+    <link rel="stylesheet" href="assets/app.css?v=20260929-approval-workflow-v66">
     <script>
     (function() {
         try {
@@ -57,13 +57,13 @@ $user = current_user();
         <h1 id="loginTitle">Price lists, without the spreadsheet drift.</h1>
         <p class="muted">Upload a price list, adjust prices by category, get it approved, then export it to Excel or PDF.</p>
         <form id="loginForm" class="login-form">
-            <label>Email<input id="email" name="email" type="email" placeholder="name@lrn.local" autocomplete="username" required></label>
+            <label>Biometrics ID<input id="email" name="login" type="text" inputmode="numeric" placeholder="e.g. 1652" autocomplete="username" required></label>
             <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
             <button class="button primary" type="submit">Sign in</button>
             <p id="loginError" class="form-error" role="alert"></p>
         </form>
     </section>
-    <aside class="login-art" aria-label="System capabilities">
+    <aside class="login-art" id="loginArt" aria-label="System capabilities">
         <div class="art-grid"></div>
         <div class="capability"><span>01</span><strong>Upload</strong><small>Excel price list</small></div>
         <div class="capability"><span>02</span><strong>Adjust</strong><small>By category or all</small></div>
@@ -201,64 +201,49 @@ $user = current_user();
                             </div>
                         </div>
                         <section id="adjustmentBar" class="adjustment-bar price-popover" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
-                            <div class="popover-header">
-                                <div class="edit-summary">
-                                    <strong id="adjustmentTitle">Adjust Prices</strong>
-                                    <span>Increase or decrease prices by percentage for selected categories.</span>
-                                </div>
-                                <button type="button" id="closeAdjustmentBarBtn" class="popover-close-btn" aria-label="Close" title="Close editor">✕</button>
-                            </div>
                             <form id="adjustmentForm" class="adjustment-form-wrap" onsubmit="return false;">
-                                <div class="adjustment-field-group">
-                                    <div class="adj-field-header">
-                                        <label for="percentage">Percentage Adjustment</label>
-                                        <span class="adj-field-hint">e.g. +5% or -10%</span>
-                                    </div>
-                                    <div class="percentage-input-row">
-                                        <div class="percentage-input">
-                                            <input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0" placeholder="0.00">
-                                            <span>%</span>
-                                        </div>
-                                    </div>
+                                <div class="adj-head">
+                                    <strong id="adjustmentTitle">Adjust prices</strong>
+                                    <button type="button" id="closeAdjustmentBarBtn" class="popover-close-btn" aria-label="Close" title="Close (Esc)">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    </button>
+                                </div>
+
+                                <div class="adj-amount">
+                                    <label class="percentage-input" for="percentage" title="Percentage change, e.g. 5 or -10. Arrow keys step by 1 (Shift: 10).">
+                                        <input id="percentage" type="number" min="-100" max="10000" step="0.01" value="0" placeholder="0" aria-label="Percentage adjustment">
+                                        <span>%</span>
+                                    </label>
                                     <div class="adj-presets" role="group" aria-label="Preset percentages">
-                                        <button type="button" class="adj-preset-chip" data-preset="2">+2%</button>
-                                        <button type="button" class="adj-preset-chip" data-preset="5">+5%</button>
-                                        <button type="button" class="adj-preset-chip" data-preset="10">+10%</button>
-                                        <button type="button" class="adj-preset-chip" data-preset="-5">-5%</button>
-                                        <button type="button" class="adj-preset-chip" data-preset="-10">-10%</button>
-                                        <button type="button" class="adj-preset-chip" data-preset="0">0%</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="-10">−10</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="-5">−5</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="0">0</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="2">+2</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="5">+5</button>
+                                        <button type="button" class="adj-preset-chip" data-preset="10">+10</button>
                                     </div>
                                 </div>
 
-                                <div class="adjustment-categories-section">
-                                    <div class="adj-categories-header">
-                                        <div class="adj-categories-title">
-                                            <label>Select Categories</label>
-                                            <span id="selectedCategoryCountBadge" class="selected-cat-badge">0 selected</span>
-                                        </div>
-                                        <div class="adj-categories-quick-actions">
-                                            <button type="button" id="selectAllCategoriesBtn" class="text-button">Select all</button>
-                                            <span class="sep-dot">·</span>
-                                            <button type="button" id="deselectAllCategoriesBtn" class="text-button">Deselect</button>
-                                        </div>
-                                    </div>
-
-                                    <div class="category-search-box" id="categoryAdjustSearchBox">
+                                <div class="adj-cats">
+                                    <label class="adj-cat-row adj-cat-all">
+                                        <input type="checkbox" id="adjAllCategories">
+                                        <span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                        <span class="cat-name" id="adjAllLabel">All categories</span>
+                                        <span class="cat-count" id="adjCategoryTotal"></span>
+                                    </label>
+                                    <div class="category-search-box" id="categoryAdjustSearchBox" hidden>
                                         <svg class="cat-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                        <input type="search" id="categoryAdjustSearch" placeholder="Search categories..." autocomplete="off">
+                                        <input type="search" id="categoryAdjustSearch" placeholder="Search categories…" autocomplete="off">
                                     </div>
-
-                                    <div class="category-checkboxes-container" id="categoryCheckboxesList" role="group" aria-label="Target categories">
-                                        <!-- Categories with checkboxes rendered dynamically via JavaScript -->
-                                    </div>
+                                    <div class="category-checkboxes-container" id="categoryCheckboxesList" role="group" aria-label="Categories to adjust"></div>
                                 </div>
 
                                 <div class="adjustment-actions">
+                                    <span id="adjPreviewSummary" class="adj-preview-summary"></span>
                                     <button id="previewButton" type="submit" class="button primary btn-apply-adjustment">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                                        <span id="applyButtonText">Apply Adjustment</span>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <span id="applyButtonText">Apply</span>
                                     </button>
-                                    <span id="adjPreviewSummary" class="adj-preview-summary">Select categories above to apply percentage.</span>
                                 </div>
                             </form>
                         </section>
@@ -296,7 +281,8 @@ $user = current_user();
                                 <svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                             </button>
                             <span class="filter-sep" aria-hidden="true"></span>
-                            <label class="filter-field"><span>Category</span><select id="categorySelect"></select></label>
+                            <select id="categorySelect" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+                            <button type="button" id="categoryPicker" class="list-switcher category-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="categoryMenu" title="Filter by product category"><svg class="cp-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="cp-label" id="cpLabel">All categories</span><span class="cp-count" id="cpCount">0</span><svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
                             <label class="filter-field"><span>LRN</span><input id="codeFilterInput" type="search" placeholder="Code" autocomplete="off" list="codeFilterOptions"><datalist id="codeFilterOptions"></datalist></label>
                             <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search descriptions, prices..."><kbd class="search-kbd">/</kbd></label>
                             <button type="button" id="clearFiltersBtn" class="text-button clear-filters-btn" hidden>Clear filters</button>
@@ -910,12 +896,17 @@ $user = current_user();
         <div class="lsm-col lsm-col-lists"><p class="lsm-heading">Price list</p><div id="lsmLists" role="listbox" aria-label="Price lists"></div></div>
     </div>
 </div>
+<div id="categoryMenu" class="list-switcher-menu category-menu" role="dialog" aria-label="Product category" hidden>
+    <div class="lsm-search" id="categoryMenuSearchWrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="categoryMenuSearch" placeholder="Search categories…" autocomplete="off" aria-label="Search categories"></div>
+    <p class="lsm-heading">Product category</p>
+    <div id="categoryMenuList" class="cm-list" role="listbox" aria-label="Product categories"></div>
+</div>
 <div id="rowMenu" class="row-menu" role="menu" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => $_SESSION['csrf']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
 <script src="assets/vendor/jspdf.umd.min.js"></script>
 <script src="assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="assets/app.js?v=20260929-approval-workflow-v58"></script>
+<script src="assets/app.js?v=20260929-approval-workflow-v64"></script>
 </body>
 </html>

@@ -1,0 +1,329 @@
+/*
+ * login.css — the sign-in page (pages/login.php). Loaded after styles/app.css, which provides the
+ * design tokens, buttons and theme variables.
+ */
+
+/* Login Shell */
+.login-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(380px, 55%) 1fr;
+  animation: login-shell-reveal .48s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.login-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 8vw, 120px);
+  max-width: 830px;
+}
+
+.login-panel .brand-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--pink);
+  color: var(--pink);
+  font: 700 .95rem var(--sans);
+  margin-bottom: 48px;
+  border-radius: 8px;
+  box-shadow: 0 0 20px var(--pink-subtle);
+}
+
+.login-panel h1 {
+  font-family: var(--display);
+  font-size: clamp(2rem, 3.2vw, 3.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text-heading);
+  margin-bottom: 12px;
+}
+
+.login-panel>.muted {
+  max-width: 500px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  margin-top: 28px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-body);
+  font-size: 0.8rem;
+}
+
+.login-form input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--line-panel);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--text-body);
+  padding: 0 12px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color .2s ease;
+}
+
+.login-form input:focus {
+  border-color: var(--pink);
+}
+
+.login-art {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 84% 18%, rgba(255, 255, 255, .48), transparent 30%),
+    linear-gradient(145deg, #f3b9c1, #efc9cd 58%, #eaaab4);
+  color: var(--text-heading);
+  padding: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.art-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(25, 7, 17, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(25, 7, 17, 0.16) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+.capability {
+  position: relative;
+  border-top: 1px solid rgba(25, 7, 17, 0.45);
+  padding: 18px 0;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: baseline;
+}
+
+.capability span,
+.capability small {
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.capability strong {
+  font-size: 1.45rem;
+}
+
+/* Login Page Motion */
+.login-panel .brand-mark {
+  animation: login-fade-up .44s cubic-bezier(.22, 1, .36, 1) both 60ms;
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), box-shadow .3s ease, border-color .2s ease;
+}
+
+.login-panel .brand-mark:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--pink) 40%, transparent);
+}
+
+.login-panel .kicker {
+  animation: login-fade-up .44s cubic-bezier(.22, 1, .36, 1) both 120ms;
+}
+
+.login-panel h1 {
+  animation: login-fade-up .46s cubic-bezier(.22, 1, .36, 1) both 180ms;
+}
+
+.login-panel>.muted {
+  animation: login-fade-up .46s cubic-bezier(.22, 1, .36, 1) both 240ms;
+}
+
+.login-panel .login-form {
+  animation: login-fade-up .48s cubic-bezier(.22, 1, .36, 1) both 300ms;
+}
+
+.login-art {
+  animation: login-art-enter .54s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.art-grid {
+  animation: art-grid-reveal .8s ease both 150ms;
+}
+
+.capability {
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1), border-color .2s ease;
+}
+
+.capability:hover {
+  transform: translateX(4px);
+}
+
+.login-art .capability:nth-child(2) {
+  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 320ms;
+}
+
+.login-art .capability:nth-child(3) {
+  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 400ms;
+}
+
+.login-art .capability:nth-child(4) {
+  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 480ms;
+}
+
+.login-theme-toggle {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+}
+
+[data-theme="dark"] .login-theme-toggle {
+  background: rgba(18, 18, 22, 0.9);
+  border-color: #2c2c36;
+  color: #eb97ae;
+}
+
+/* Login Shell */
+[data-theme="dark"] .login-shell {
+  background: #18191e;
+}
+
+[data-theme="dark"] .login-panel {
+  background: #111216;
+  border-color: #26292e;
+}
+
+[data-theme="dark"] .login-panel .brand-mark {
+  border-color: #eb97ae;
+  color: #eb97ae;
+  box-shadow: 0 0 20px rgba(235, 151, 174, 0.25);
+}
+
+[data-theme="dark"] .login-panel h1 {
+  color: #f3d8e2;
+}
+
+[data-theme="dark"] .login-panel .muted {
+  color: #8c8d94;
+}
+
+[data-theme="dark"] .login-form label {
+  color: #d4d4d8;
+}
+
+[data-theme="dark"] .login-form input {
+  background: #18191e;
+  border-color: #28292e;
+  color: #f4f4f6;
+}
+
+[data-theme="dark"] .login-form input:focus {
+  border-color: #eb97ae;
+  box-shadow: 0 0 0 3px rgba(235, 151, 174, 0.25);
+}
+
+[data-theme="dark"] .login-art {
+  background: linear-gradient(135deg, #111216, #1e1518);
+  border-left-color: #26292e;
+}
+
+[data-theme="dark"] .capability {
+  background: rgba(27, 29, 34, 0.8);
+  border-color: #33363e;
+}
+
+[data-theme="dark"] .capability strong {
+  color: #f4f4f6;
+}
+
+[data-theme="dark"] .capability span {
+  color: #eb97ae;
+}
+
+/* ==========================================================================
+   Login page: right-half hover effects (both themes) and a proper dark mode
+   ========================================================================== */
+.login-art { --mx: 70%; --my: 30%; }
+
+/* Soft spotlight that follows the mouse across the grid */
+.login-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(260px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.38), transparent 70%);
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+
+.login-art:hover::after { opacity: 1; }
+
+.login-art .capability { z-index: 1; margin: 0 -14px; padding: 18px 14px; border-radius: 10px; transition: transform .28s cubic-bezier(.22, 1, .36, 1), background-color .2s ease, border-color .2s ease; }
+
+.login-art .capability span,
+.login-art .capability strong,
+.login-art .capability small { transition: color .2s ease, transform .28s cubic-bezier(.22, 1, .36, 1), letter-spacing .28s ease; }
+
+.login-art .capability:hover { transform: translateX(6px); background-color: rgba(255, 255, 255, 0.32); border-top-color: transparent; }
+
+.login-art .capability:hover + .capability { border-top-color: transparent; }
+
+.login-art .capability:hover span { color: #b52042; transform: scale(1.12); }
+
+.login-art .capability:hover strong { color: #8f1734; letter-spacing: 0.01em; }
+
+.login-art .capability:hover small { color: #43363d; }
+
+/* Dark mode: deep rose canvas with the grid visible again; steps without grey blocks */
+[data-theme="dark"] .login-art {
+  background:
+    radial-gradient(circle at 84% 18%, rgba(235, 151, 174, 0.16), transparent 34%),
+    radial-gradient(circle at 10% 95%, rgba(181, 32, 66, 0.18), transparent 40%),
+    linear-gradient(145deg, #1b0f14, #221218 58%, #2a1520);
+  border-left: 1px solid #2a1d22;
+}
+
+[data-theme="dark"] .art-grid {
+  background-image: linear-gradient(rgba(235, 151, 174, 0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(235, 151, 174, 0.09) 1px, transparent 1px);
+}
+
+[data-theme="dark"] .login-art::after { background: radial-gradient(260px circle at var(--mx) var(--my), rgba(235, 151, 174, 0.14), transparent 70%); }
+
+[data-theme="dark"] .login-art .capability { background: transparent; border-top: 1px solid rgba(235, 151, 174, 0.2); }
+
+[data-theme="dark"] .login-art .capability strong { color: #f4f4f6; }
+
+[data-theme="dark"] .login-art .capability span { color: #eb97ae; }
+
+[data-theme="dark"] .login-art .capability small { color: #a49aa0; }
+
+[data-theme="dark"] .login-art .capability:hover { background-color: rgba(235, 151, 174, 0.09); border-top-color: transparent; }
+
+[data-theme="dark"] .login-art .capability:hover strong { color: #ffd3de; }
+
+[data-theme="dark"] .login-art .capability:hover span { color: #f6b3c4; }
+
+[data-theme="dark"] .login-art .capability:hover small { color: #e4dadf; }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-art::after { display: none; }
+  
+  .login-art .capability:hover { transform: none; }
+}
+
+/* Straight divider lines; rounded corners only on the hovered step (its divider is hidden then) */
+.login-art .capability { border-radius: 0; }
+
+.login-art .capability:hover { border-radius: 10px; }
+
+/* Dark login: the panel column and the page share one colour, so wide screens show no band between them */
+[data-theme="dark"] .login-shell { background: #111216; }
+
+[data-theme="dark"] .login-panel { background: transparent; }

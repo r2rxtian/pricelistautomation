@@ -15,13 +15,18 @@ const ROLE_PERMISSIONS = [
 ];
 
 /*
- * Accounts are keyed by login email. Passwords are bcrypt hashes; override them
- * (and add or remove accounts) in config.local.php under the 'users' key.
+ * Accounts and their roles. Employees are linked by 'employee_id' (EmployeeID in LRNPH_OJT
+ * dbo.lrn_master_list): they sign in with the BiometricsID the master list holds for that employee,
+ * looked up live at sign-in, and the password is that same biometrics ID. No biometrics IDs or
+ * passwords are stored here, and an employee who is no longer active in the master list can't sign in.
+ * Accounts without an employee_id sign in with the email key and their password_hash.
+ * Override or extend in config.local.php under the 'users' key.
  */
 const DEFAULT_USERS = [
-    'gen@lrn.local' => ['username' => 'gen', 'name' => 'Gen Ong', 'role' => 'admin', 'password_hash' => '$2y$10$dJpIE5.2lt9kmc8mrD5.SeuqmyID0N.TcCoUBvDGCZpl2ROe/jPiK'],
-    'chelsea@lrn.local' => ['username' => 'chelsea', 'name' => 'Chelsea Favila', 'role' => 'admin', 'password_hash' => '$2y$10$xwR/iCZY/VrReMPDPGtV/uNqPQ53kMhK.zZ8n5A4bffstSONeBiKG'],
-    'margaret@lrn.local' => ['username' => 'margaret', 'name' => 'Margaret Santos', 'role' => 'admin', 'password_hash' => '$2y$10$Klf7UoI.9P8Ue2jiqgahrO0xAnNOnvKiN7RgdkUVMZnjwx4DMZ3R6'],
+    'gen@lrn.local' => ['username' => 'gen', 'name' => 'Gen Ong', 'role' => 'admin', 'employee_id' => '2015-1652'],
+    'chelsea@lrn.local' => ['username' => 'chelsea', 'name' => 'Chelsea Favila', 'role' => 'admin', 'employee_id' => '2012-00077'],
+    'margaret@lrn.local' => ['username' => 'margaret', 'name' => 'Margaret Santos', 'role' => 'admin', 'employee_id' => '2014-00446'],
+    // Gemma's employee number isn't known yet; she keeps the email login until it is.
     'gemma@lrn.local' => ['username' => 'gemma', 'name' => 'Gemma Comission', 'role' => 'user', 'password_hash' => '$2y$10$.DjUeOQjP9pSqqvh21fOLeW60eoUgb5tz3EjcrruceK1R/JpJQcC6'],
 ];
 
@@ -97,3 +102,17 @@ define('DATABASE_CONFIG', array_replace([
     'password' => getenv('PLA_DB_PASSWORD') ?: '',
     'trust_certificate' => filter_var(getenv('PLA_DB_TRUST_CERT') ?: 'true', FILTER_VALIDATE_BOOL),
 ], is_array($localConfiguration['database'] ?? null) ? $localConfiguration['database'] : []));
+
+/*
+ * Employee master list used for sign-in (LRNPH_OJT dbo.lrn_master_list). Set 'master_list' in
+ * config.local.php; any connection setting left out falls back to 'database' above. This only reads
+ * the master list; it doesn't move the app's own storage to SQL Server.
+ */
+define('MASTER_LIST_CONFIG', array_replace([
+    'host' => getenv('PLA_MASTER_DB_HOST') ?: DATABASE_CONFIG['host'],
+    'database' => getenv('PLA_MASTER_DB_NAME') ?: DATABASE_CONFIG['database'],
+    'username' => getenv('PLA_MASTER_DB_USER') ?: DATABASE_CONFIG['username'],
+    'password' => getenv('PLA_MASTER_DB_PASSWORD') ?: DATABASE_CONFIG['password'],
+    'trust_certificate' => DATABASE_CONFIG['trust_certificate'],
+    'table' => 'dbo.lrn_master_list',
+], is_array($localConfiguration['master_list'] ?? null) ? $localConfiguration['master_list'] : []));

@@ -63,6 +63,83 @@ function find_user_by_email(string $email): ?array
     return ['email' => strtolower($email)] + $record;
 }
 
+function find_user_by_employee_id(string $employeeId): ?array
+{
+    $employeeId = strtolower(trim($employeeId));
+    if ($employeeId === '') return null;
+    foreach (USERS as $email => $record) {
+        if (strtolower(trim((string) ($record['employee_id'] ?? ''))) === $employeeId) return ['email' => $email] + $record;
+    }
+    return null;
+}
+
+/** The master list isn't configured or can't be reached. */
+final class MasterListUnavailable extends RuntimeException {}
+
+function master_list_connection(): PDO
+{
+    static $connection = null;
+    if ($connection instanceof PDO) return $connection;
+    $config = MASTER_LIST_CONFIG;
+    if ($config['host'] === '' || $config['database'] === '' || $config['username'] === '' || $config['password'] === '') {
+        throw new MasterListUnavailable('The master list connection is not set up (config.local.php › master_list).');
+    }
+    $server = str_replace([';', "\0", "\r", "\n"], '', (string) $config['host']);
+    $database = str_replace([';', "\0", "\r", "\n"], '', (string) $config['database']);
+    $trust = $config['trust_certificate'] ? 'yes' : 'no';
+    try {
+        $connection = new PDO("sqlsrv:Server={$server};Database={$database};TrustServerCertificate={$trust};LoginTimeout=5", (string) $config['username'], (string) $config['password'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (PDOException $error) {
+        throw new MasterListUnavailable('Could not connect to the master list: ' . $error->getMessage(), 0, $error);
+    }
+    return $connection;
+}
+
+/**
+ * Active master-list rows with this BiometricsID. Some IDs appear on more than one row (old records),
+ * so the caller picks the row that belongs to an account here.
+ */
+function master_list_employees(string $biometricsId): array
+{
+    $table = (string) MASTER_LIST_CONFIG['table'];
+    if (!preg_match('/^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?$/', $table)) throw new MasterListUnavailable('Invalid master list table name.');
+    try {
+        $statement = master_list_connection()->prepare(
+            "SELECT EmployeeID, BiometricsID FROM {$table} WHERE LTRIM(RTRIM(BiometricsID)) = ? AND IsActive = '1'"
+        );
+        $statement->execute([$biometricsId]);
+        return $statement->fetchAll();
+    } catch (PDOException $error) {
+        throw new MasterListUnavailable('Master list lookup failed: ' . $error->getMessage(), 0, $error);
+    }
+}
+
+/**
+ * Checks a sign-in and returns the account, or null when the login or password is wrong.
+ * Employees: the login is their BiometricsID, looked up live in the master list and matched to an
+ * account here by EmployeeID; the password is that same biometrics ID.
+ * Other accounts (no employee_id): email + password_hash.
+ * Throws MasterListUnavailable when an employee login can't be checked.
+ */
+function authenticate_login(string $login, string $password): ?array
+{
+    $login = trim($login);
+    if ($login === '' || $password === '') return null;
+    if (str_contains($login, '@')) {
+        $record = find_user_by_email($login);
+        // Employees use their biometrics ID, not the placeholder email.
+        return $record && empty($record['employee_id']) && verify_user_password($record, $password) ? $record : null;
+    }
+    foreach (master_list_employees($login) as $employee) {
+        $record = find_user_by_employee_id((string) $employee['EmployeeID']);
+        if ($record) return hash_equals(trim((string) $employee['BiometricsID']), $password) ? $record : null;
+    }
+    return null;
+}
+
 function find_user_by_username(string $username): ?array
 {
     foreach (USERS as $email => $record) {

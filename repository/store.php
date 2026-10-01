@@ -2,13 +2,13 @@
 declare(strict_types=1);
 
 /*
- * Repository layer. Every repo_* function dispatches to SQL Server when
- * config.local.php provides credentials, otherwise to the JSON development store.
+ * Repository layer. Every repo_* function dispatches to SQL Server (dbo.PLA_ACD_* tables) when
+ * conn/config.php sets PLA_STORAGE_DRIVER to 'sqlserver', otherwise to the JSON store (storage/app.json).
  */
 
-const AUDIT_LOG_LIMIT = 5000;
-const NOTIFICATION_LIMIT_PER_USER = 200;
-const SUPERSEDED_KEEP_PER_LIST = 5;
+require_once __DIR__ . '/../rules/constants.php';
+require_once __DIR__ . '/sqlserver.php';
+require_once __DIR__ . '/../rules/workflow.php';
 
 // ---------------------------------------------------------------------------
 // JSON development store
