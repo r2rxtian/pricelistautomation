@@ -8495,3 +8495,22 @@ select.sd-open {
 #workspacePanel.has-file .workflow-note[data-tone="pending"],
 #workspacePanel.has-file .workflow-note[data-tone="rejected"],
 #workspacePanel.has-file .workflow-note[data-tone="superseded"] { margin-left: 12px; }
+
+/* ==========================================================================
+   Notifications panel, dark mode: the header had no dark background (it stayed near-white,
+   hiding the title); the rest is tuned to match.
+   ========================================================================== */
+[data-theme="dark"] .notifications-dropdown { background: #141519; border-color: #2a2c33; }
+[data-theme="dark"] .notifications-header { background: #18191e; border-bottom-color: #24262d; }
+[data-theme="dark"] .notifications-title strong { color: #f4f4f6; }
+[data-theme="dark"] .notifications-pill { background: #24191e; color: #f0a3b7; border: 1px solid #3d2630; }
+[data-theme="dark"] .notifications-header-actions .text-button { color: #f0a3b7; }
+[data-theme="dark"] .notifications-header-actions .text-muted-button { color: #7d818a !important; }
+[data-theme="dark"] .notifications-empty { color: #8c9099; }
+[data-theme="dark"] .notifications-empty svg { color: #4a4d56; }
+[data-theme="dark"] .notification-item { border-bottom-color: #1f2127; }
+[data-theme="dark"] .notification-item:hover { background-color: #1c1d23; }
+[data-theme="dark"] .notification-item.is-unread { background-color: #1f171b; }
+[data-theme="dark"] .notifications-footer { background: #141519; border-top-color: #24262d; }
+[data-theme="dark"] .notifications-footer-btn { background: #1b1d23; border-color: #3a3d47; color: #f0a3b7; }
+[data-theme="dark"] .notifications-footer-btn:hover { background: #eb97ae; border-color: #eb97ae; color: #1a0f14; }
