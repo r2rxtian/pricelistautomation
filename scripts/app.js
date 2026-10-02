@@ -641,7 +641,8 @@
       const edits = (active.pendingChanges || []).length;
       setSavedMeta(active.id ? `Unsaved edits to the version saved by ${active.savedBy || 'a user'}${edits ? ` · ${edits} cell edit${edits === 1 ? '' : 's'}` : ''}` : 'Imported workbook · Unsaved');
     } else {
-      setSavedMeta(active.savedAt ? `Saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Saved');
+      // An uploaded file's status note already says who uploaded it and when.
+      setSavedMeta(status === 'uploaded' ? '' : active.savedAt ? `Saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Saved');
     }
 
     // Compact one-line status note beside the price level / country tags (no extra row above the table).

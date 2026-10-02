@@ -34,7 +34,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=75">
+    <link rel="stylesheet" href="../styles/app.css?v=76">
     <script>
     (function() {
         try {
@@ -132,8 +132,8 @@ $panel = APP_PAGES[$page]['panel'];
                                 <span id="savedMeta" class="saved-meta"></span>
                             </div>
                             <div class="file-tags-row" id="listTagsRow" hidden>
-                                <span class="list-tag"><small>Price level</small><strong id="listPriceLevel">—</strong></span>
-                                <span class="list-tag list-tag-country"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><small>Country</small><strong id="listCountry">—</strong></span>
+                                <span class="list-tag list-tag-country" title="Country"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><small>Country</small><strong id="listCountry">—</strong></span>
+                                <span class="list-tag" title="Price level"><small>Price level</small><strong id="listPriceLevel">—</strong></span>
                                 <span class="list-tag" id="listRevisionTag" hidden><small>Revision</small><strong id="listRevision">1</strong></span>
                                 <span id="approvalBanner" class="workflow-note" role="status" aria-live="polite" hidden>
                                     <span id="approvalBannerIcon" class="workflow-note-icon" aria-hidden="true"></span>
@@ -888,7 +888,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=4"></script>
-<script src="../scripts/app.js?v=71"></script>
+<script src="../scripts/app.js?v=72"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=4"></script>
 <script src="../scripts/select-dropdown.js?v=2"></script>

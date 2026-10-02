@@ -8441,3 +8441,57 @@ select.sd-open {
   ::view-transition-old(root),
   ::view-transition-new(root) { animation: none; }
 }
+
+/* ==========================================================================
+   Open-file header: one quiet line of facts (country · price level · revision · status)
+   instead of pills. The status note keeps a coloured pill only when it needs attention
+   (pending, rejected, superseded).
+   ========================================================================== */
+#workspacePanel.has-file .file-tags-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0; }
+
+#workspacePanel.has-file .list-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+#workspacePanel.has-file .list-tag small { display: none; }
+#workspacePanel.has-file .list-tag strong { font-weight: 600; color: var(--text-heading); }
+#workspacePanel.has-file .list-tag.list-tag-country svg { color: var(--pink); }
+
+/* Dot separators between the visible facts. */
+#workspacePanel.has-file .list-tag:not([hidden]) ~ .list-tag:not([hidden])::before,
+#workspacePanel.has-file .list-tag:not([hidden]) ~ .workflow-note[data-tone="uploaded"]::before,
+#workspacePanel.has-file .list-tag:not([hidden]) ~ .workflow-note[data-tone="approved"]::before {
+  content: "·";
+  margin: 0 9px;
+  color: var(--text-subtle);
+  font-weight: 700;
+}
+
+/* Uploaded / approved: plain text, no pill. */
+#workspacePanel.has-file .workflow-note[data-tone="uploaded"],
+#workspacePanel.has-file .workflow-note[data-tone="approved"] {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+#workspacePanel.has-file .workflow-note[data-tone="uploaded"] .workflow-note-icon,
+#workspacePanel.has-file .workflow-note[data-tone="approved"] .workflow-note-icon { display: none; }
+
+/* Pills that need attention sit a little apart from the facts. */
+#workspacePanel.has-file .workflow-note[data-tone="pending"],
+#workspacePanel.has-file .workflow-note[data-tone="rejected"],
+#workspacePanel.has-file .workflow-note[data-tone="superseded"] { margin-left: 12px; }
