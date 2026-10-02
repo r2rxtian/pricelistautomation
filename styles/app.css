@@ -3863,6 +3863,8 @@ dialog::backdrop {
   background: var(--bg);
   opacity: 0;
   visibility: hidden;
+  /* Never catches clicks once loading is done, even while the fade-out is still running. */
+  pointer-events: none;
   transition: opacity .24s ease, visibility .24s ease;
 }
 
@@ -3875,6 +3877,7 @@ dialog::backdrop {
 .is-booting .app-loading {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 
 .loader-orbit {
@@ -5338,16 +5341,19 @@ dialog[open]::backdrop {
   transform: translateY(-1px);
 }
 
+/* Secondary buttons (Cancel, Back, Close…) are outlined so they never look like the main action. */
 [data-theme="dark"] .button.secondary {
-  background: #eb97ae !important;
-  border: 1px solid #e28aa2 !important;
-  color: #1a0f14 !important;
-  font-weight: 700 !important;
+  background: #1b1d23 !important;
+  border: 1px solid #3a3d47 !important;
+  color: #e4e4e7 !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
 }
 
-[data-theme="dark"] .button.secondary:hover {
-  background: #f0a3b7 !important;
-  color: #1a0f14 !important;
+[data-theme="dark"] .button.secondary:hover:not(:disabled) {
+  background: #241a1f !important;
+  border-color: #eb97ae !important;
+  color: #f0a3b7 !important;
 }
 
 [data-theme="dark"] .button.danger {
@@ -8188,4 +8194,235 @@ html.theme-switching *::after {
   .theme-toggle-btn:hover svg,
   .notification-bell-btn:hover,
   .theme-toggle-btn:hover { transform: none; }
+}
+
+/* ==========================================================================
+   iOS-style motion (scripts/motion.js, GSAP). html.gsap-motion is set by that script; the CSS
+   keyframes below are switched off only for the elements it animates itself.
+   ========================================================================== */
+:root { --ease-ios: cubic-bezier(.32, .72, 0, 1); }
+
+.gsap-motion .panel.active,
+.gsap-motion dialog[open],
+.gsap-motion .adjustment-bar:not([hidden]),
+.gsap-motion .notifications-dropdown,
+.gsap-motion .row-menu,
+.gsap-motion .list-switcher-menu,
+.gsap-motion .dev-tools-panel {
+  animation: none;
+}
+
+/* One underline that slides between the top-nav pages (replaces each item's own underline). */
+.gsap-motion .top-nav .nav-item::after { display: none; }
+
+.nav-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--pink);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, width;
+}
+
+[data-theme="dark"] .nav-indicator { background: #eb97ae; height: 2px; }
+
+/* Dialog backdrop fades out with the dialog. */
+dialog::backdrop { transition: opacity .2s ease; }
+dialog.is-closing::backdrop { opacity: 0; }
+
+/* Toasts rise and settle on the iOS curve. */
+.toast {
+  transform: translateY(28px) scale(.96);
+  transition: transform .55s var(--ease-ios), opacity .3s ease;
+}
+.toast.show { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-indicator { transition: none; }
+  .toast { transition: opacity .2s ease; transform: none; }
+}
+
+/* ==========================================================================
+   Dropdowns (scripts/select-dropdown.js): every <select> opens this menu instead of the
+   browser's plain list. The closed select keeps its own styles above.
+   ========================================================================== */
+.sd-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid #ecd9de;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--text-body);
+  box-shadow: 0 18px 44px rgba(76, 32, 44, 0.16), 0 3px 10px rgba(76, 32, 44, 0.06);
+  font-family: var(--sans);
+}
+
+.sd-menu:focus { outline: none; }
+
+/* display: flex above would override the browser's own hiding of a closed popover, leaving the
+   menu drawn on screen after it closes. */
+.sd-menu[popover]:not(:popover-open),
+.sd-menu[hidden] {
+  display: none !important;
+}
+
+.sd-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  height: 36px;
+  margin: 0 0 6px;
+  padding: 0 10px;
+  border: 1px solid #ecd9de;
+  border-radius: 8px;
+  background: #fbf7f8;
+  color: #9a858c;
+}
+
+.sd-search[hidden] { display: none; }
+
+.sd-search:focus-within {
+  border-color: var(--pink);
+  box-shadow: 0 0 0 3px var(--pink-subtle);
+}
+
+.sd-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.84rem;
+  outline: none;
+}
+
+.sd-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #dcc3ca transparent;
+}
+
+.sd-group {
+  margin: 8px 10px 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #a08c93;
+}
+
+.sd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 10px 7px 8px;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  color: var(--text-heading);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sd-item.is-active { background: #fbeef1; }
+
+.sd-item[aria-selected="true"] {
+  color: var(--pink);
+  font-weight: 600;
+}
+
+.sd-item[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+
+.sd-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  color: var(--pink);
+}
+
+.sd-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sd-empty {
+  margin: 0;
+  padding: 14px 10px;
+  font-size: 0.82rem;
+  color: #a08c93;
+  text-align: center;
+}
+
+/* The select whose menu is open. */
+select.sd-open {
+  border-color: var(--pink) !important;
+  box-shadow: 0 0 0 3px var(--pink-subtle) !important;
+}
+
+/* A page filter with a value chosen gets a soft pink tint, like the category picker. */
+:is(#listPriceLevelFilter, #listCountryFilter, #listStatusFilter, #filesCountryFilter, #filesLevelFilter,
+    #auditFileSelect, #auditTypeSelect, #auditUserSelect, #imageCategoryFilter):has(> option:checked:not([value=""])) {
+  border-color: #e3a9b8 !important;
+  background-color: #fdf1f4 !important;
+  color: var(--pink) !important;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .sd-menu {
+  border-color: #2c2f37;
+  background: #17181d;
+  color: #e4e4e7;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .sd-search { border-color: #2c2f37; background: #111216; color: #7d818a; }
+[data-theme="dark"] .sd-search:focus-within { border-color: #eb97ae; box-shadow: 0 0 0 3px rgba(235, 151, 174, 0.18); }
+[data-theme="dark"] .sd-search input { color: #f4f4f6; }
+[data-theme="dark"] .sd-list { scrollbar-color: #3a3d46 transparent; }
+[data-theme="dark"] .sd-group, [data-theme="dark"] .sd-empty { color: #7d818a; }
+[data-theme="dark"] .sd-item { color: #e4e4e7; }
+[data-theme="dark"] .sd-item.is-active { background: #24191e; }
+[data-theme="dark"] .sd-item[aria-selected="true"], [data-theme="dark"] .sd-check { color: #f0a3b7; }
+[data-theme="dark"] select.sd-open { border-color: #eb97ae !important; box-shadow: 0 0 0 3px rgba(235, 151, 174, 0.2) !important; }
+
+[data-theme="dark"] :is(#listPriceLevelFilter, #listCountryFilter, #listStatusFilter, #filesCountryFilter, #filesLevelFilter,
+    #auditFileSelect, #auditTypeSelect, #auditUserSelect, #imageCategoryFilter):has(> option:checked:not([value=""])) {
+  border-color: #7a3f50 !important;
+  background-color: #2a161e !important;
+  color: #f0a3b7 !important;
+}
+
+/* Inside dialogs the menu's search field must not pick up the dialog's input styles. */
+.sd-menu .sd-search input,
+.sd-menu .sd-search input:focus {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
 }

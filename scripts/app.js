@@ -414,7 +414,16 @@
     const match = String(fileName || '').match(/\b(?:price\s*level|level|pl)\s*[-_ #]?\s*(\d{1,2})\b/i);
     return match ? canonicalPriceLevel(match[1]) : '';
   }
-  function setAppLoading(loading) { document.body.classList.toggle('is-booting', loading); document.body.classList.toggle('is-ready', !loading); }
+  function setAppLoading(loading) {
+    document.body.classList.toggle('is-booting', loading);
+    document.body.classList.toggle('is-ready', !loading);
+    // Take the loading screen away once its fade-out is due, even if the browser never ran the fade.
+    const loader = $('#appLoading');
+    if (!loader) return;
+    clearTimeout(setAppLoading.timer);
+    if (loading) loader.style.display = '';
+    else setAppLoading.timer = setTimeout(() => { if (document.body.classList.contains('is-ready')) loader.style.display = 'none'; }, 350);
+  }
   function showApp() {
     dom.userName.textContent = state.user.name; dom.roleBadge.textContent = can('update') ? 'Admin' : 'Export only'; applyPermissions();
     switchPanel(getInitialPanelId(), true);
@@ -469,13 +478,25 @@
   function rememberedVersionId() {
     try { return localStorage.getItem(`pla_open_version_${state.user?.username}`) || ''; } catch { return ''; }
   }
+  /** The live (approved or uploaded) revision of the same price list: same name, country and price level. */
+  function liveRevisionOf(version) {
+    const key = v => [v.name, v.country, v.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|');
+    return (state.versions || [])
+      .filter(v => key(v) === key(version) && ['approved', 'uploaded'].includes(v.status))
+      .sort((a, b) => (b.revision || 0) - (a.revision || 0))[0] || null;
+  }
   /** Reloads versions, notifications and audit logs; keeps the open price list unless it changed on the server. */
   async function refreshState() {
     const data = await api('state');
     applyStatePayload(data);
     applyPermissions();
     const open = state.active?.id && !state.active.isDraft ? versionSummaryById(state.active.id) : null;
-    if (state.active?.id && !state.active.isDraft && (!open || open.status !== state.active.status || (open.approvals || []).length !== (state.active.approvals || []).length)) {
+    // The open revision was replaced (e.g. a change to it was just approved): move to the live one.
+    const live = open?.status === 'superseded' ? liveRevisionOf(open) : null;
+    if (live && live.id !== open.id) {
+      await openVersion(live.id, { silent: true, stay: true });
+      toast(`Opened revision ${live.revision}, the current version of ${live.name}.`);
+    } else if (state.active?.id && !state.active.isDraft && (!open || open.status !== state.active.status || (open.approvals || []).length !== (state.active.approvals || []).length)) {
       if (open) await openVersion(open.id, { silent: true, stay: true });
       else loadActive(null);
     } else {
@@ -497,7 +518,9 @@
     }
     if (!targetActive) {
       const rememberedId = rememberedVersionId();
-      const remembered = rememberedId ? versionSummaryById(rememberedId) : null;
+      let remembered = rememberedId ? versionSummaryById(rememberedId) : null;
+      // Reopen the current revision rather than one that has since been replaced.
+      if (remembered?.status === 'superseded') remembered = liveRevisionOf(remembered) || remembered;
       if (remembered) {
         try { targetActive = (await api('open', { method: 'POST', body: JSON.stringify({ id: remembered.id }) })).active; } catch { targetActive = null; }
       }
@@ -2727,7 +2750,7 @@
     loadActive(data.active);
     switchPanel('workspacePanel', true);
     refreshState().catch(() => { });
-    toast(`Uploaded ${list.name} (${list.rows.length.toLocaleString()} products). Price changes you save will go for approval.`);
+    toast(`Uploaded ${list.name} (${list.rows.length.toLocaleString()} products). ${state.autoApprove ? 'Price changes you save are approved right away.' : 'Price changes you save will go for approval.'}`);
   }
   function resetFilters() {
     state.search = ''; state.codeFilter = ''; state.priceLevelFilter = ''; state.countryFilter = '';
