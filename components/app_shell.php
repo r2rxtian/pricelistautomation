@@ -34,7 +34,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=74">
+    <link rel="stylesheet" href="../styles/app.css?v=75">
     <script>
     (function() {
         try {
@@ -887,7 +887,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/xlsx.full.min.js"></script>
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="../scripts/theme.js?v=3"></script>
+<script src="../scripts/theme.js?v=4"></script>
 <script src="../scripts/app.js?v=71"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=4"></script>

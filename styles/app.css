@@ -8426,3 +8426,18 @@ select.sd-open {
   box-shadow: none !important;
   outline: none !important;
 }
+
+/* ==========================================================================
+   Light/dark switch: the page cross-fades between the two themes (scripts/theme.js uses
+   document.startViewTransition). Only the theme switch starts a view transition.
+   ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: .5s;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; }
+}
