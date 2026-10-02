@@ -36,7 +36,7 @@
         showMessage(data.message, 'success');
         // A fresh sign-in starts on "All categories".
         try { sessionStorage.removeItem('pla_view_category'); } catch { }
-        window.location.href = data.data && data.data.redirect ? data.data.redirect : 'dashboard.php';
+        window.location.href = data.data && data.data.redirect ? data.data.redirect : 'prices.php';
         return;
       }
       showMessage(data.message || 'Sign-in failed. Please try again.', 'error');

@@ -7,7 +7,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 try {
     if (isLoggedIn()) {
-        header('Location: dashboard.php');
+        header('Location: prices.php');
         exit;
     }
 } catch (Throwable $error) {
@@ -25,7 +25,7 @@ try {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=67">
+    <link rel="stylesheet" href="../styles/app.css?v=68">
     <link rel="stylesheet" href="../styles/login.css?v=1">
     <script>
     (function () {
@@ -73,7 +73,7 @@ try {
         <div class="capability"><span>04</span><strong>Export</strong><small>Excel or PDF</small></div>
     </aside>
 </main>
-<script src="../scripts/theme.js?v=1"></script>
-<script src="../scripts/login.js?v=1"></script>
+<script src="../scripts/theme.js?v=3"></script>
+<script src="../scripts/login.js?v=2"></script>
 </body>
 </html>

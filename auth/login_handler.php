@@ -4,9 +4,13 @@ declare(strict_types=1);
  * POST target for pages/login.php. Accepts login_id + login_password and returns JSON
  * {success, message, type, data}. Same flow as QRTS:
  *
- *   dbo.lrnph_users      company login: biometrics number + company password
+ *   dbo.lrnph_users      company login for that biometrics number (must be active)
  *     → dbo.lrn_master_list   BiometricsID → EmployeeID, name, department
  *     → dbo.PLA_ACD_Users     EmployeeID → this app's account and role (the selected users)
+ *
+ * The password is the person's biometrics number, as held in the master list (BiometricsID). It is
+ * looked up at sign-in, never stored here; most are the employee number without the year, but some
+ * people have their own.
  *
  * Ordinary users need an active company login, an active master-list record and an active
  * PLA_ACD_Users row. Employees of the IT department (rules/constants.php) are provisioned
@@ -15,7 +19,6 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/session.php';
-require_once __DIR__ . '/password.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/../authz/audit.php';
 
@@ -62,7 +65,7 @@ try {
     // count, and a row that has an account here wins.
     $stmt = $pdo->prepare('
         SELECT TOP 1 u.id, ml.EmployeeID AS employee_id, ml.Department AS department,
-               lu.password AS lrnph_password_hash, lu.status AS lrnph_status,
+               ml.BiometricsID AS biometrics_id, lu.status AS lrnph_status,
                u.is_active, u.failed_login_attempts, u.locked_until, u.deleted_at
         FROM ' . T_LRNPH_USERS . ' lu
         JOIN ' . T_MASTER_LIST . " ml ON ml.BiometricsID = lu.username AND ml.IsActive = '1'
@@ -95,7 +98,8 @@ if ($user['id'] && $user['locked_until'] && strtotime((string) $user['locked_unt
     jsonError("Too many failed attempts. Please try again in $minutesLeft minute(s).", 429);
 }
 
-if (!verifyPassword($password, (string) $user['lrnph_password_hash'])) {
+// The password is the biometrics number from the master list.
+if (!hash_equals(trim((string) $user['biometrics_id']), $password)) {
     $attempts = (int) $user['failed_login_attempts'] + 1;
     $lockUntil = null;
     if ($attempts >= LOGIN_MAX_ATTEMPTS) {
@@ -155,5 +159,5 @@ echo json_encode([
     'success' => true,
     'message' => 'Welcome back, ' . $current['name'] . '!',
     'type' => 'success',
-    'data' => ['redirect' => 'dashboard.php'],
+    'data' => ['redirect' => 'prices.php'],
 ]);

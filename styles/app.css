@@ -8108,3 +8108,84 @@ html[data-initial-panel="filesPanel"] #filesPanel { display: block !important; }
   #priceTable thead tr.presentation-header th:nth-child(2) { width: 122px; }
 }
 
+/* ==========================================================================
+   Top bar: notification bell and theme toggle motion
+   ========================================================================== */
+/* Only these properties animate, so a theme switch doesn't leave the buttons fading behind the page. */
+.notification-bell-btn,
+.theme-toggle-btn {
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.notification-bell-btn:active,
+.theme-toggle-btn:active {
+  transform: translateY(0) scale(.95);
+}
+
+/* The bell swings from its top, like a bell, and settles. */
+.bell-icon {
+  transform-origin: 50% 3px;
+  transition: none;
+}
+
+.notification-bell-btn:hover .bell-icon {
+  transform: none;
+  animation: bell-ring .7s ease-in-out;
+}
+
+@keyframes bell-ring {
+  0% { rotate: 0deg; }
+  18% { rotate: 16deg; }
+  36% { rotate: -12deg; }
+  54% { rotate: 8deg; }
+  72% { rotate: -4deg; }
+  100% { rotate: 0deg; }
+}
+
+/* The badge pops in once when it appears instead of pulsing forever. */
+.notification-badge {
+  animation: badge-pop .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes badge-pop {
+  from { transform: scale(.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Theme toggle: the sun turns and the moon tilts on hover; the new icon spins in on click. */
+.theme-toggle-btn svg {
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.theme-toggle-btn:hover .theme-icon-sun { transform: rotate(45deg); }
+.theme-toggle-btn:hover .theme-icon-moon { transform: rotate(-16deg); }
+
+.theme-toggle-btn.is-switching svg,
+.theme-toggle-btn.is-switching:hover svg {
+  transform: none;
+}
+
+.theme-toggle-btn.is-switching svg:not([hidden]) {
+  animation: theme-icon-in .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes theme-icon-in {
+  from { opacity: 0; transform: rotate(-120deg) scale(.4); }
+  to { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+
+/* While the theme switches, nothing transitions, so the whole page changes in one step. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-bell-btn:hover .bell-icon,
+  .notification-badge,
+  .theme-toggle-btn.is-switching svg:not([hidden]) { animation: none; }
+  .theme-toggle-btn:hover svg,
+  .notification-bell-btn:hover,
+  .theme-toggle-btn:hover { transform: none; }
+}

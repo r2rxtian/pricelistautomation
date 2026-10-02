@@ -1,0 +1,10 @@
+# LRN Price List Automation — Apache settings
+Options -Indexes
+
+ErrorDocument 404 /pricelistautomation/pages/404.php
+ErrorDocument 403 /pricelistautomation/pages/404.php
+
+# Internal files are never served directly.
+<FilesMatch "\.(md|sql|lock|tmp|json)$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,5 @@
+# Only photos are served from storage/; data files and sessions are not.
+Require all denied
+<FilesMatch "\.(jpe?g|png|webp)$">
+    Require all granted
+</FilesMatch>

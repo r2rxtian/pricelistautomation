@@ -16,8 +16,9 @@
     document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
       const sun = btn.querySelector('.theme-icon-sun');
       const moon = btn.querySelector('.theme-icon-moon');
-      if (sun) sun.hidden = !isDark;
-      if (moon) moon.hidden = isDark;
+      // The icons are <svg> elements, which have no .hidden property: set the attribute itself.
+      sun?.toggleAttribute('hidden', !isDark);
+      moon?.toggleAttribute('hidden', isDark);
       btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
       btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
     });
@@ -30,9 +31,19 @@
 
   document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      const root = document.documentElement;
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      // Pause every transition for the switch so the whole page changes in one step.
+      root.classList.add('theme-switching');
       applyTheme(next);
       try { localStorage.setItem(KEY, next); } catch { }
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+      // Spin the new icon in (restarts if clicked again mid-animation).
+      btn.classList.remove('is-switching');
+      void btn.offsetWidth;
+      btn.classList.add('is-switching');
+      clearTimeout(btn.switchTimer);
+      btn.switchTimer = setTimeout(() => btn.classList.remove('is-switching'), 480);
     });
   });
 })();

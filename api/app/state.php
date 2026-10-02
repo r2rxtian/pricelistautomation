@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-/** Everything the dashboard needs on load and refresh: user, permissions, lists, photos, logs, notifications. */
+/** Everything the app needs on load and refresh: user, permissions, lists, photos, logs, notifications. */
 require_once __DIR__ . '/../bootstrap.php';
 
 $user = apiUser();

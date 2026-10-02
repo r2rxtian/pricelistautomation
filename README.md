@@ -4,19 +4,54 @@ A PHP 8.2 application for uploading an Excel price list, adjusting prices by cat
 
 ## Run locally
 
-1. Start Apache in XAMPP.
-2. Open `http://localhost/pricelistautomation/`.
-3. Sign in with one of the accounts below.
+1. Copy `conn/config.example.php` to `conn/config.php` and enter the SQL Server connection (LRNPH_OJT). Git ignores `conn/config.php`.
+2. Create the tables and the selected users once: `php sql/install.php` (runs `sql/schema.sql` then `sql/seed.sql`; safe to re-run).
+3. Start Apache in XAMPP and open `http://localhost/pricelistautomation/` (it redirects to `pages/login.php`).
 
-| User | Employee no. (LRNPH_OJT master list) | Sign in with (biometrics ID) | Password | Access |
-|---|---|---|---|---|
-| Ms. Gen (Gen Ong) | 2015-1652 | `1652` | `1652` | Upload · Update · Save · Approve (instant) · Export |
-| Chelsea Favila | 2012-00077 | `10079` | `10079` | Upload · Update · Save · Approve · Export |
-| Margaret Santos | 2014-00446 | `1857` | `1857` | Upload · Update · Save · Approve · Export |
-| Gemma Comission | not yet known | `gemma@lrn.local` | `Gemma@2026!` | Export only |
+## Sign-in
 
-Employee sign-in is checked live against `dbo.lrn_master_list` (LRNPH_OJT): the app finds the active row (`IsActive = '1'`) with that `BiometricsID`, and its `EmployeeID` must belong to an account in `config.php`. The password is the same biometrics ID. No biometrics IDs or passwords are stored in this project, so a changed ID in the master list takes effect at once and an employee who leaves loses access. The IDs above are what the master list holds today. The connection goes in `config.local.php` under `master_list` (see `config.local.example.php`); if the master list can't be reached, employees can't sign in. Gemma keeps the email login until her employee number is added to `config.php`.
-Change the passwords before going live by overriding `users` in `config.local.php` (see `config.local.example.php`). Passwords are stored as bcrypt hashes.
+Sign-in works the same way as QRTS (`auth/login_handler.php`):
+
+1. **Company login** – `dbo.lrnph_users`: the biometrics number and the person's **company password** (the same login as the other internal apps). The account must be `active`.
+2. **HR master list** – `dbo.lrn_master_list`: the active row with that `BiometricsID` gives the `EmployeeID`, name and department.
+3. **This app's users** – `dbo.PLA_ACD_Users`: the `EmployeeID` must belong to one of the selected users, which also gives the role.
+
+Nothing about a person is stored in this project: names come from the master list, passwords from `lrnph_users`. Five wrong passwords lock the account here for 15 minutes. Successful and failed sign-ins, and sign-outs, are written to the audit log.
+
+**Selected initial users** (`sql/seed.sql`):
+
+| User | Employee no. | Biometrics no. (today) | Role |
+|---|---|---|---|
+| Ms. Gen | 2015-1652 | 1652 | Admin – Upload · Update · Save · Approve (instant) · Export |
+| Chelsea Favila | 2012-00077 | 10079 | Admin – Upload · Update · Save · Approve · Export |
+| Margaret Santos | 2014-00446 | 1857 | Admin – Upload · Update · Save · Approve · Export |
+| Gemma Comission | 2022-21518 | 21518 | User – Export only |
+
+To give someone access later, add a row to `dbo.PLA_ACD_Users` (employee_id, a short username, role) or add them to `sql/seed.sql` and re-run the installer.
+
+**IT department:** as in QRTS, employees of *Information Technology Department - LRN* get Admin access automatically on a successful company sign-in, so IT can support the system. They are stored with the User role and are never approvers. Turn it off by setting `IT_ADMIN_DEPARTMENT` to `''` in `rules/constants.php`.
+
+## Folder structure
+
+```text
+pricelistautomation/
+├── index.php              redirects to pages/login.php
+├── pages/                 login.php, prices.php, files.php, approvals.php, audit_logs.php, config.php, 404.php
+├── components/            app_shell.php: the shared top bar, pages and dialogs the page files render
+├── api/                   JSON endpoints, one file per action (app/, versions/, audit/, notifications/, photos/, dev/)
+├── auth/                  session, CSRF, login_handler.php, logout.php
+├── authz/                 roles → permissions, permission guard, audit log + notifications
+├── conn/                  db.php (PDO, SQL Server) and config.php (credentials, not in Git)
+├── rules/                 constants (tables, approval routing, countries, price levels), users, workflow, validation, photos
+├── repository/            storage: JSON file or SQL Server tables
+├── scripts/               app.js (the app pages), login.js, theme.js
+├── styles/                app.css, login.css
+├── assets/                vendor libraries (SheetJS, jsPDF) and images
+├── sql/                   schema.sql, seed.sql, install.php
+└── storage/               app.json, sessions, uploaded photos (not in Git)
+```
+
+`conn/`, `rules/`, `authz/`, `repository/` and `sql/` are not served by Apache, and `storage/` only serves photos.
 
 ## Workflow
 
@@ -37,8 +72,8 @@ Change the passwords before going live by overriding `users` in `config.local.ph
 | Ms. Gen | Chelsea & Margaret *(not specified in the requirements; configurable)* |
 
 - A user cannot approve their own price list.
-- `approval_mode` is `any` by default: one approval from the listed approvers is enough. Set it to `all` in `config.local.php` to require every listed approver.
-- Routing can be changed under `approvers` in `config.local.php`.
+- `approval_mode` is `any` by default: one approval from the listed approvers is enough. Set `APPROVAL_MODE` to `all` in `rules/constants.php` to require every listed approver.
+- Routing is `APPROVERS` in `rules/constants.php` (by username).
 
 ### Statuses
 
@@ -47,11 +82,11 @@ Change the passwords before going live by overriding `users` in `config.local.ph
 - **Rejected**: returned to the submitter with the approver's reason. Saving again resubmits it.
 - **Superseded**: an older approved revision replaced by a newer approved revision of the same price list. Editing an approved list and saving it creates a new revision. The previous approved revision stays exportable until the new one is approved.
 
-The server enforces export access, not just the UI. `api.php?action=export` only returns approved price lists and logs every export.
+The server enforces export access, not just the UI. `api/versions/export.php` only returns uploaded files and approved price changes, and logs every export.
 
 ## Countries and saved price lists
 
-Each uploaded price list belongs to one country and price level, chosen at upload (e.g. Philippines · Price Level 1). Price levels are numbered (**Price Level 1, 2, …**; 5 by default, set `price_levels` in `config.local.php` to change). Countries are picked from a fixed list (`countries` in `config.php` or `config.local.php`). The current list is a **placeholder**; replace it with the official 44 countries when they're provided.
+Each uploaded price list belongs to one country and price level, chosen at upload (e.g. Philippines · Price Level 1). Price levels are numbered (**Price Level 1, 2, …**; 5 by default, `PRICE_LEVEL_COUNT` in `rules/constants.php`). Countries are picked from a fixed list (`COUNTRIES` in `rules/constants.php`). The current list is a **placeholder**; replace it with the official 44 countries when they're provided.
 
 A price list is identified by **name + country + price level**. Uploading another Philippines file with a different price level adds a second Philippines price level; it doesn't replace the first, and Philippines still appears once in the Country filter.
 
@@ -67,12 +102,14 @@ The editor toolbar filters in this order: **Country → Level → List**, then *
 
 Admins see a small **Dev tools** button at the bottom-left of the screen. It opens a panel that clears test data: the uploaded file/draft in the current browser, saved price lists, notifications, audit logs and product photos. Every clear asks for confirmation and writes a "Cleared test data" entry to the audit log.
 
-**Turn it off before go-live** by adding `'dev_tools' => false` to `config.local.php`. When it's off, the button disappears and the server refuses the request.
+**Turn it off before go-live** by setting `PLA_DEV_TOOLS` to `false` in `conn/config.php`. When it's off, the button disappears and the server refuses the request.
 
 ## Storage
 
-- **Development:** without database credentials, data is stored in `storage/app.json`. Writes are atomic and file-locked.
-- **Production:** Microsoft SQL Server through `pdo_sqlsrv`. Copy `config.local.example.php` to `config.local.php` and enter the credentials. On first connection the app creates or migrates `dbo.PLA_ACD_Versions`, `dbo.PLA_ACD_GroupImages`, `dbo.PLA_ACD_AuditLog`, and `dbo.PLA_ACD_Notifications`. The same idempotent DDL is in `database/schema.sql`.
+Sign-in always uses SQL Server. Price lists, audit logs, notifications and photos follow `PLA_STORAGE_DRIVER` in `conn/config.php`:
+
+- `json` (current): `storage/app.json`. Writes are atomic and file-locked.
+- `sqlserver`: the `dbo.PLA_ACD_*` tables in `sql/schema.sql` (Versions, GroupImages, PhotoLibrary, AuditLog, Notifications).
 
 ## Workbook behavior
 

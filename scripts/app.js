@@ -170,7 +170,7 @@
     updateAdjustmentUI();
   }
 
-  // Each action is its own endpoint under api/ (paths are relative to pages/dashboard.php).
+  // Each action is its own endpoint under api/ (paths are relative to the page files in pages/).
   const API_ROUTES = {
     'state': 'app/state',
     'open': 'versions/open', 'save': 'versions/save', 'approve': 'versions/approve', 'reject': 'versions/reject',
@@ -3082,6 +3082,15 @@
 
       if (!targetRows.length) return toast('No products to export.');
 
+      // Shrinks the column widths proportionally if they add up to more than the printable width.
+      const printableWidth = pageWidth - margin * 2;
+      const fitColumnsToPage = columns => {
+        const total = Object.values(columns).reduce((sum, col) => sum + (col.cellWidth || 0), 0);
+        if (total <= printableWidth) return columns;
+        const scale = printableWidth / total;
+        return Object.fromEntries(Object.entries(columns).map(([key, col]) => [key, { ...col, cellWidth: Math.floor(col.cellWidth * scale * 10) / 10 }]));
+      };
+
       const categoriesMap = new Map();
       targetRows.forEach(row => {
         const category = String(row[0] || 'Products').trim();
@@ -3101,18 +3110,19 @@
       for (const [category, groupsMap] of categoriesMap.entries()) {
         const isPresentation = category.toLowerCase() === 'presentation stands';
 
-        // 3-Tier Excel Header
+        // 3-Tier Excel Header. Column widths come only from columnStyles below: widths set on header
+        // cells win over them and pushed the table past the page edge.
         const standardHead = [
           [
-            { content: '', rowSpan: 3, styles: { cellWidth: 93 } },
-            { content: 'Code No', rowSpan: 3, styles: { cellWidth: 60 } },
-            { content: 'Description', rowSpan: 3, styles: { cellWidth: 152 } },
-            { content: 'Expiry\nDate', rowSpan: 3, styles: { cellWidth: 48 } },
-            { content: 'Weight\ngr/pc', rowSpan: 3, styles: { cellWidth: 45 } },
-            { content: 'Pcs\n/box', rowSpan: 3, styles: { cellWidth: 38 } },
-            { content: 'Box Size', rowSpan: 3, styles: { cellWidth: 55 } },
-            { content: 'Price/pc\nUSD', rowSpan: 3, styles: { cellWidth: 52 } },
-            { content: 'Price/box\nIn USD', rowSpan: 3, styles: { cellWidth: 55 } },
+            { content: '', rowSpan: 3 },
+            { content: 'Code No', rowSpan: 3 },
+            { content: 'Description', rowSpan: 3 },
+            { content: 'Expiry\nDate', rowSpan: 3 },
+            { content: 'Weight\ngr/pc', rowSpan: 3 },
+            { content: 'Pcs\n/box', rowSpan: 3 },
+            { content: 'Box Size', rowSpan: 3 },
+            { content: 'Price/pc\nUSD', rowSpan: 3 },
+            { content: 'Price/box\nIn USD', rowSpan: 3 },
             { content: 'PALLET PER CONTAINER', colSpan: 3, styles: { halign: 'center' } }
           ],
           [
@@ -3120,9 +3130,9 @@
             { content: '20ft Container', colSpan: 1, styles: { halign: 'center' } }
           ],
           [
-            { content: 'Large Pallet\n(16 pallets)', styles: { cellWidth: 66, halign: 'center' } },
-            { content: 'Small Pallet\n(2 pallets)', styles: { cellWidth: 66, halign: 'center' } },
-            { content: 'Large Pallet\n(8 pallets)', styles: { cellWidth: 65, halign: 'center' } }
+            { content: 'Large Pallet\n(16 pallets)', styles: { halign: 'center' } },
+            { content: 'Small Pallet\n(2 pallets)', styles: { halign: 'center' } },
+            { content: 'Large Pallet\n(8 pallets)', styles: { halign: 'center' } }
           ]
         ];
 
@@ -3259,7 +3269,7 @@
             lineColor: [203, 157, 168],
             lineWidth: 0.65
           },
-          columnStyles: isPresentation ? {
+          columnStyles: fitColumnsToPage(isPresentation ? {
             0: { cellWidth: 93, halign: 'center' },
             1: { cellWidth: 60, halign: 'center', fontStyle: 'bold' },
             2: { cellWidth: 95, halign: 'left' },
@@ -3285,7 +3295,7 @@
             9: { cellWidth: 56, halign: 'center' },
             10: { cellWidth: 56, halign: 'center' },
             11: { cellWidth: 56, halign: 'center' }
-          },
+          }),
           alternateRowStyles: {
             fillColor: [253, 248, 249]
           },
@@ -3755,23 +3765,22 @@
   $('#listsBackBtn')?.addEventListener('click', () => switchPanel('workspacePanel', true));
   dom.bannerApproveBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('approve', state.active.id));
   dom.bannerRejectBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('reject', state.active.id));
+  // The tab title is "<page> · <app name>" (set by components/app_shell.php).
+  const APP_TITLE = document.title.split(' · ').slice(1).join(' · ') || document.title;
+  // Each page has its own file in pages/; the page file tells the shell which panel to open.
+  const PANEL_PAGES = {
+    workspacePanel: 'prices.php',
+    filesPanel: 'files.php',
+    listsPanel: 'approvals.php',
+    historyPanel: 'audit_logs.php',
+    settingsPanel: 'config.php'
+  };
   function getInitialPanelId() {
-    const hash = (location.hash || '').replace(/^#/, '').toLowerCase();
-    if (hash === 'approvals' || hash === 'lists' || hash === 'listspanel') return 'listsPanel';
-    if (hash === 'files' || hash === 'filespanel') return 'filesPanel';
-    if (hash === 'history' || hash === 'historypanel') return 'historyPanel';
-    if (hash === 'config' || hash === 'settings' || hash === 'settingspanel') return 'settingsPanel';
-    if (hash === 'prices' || hash === 'workspace' || hash === 'workspacepanel') return 'workspacePanel';
-    try {
-      const saved = localStorage.getItem('pla_active_panel');
-      if (saved && ['workspacePanel', 'filesPanel', 'listsPanel', 'historyPanel', 'settingsPanel'].includes(saved)) {
-        return saved;
-      }
-    } catch { }
-    return 'workspacePanel';
+    const panel = document.body.dataset.panel;
+    return PANEL_PAGES[panel] ? panel : 'workspacePanel';
   }
 
-  function switchPanel(panelId, updateHash = true) {
+  function switchPanel(panelId, updateUrl = true) {
     let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === panelId);
     if (!targetButton || targetButton.hidden) {
       targetButton = $$('.nav-item')[0];
@@ -3795,22 +3804,12 @@
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
 
-    try {
-      localStorage.setItem('pla_active_panel', finalPanelId);
-    } catch { }
-
-    if (updateHash) {
-      const hashMap = {
-        workspacePanel: 'prices',
-        listsPanel: 'approvals',
-        filesPanel: 'files',
-        historyPanel: 'history',
-        settingsPanel: 'config'
-      };
-      const hashName = hashMap[finalPanelId] || finalPanelId;
-      if (location.hash !== `#${hashName}`) {
-        history.replaceState(null, '', `#${hashName}`);
-      }
+    // Show the page's own file in the address bar, so a refresh or bookmark opens this page.
+    const pageFile = PANEL_PAGES[finalPanelId];
+    const pageName = targetButton.querySelector('strong')?.textContent.trim();
+    if (pageName) document.title = `${pageName} · ${APP_TITLE}`;
+    if (updateUrl && pageFile && !location.pathname.endsWith(`/${pageFile}`)) {
+      history.replaceState(null, '', pageFile);
     }
   }
 

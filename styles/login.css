@@ -327,3 +327,23 @@
 [data-theme="dark"] .login-shell { background: #111216; }
 
 [data-theme="dark"] .login-panel { background: transparent; }
+
+/* Password field with show/hide, and the sign-in message (pages/login.php) */
+.login-field { display: grid; gap: 6px; }
+.login-field > label { font-weight: 600; color: var(--text-body); font-size: 0.8rem; }
+.password-field { position: relative; display: block; }
+.password-field input { padding-right: 44px; }
+.eye-toggle-btn {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.eye-toggle-btn:hover { color: var(--pink); background: var(--pink-subtle); }
+.auth-message { display: none; font-size: 0.8rem; font-weight: 600; padding: 9px 12px; border-radius: 6px; }
+.auth-message.visible { display: block; }
+.auth-message.error { background: #fdecef; color: #b52042; }
+.auth-message.success { background: #e8f7ec; color: #1e7e34; }
+.auth-message.info { background: #eef2fb; color: #33508f; }
+[data-theme="dark"] .login-field > label { color: #d4d4d8; }
+[data-theme="dark"] .auth-message.error { background: rgba(235, 151, 174, 0.12); color: #f6b3c4; }
+[data-theme="dark"] .auth-message.success { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
