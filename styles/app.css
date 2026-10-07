@@ -1400,7 +1400,7 @@ col.col-description {
 }
 
 col.col-expiry {
-  width: 7%;
+  width: 7% !important;
 }
 
 col.col-weight {
@@ -8514,3 +8514,9 @@ select.sd-open {
 [data-theme="dark"] .notifications-footer { background: #141519; border-top-color: #24262d; }
 [data-theme="dark"] .notifications-footer-btn { background: #1b1d23; border-color: #3a3d47; color: #f0a3b7; }
 [data-theme="dark"] .notifications-footer-btn:hover { background: #eb97ae; border-color: #eb97ae; color: #1a0f14; }
+/* Fixed table layout takes column widths from the first header row.
+   C-H: Expiry Date, Weight, Pcs, Box Size, Price/pc and Price/box. */
+#priceTable thead tr.excel-header-primary:not(.presentation-header)
+  > th:nth-child(n + 5):nth-child(-n + 10) {
+  width: 112px !important;
+}
