@@ -9,7 +9,7 @@ $base = '/pricelistautomation/';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Page not found · LRN Price List Automation</title>
-    <link rel="stylesheet" href="<?= $base ?>styles/app.css?v=97">
+    <link rel="stylesheet" href="<?= $base ?>styles/app.css?v=98">
     <script>try { if (localStorage.getItem('pla_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}</script>
     <style>
         .not-found { min-height: 100dvh; display: grid; place-content: center; gap: 12px; text-align: center; padding: 24px; background: var(--surface-page, #fffafb); }

@@ -8629,6 +8629,25 @@ dialog.anchored-confirm::backdrop { background: transparent; backdrop-filter: no
    the animated size is the outer box, and content outside it is clipped until it settles. */
 .upload-modal-dialog.is-resizing { overflow: hidden; box-sizing: border-box; }
 
+/* Photo folders: one highlight sits behind the folder buttons and glides to the active one
+   (placeFolderIndicator in scripts/app.js). Until it can be measured, the button keeps its own. */
+.library-folders { position: relative; }
+.library-folder { position: relative; z-index: 1; }
+.library-folder-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line-panel);
+  border-radius: 8px;
+  background: var(--pink-subtle);
+  pointer-events: none;
+  will-change: transform;
+}
+.library-folders.has-indicator .library-folder.is-active,
+.library-folders.has-indicator .library-folder.is-active:hover { background: transparent; border-color: transparent; }
+
 /* A dropdown menu on its way out (scripts/select-dropdown.js) no longer takes clicks. */
 .sd-menu.is-closing { pointer-events: none; }
 

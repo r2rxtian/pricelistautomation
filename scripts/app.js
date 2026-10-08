@@ -2998,29 +2998,36 @@
   function clearPdfImageCache() {
     Object.keys(pdfImageCache).forEach(key => delete pdfImageCache[key]);
   }
-  async function loadPdfImages() {
+  /**
+   * Product photos for the PDF as { data, width, height }: every format (JPG, PNG, WebP) is redrawn
+   * as a JPEG of at most 640px, which jsPDF always accepts and which keeps the file small.
+   */
+  async function loadPdfImages(rows = null) {
+    const wanted = rows ? new Set(rows.map(row => groupLookupKey(String(row[0] || ''), String(row[18] || row[0] || '')))) : null;
     const urls = {};
     state.productImages.forEach(image => {
-      if (image.key && image.imagePath) urls[`custom:${image.key}`] = mediaUrl(image.imagePath);
+      if (!image.key || !image.imagePath) return;
+      if (wanted && !wanted.has(groupLookupKey(image.category, image.groupName))) return;
+      urls[`custom:${image.key}`] = mediaUrl(image.imagePath);
     });
     for (const [key, url] of Object.entries(urls)) {
-      if (!pdfImageCache[key]) {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) {
-            pdfImageCache[key] = null;
-            continue;
-          }
-          const blob = await res.blob();
-          pdfImageCache[key] = await new Promise(resolve => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(blob);
-          });
-        } catch {
-          pdfImageCache[key] = null;
-        }
+      if (pdfImageCache[key]) continue;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) { pdfImageCache[key] = null; continue; }
+        const bitmap = await createImageBitmap(await res.blob());
+        const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close?.();
+        pdfImageCache[key] = { data: canvas.toDataURL('image/jpeg', 0.86), width: canvas.width, height: canvas.height };
+      } catch {
+        pdfImageCache[key] = null;
       }
     }
     return pdfImageCache;
@@ -3034,19 +3041,25 @@
   async function exportPdf(version, targetRows, scope = '') {
     try {
       if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
+      if (!targetRows.length) return toast('No products to export.');
       const { jsPDF } = window.jspdf;
       const rateFor = adjustmentFor(version);
       const adjusted = (value, category) => adjustedWith(rateFor(category), value);
-      const getCategoryAdjustment = category => rateFor(category);
       toast('Generating PDF...');
-      const pdfImages = await loadPdfImages();
+      const pdfImages = await loadPdfImages(targetRows);
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
       if (typeof doc.autoTable !== 'function') return toast('PDF table tools are unavailable.');
 
+      // Page frame: header band on top, footer at the bottom, tables in between.
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 18;
+      const margin = 22;
+      const TOP = 60;
+      const BOTTOM = 36;
+      const printableWidth = pageWidth - margin * 2;
+      const INK = [23, 20, 23], MUTED = [113, 98, 103], ROSE = [181, 32, 66];
+      const PHOTO_HEIGHT = 54;
 
       const formatPallet = val => {
         const s = String(val ?? '').trim();
@@ -3054,7 +3067,6 @@
         if (/pallet|box/i.test(s)) return s;
         return isNumeric(s) ? `${s} Boxes/Pallet` : s;
       };
-
       const formatPdfPrice = (raw, cat) => {
         if (!isNumeric(raw)) return String(raw ?? '');
         const val = adjusted(numeric(raw), cat);
@@ -3062,11 +3074,7 @@
         const decimals = numStr.includes('.') ? numStr.split('.')[1].length : 2;
         return Number(val).toFixed(Math.max(2, Math.min(4, decimals)));
       };
-
-      if (!targetRows.length) return toast('No products to export.');
-
       // Shrinks the column widths proportionally if they add up to more than the printable width.
-      const printableWidth = pageWidth - margin * 2;
       const fitColumnsToPage = columns => {
         const total = Object.values(columns).reduce((sum, col) => sum + (col.cellWidth || 0), 0);
         if (total <= printableWidth) return columns;
@@ -3078,26 +3086,38 @@
       targetRows.forEach(row => {
         const category = String(row[0] || 'Products').trim();
         const groupName = String(row[18] || row[0] || 'Other products').trim();
-        if (!categoriesMap.has(category)) {
-          categoriesMap.set(category, new Map());
-        }
+        if (!categoriesMap.has(category)) categoriesMap.set(category, new Map());
         const groupsMap = categoriesMap.get(category);
-        if (!groupsMap.has(groupName)) {
-          groupsMap.set(groupName, []);
-        }
+        if (!groupsMap.has(groupName)) groupsMap.set(groupName, []);
         groupsMap.get(groupName).push(row);
       });
 
-      let currentY = 46;
+      // A dark bar with a rose edge naming the category, above its table.
+      const drawCategoryBar = (y, name, count) => {
+        doc.setFillColor(...INK);
+        doc.roundedRect(margin, y, printableWidth, 20, 3, 3, 'F');
+        doc.setFillColor(...ROSE);
+        doc.rect(margin, y, 4, 20, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(name.toUpperCase(), margin + 14, y + 13.4, { charSpace: 0.6 });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(236, 214, 220);
+        doc.text(`${count.toLocaleString()} product${count === 1 ? '' : 's'}`, pageWidth - margin - 10, y + 13.2, { align: 'right' });
+      };
 
+      let currentY = TOP;
       for (const [category, groupsMap] of categoriesMap.entries()) {
         const isPresentation = category.toLowerCase() === 'presentation stands';
+        const isAdj = rateFor(category) !== 0;
 
         // 3-Tier Excel Header. Column widths come only from columnStyles below: widths set on header
         // cells win over them and pushed the table past the page edge.
         const standardHead = [
           [
-            { content: '', rowSpan: 3 },
+            { content: 'Photo', rowSpan: 3 },
             { content: 'Code No', rowSpan: 3 },
             { content: 'Description', rowSpan: 3 },
             { content: 'Expiry\nDate', rowSpan: 3 },
@@ -3118,7 +3138,6 @@
             { content: 'Large Pallet\n(8 pallets)', styles: { halign: 'center' } }
           ]
         ];
-
         const presentationHead = [
           [
             { content: 'Photo' },
@@ -3135,215 +3154,207 @@
           ]
         ];
 
-        // Build body rows with product group titles and rowspan photo cells
+        // Body: a title row per product group, then its products with one shared photo cell.
         const body = [];
         const colCount = 12;
-
+        let productCount = 0;
         for (const [groupName, rows] of groupsMap.entries()) {
-          // Product group title row uses the pink table header surface.
-          body.push([
-            {
-              content: groupName,
-              colSpan: colCount,
-              styles: {
-                fillColor: [241, 184, 192],
-                textColor: [23, 20, 23],
-                fontStyle: 'bold',
-                fontSize: 8.5,
-                halign: 'left',
-                cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
-                lineColor: [201, 143, 152],
-                lineWidth: 0.65
-              }
+          productCount += rows.length;
+          body.push([{
+            content: groupName,
+            colSpan: colCount,
+            styles: {
+              fillColor: [249, 226, 231], textColor: INK, fontStyle: 'bold', fontSize: 8, halign: 'left',
+              cellPadding: { top: 4, bottom: 4, left: 7, right: 6 }, lineColor: [221, 178, 188], lineWidth: 0.5
             }
-          ]);
-
+          }]);
           const imageKey = getPdfGroupImageKey(category, groupName);
-          const isAdj = getCategoryAdjustment(category) !== 0;
+          // A group with a photo gets enough height to show it; the rows share it.
+          const rowMin = imageKey && pdfImages[imageKey] ? Math.ceil(PHOTO_HEIGHT / rows.length) : 0;
+          const price = raw => ({ content: formatPdfPrice(raw, category), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal', fontSize: 7 } });
 
           rows.forEach((row, rIdx) => {
-            const isFirstInGroup = rIdx === 0;
-
+            const rowCells = [];
+            if (rIdx === 0) {
+              rowCells.push({ content: '', rowSpan: rows.length, imageKey, styles: { fillColor: [255, 255, 255], cellPadding: 2, lineColor: [221, 178, 188], lineWidth: 0.5 } });
+            }
             if (isPresentation) {
-              const rowCells = [];
-              if (isFirstInGroup) {
-                rowCells.push({
-                  content: '',
-                  rowSpan: rows.length,
-                  imageKey,
-                  styles: { fillColor: [255, 250, 249], cellPadding: 2, lineColor: [216, 167, 174], lineWidth: 0.65 }
-                });
-              }
               const itemName = [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n');
               const moq = [row[15], row[16]].filter(v => String(v ?? '').trim()).join('\n');
               rowCells.push(
-                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.5 } },
-                { content: itemName, colSpan: 2, styles: { halign: 'left', fontSize: 6 } },
-                { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: String(row[13] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[14] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: moq, styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[17] ?? ''), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6 } }
+                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8, minCellHeight: rowMin } },
+                { content: itemName, colSpan: 2, styles: { halign: 'left', fontSize: 6.8 } },
+                { content: String(row[6] ?? ''), styles: { halign: 'center' } },
+                price(row[8]),
+                price(row[9]),
+                { content: String(row[13] ?? ''), styles: { halign: 'center' } },
+                { content: String(row[14] ?? ''), styles: { halign: 'center' } },
+                { content: String(row[7] ?? ''), styles: { halign: 'center' } },
+                { content: moq, styles: { halign: 'center' } },
+                { content: isNumeric(row[17]) ? Number(numeric(row[17])).toFixed(2) : String(row[17] ?? ''), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal' } }
               );
-              body.push(rowCells);
             } else {
-              const rowCells = [];
-              if (isFirstInGroup) {
-                rowCells.push({
-                  content: '',
-                  rowSpan: rows.length,
-                  imageKey,
-                  styles: { fillColor: [255, 250, 249], cellPadding: 2, lineColor: [216, 167, 174], lineWidth: 0.65 }
-                });
-              }
-              const desc = String(row[2] ?? '').replace(/\r?\n/g, '\n');
               rowCells.push(
-                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.5 } },
-                { content: desc, styles: { halign: 'left', fontSize: 6.5, cellPadding: { top: 2.5, bottom: 2.5, left: 4, right: 4 } } },
-                { content: String(row[4] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[5] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[6] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: String(row[7] ?? ''), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPdfPrice(row[8], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: formatPdfPrice(row[9], category), styles: { halign: 'right', textColor: [23, 20, 23], fontStyle: isAdj ? 'bold' : 'normal', fontSize: 6.5 } },
-                { content: formatPallet(row[10]), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPallet(row[11]), styles: { halign: 'center', fontSize: 6 } },
-                { content: formatPallet(row[12]), styles: { halign: 'center', fontSize: 6 } }
+                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8, minCellHeight: rowMin } },
+                { content: String(row[2] ?? '').replace(/\r?\n/g, '\n'), styles: { halign: 'left', fontSize: 6.8, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 } } },
+                { content: String(row[4] ?? ''), styles: { halign: 'center' } },
+                { content: String(row[5] ?? ''), styles: { halign: 'center' } },
+                { content: String(row[6] ?? ''), styles: { halign: 'center' } },
+                { content: String(row[7] ?? ''), styles: { halign: 'center' } },
+                price(row[8]),
+                price(row[9]),
+                { content: formatPallet(row[10]), styles: { halign: 'center' } },
+                { content: formatPallet(row[11]), styles: { halign: 'center' } },
+                { content: formatPallet(row[12]), styles: { halign: 'center' } }
               );
-              body.push(rowCells);
             }
+            body.push(rowCells);
           });
         }
 
-        // If switching to a new category and not the first page, start on a new page
-        if (currentY > 46 && doc.getNumberOfPages() > 0) {
+        // Categories follow on from each other; a new page only when this one's bar, header and
+        // first products would not fit.
+        const needed = 24 + (isPresentation ? 20 : 46) + 18 + PHOTO_HEIGHT;
+        if (currentY > TOP && currentY + needed > pageHeight - BOTTOM) {
           doc.addPage();
-          currentY = 46;
+          currentY = TOP;
         }
+        drawCategoryBar(currentY, category, productCount);
 
         doc.autoTable({
           head: isPresentation ? presentationHead : standardHead,
           body,
-          startY: currentY,
+          startY: currentY + 24,
           theme: 'grid',
           showHead: 'everyPage',
-          margin: { top: 46, right: margin, bottom: 26, left: margin },
+          rowPageBreak: 'avoid',
+          margin: { top: TOP, right: margin, bottom: BOTTOM, left: margin },
           styles: {
-            font: 'helvetica',
-            fontSize: 6,
-            cellPadding: 2.5,
-            overflow: 'linebreak',
-            valign: 'middle',
-            fillColor: [255, 255, 255],
-            textColor: [20, 13, 18],
-            lineColor: [216, 180, 188],
-            lineWidth: 0.5
+            font: 'helvetica', fontSize: 6.5, cellPadding: 3, overflow: 'linebreak', valign: 'middle',
+            fillColor: [255, 255, 255], textColor: [40, 33, 38], lineColor: [226, 196, 204], lineWidth: 0.5
           },
           headStyles: {
-            fillColor: [244, 216, 222],
-            textColor: [20, 13, 18],
-            fontStyle: 'bold',
-            fontSize: 6.5,
-            halign: 'center',
-            valign: 'middle',
-            lineColor: [203, 157, 168],
-            lineWidth: 0.65
+            fillColor: [244, 216, 222], textColor: INK, fontStyle: 'bold', fontSize: 6.8,
+            halign: 'center', valign: 'middle', lineColor: [214, 170, 181], lineWidth: 0.5
           },
+          alternateRowStyles: { fillColor: [253, 249, 250] },
           columnStyles: fitColumnsToPage(isPresentation ? {
-            0: { cellWidth: 93, halign: 'center' },
-            1: { cellWidth: 60, halign: 'center', fontStyle: 'bold' },
-            2: { cellWidth: 95, halign: 'left' },
-            3: { cellWidth: 77, halign: 'left' },
-            4: { cellWidth: 55, halign: 'center' },
-            5: { cellWidth: 55, halign: 'right' },
-            6: { cellWidth: 55, halign: 'right' },
-            7: { cellWidth: 55, halign: 'center' },
-            8: { cellWidth: 55, halign: 'center' },
-            9: { cellWidth: 65, halign: 'center' },
-            10: { cellWidth: 65, halign: 'center' },
-            11: { cellWidth: 65, halign: 'right' }
+            0: { cellWidth: 86, halign: 'center' },
+            1: { cellWidth: 64, halign: 'center', fontStyle: 'bold' },
+            2: { cellWidth: 100, halign: 'left' },
+            3: { cellWidth: 80, halign: 'left' },
+            4: { cellWidth: 54, halign: 'center' },
+            5: { cellWidth: 56, halign: 'right' },
+            6: { cellWidth: 56, halign: 'right' },
+            7: { cellWidth: 54, halign: 'center' },
+            8: { cellWidth: 54, halign: 'center' },
+            9: { cellWidth: 62, halign: 'center' },
+            10: { cellWidth: 62, halign: 'center' },
+            11: { cellWidth: 70, halign: 'right' }
           } : {
-            0: { cellWidth: 85, halign: 'center' },
-            1: { cellWidth: 65, halign: 'center', fontStyle: 'bold' },
-            2: { cellWidth: 180, halign: 'left' },
-            3: { cellWidth: 46, halign: 'center' },
+            0: { cellWidth: 82, halign: 'center' },
+            1: { cellWidth: 64, halign: 'center', fontStyle: 'bold' },
+            2: { cellWidth: 172, halign: 'left' },
+            3: { cellWidth: 48, halign: 'center' },
             4: { cellWidth: 44, halign: 'center' },
-            5: { cellWidth: 42, halign: 'center' },
+            5: { cellWidth: 40, halign: 'center' },
             6: { cellWidth: 56, halign: 'center' },
-            7: { cellWidth: 58, halign: 'right' },
-            8: { cellWidth: 60, halign: 'right' },
-            9: { cellWidth: 56, halign: 'center' },
-            10: { cellWidth: 56, halign: 'center' },
-            11: { cellWidth: 56, halign: 'center' }
+            7: { cellWidth: 52, halign: 'right' },
+            8: { cellWidth: 56, halign: 'right' },
+            9: { cellWidth: 61, halign: 'center' },
+            10: { cellWidth: 61, halign: 'center' },
+            11: { cellWidth: 62, halign: 'center' }
           }),
-          alternateRowStyles: {
-            fillColor: [253, 248, 249]
-          },
-          didDrawCell: function (data) {
-            if (data.section === 'body' && data.column.index === 0 && data.cell.raw && data.cell.raw.imageKey && pdfImages[data.cell.raw.imageKey]) {
-              const imgData = pdfImages[data.cell.raw.imageKey];
-              const pad = 2;
-              const cellX = data.cell.x + pad;
-              const cellY = data.cell.y + pad;
-              const cellW = data.cell.width - pad * 2;
-              const cellH = data.cell.height - pad * 2;
-              try {
-                doc.addImage(imgData, 'JPEG', cellX, cellY, cellW, cellH, undefined, 'FAST');
-              } catch {
-                // fallback
-              }
+          // The group photo, fitted inside its cell without stretching.
+          didDrawCell: data => {
+            const raw = data.cell.raw;
+            if (data.section !== 'body' || data.column.index !== 0 || !raw || !('imageKey' in raw)) return;
+            const img = raw.imageKey ? pdfImages[raw.imageKey] : null;
+            if (!img) {
+              // No photo for this group: a quiet dash instead of an empty box.
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(8);
+              doc.setTextColor(205, 182, 189);
+              doc.text('—', data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height / 2 + 2.5, { align: 'center' });
+              return;
             }
-          },
-          willDrawPage: function () {
-            doc.setFillColor(255, 255, 255);
-            doc.rect(0, 0, pageWidth, pageHeight, 'F');
+            const pad = 3;
+            const boxW = data.cell.width - pad * 2, boxH = data.cell.height - pad * 2;
+            if (boxW <= 4 || boxH <= 4) return;
+            const scale = Math.min(boxW / img.width, boxH / img.height);
+            const w = img.width * scale, h = img.height * scale;
+            try {
+              doc.addImage(img.data, 'JPEG', data.cell.x + (data.cell.width - w) / 2, data.cell.y + (data.cell.height - h) / 2, w, h, raw.imageKey, 'FAST');
+            } catch { /* a photo that can't be drawn leaves the cell empty */ }
           }
         });
 
-        currentY = (doc.lastAutoTable?.finalY || currentY) + 20;
+        currentY = (doc.lastAutoTable?.finalY || currentY) + 18;
       }
 
-      // Now loop over every generated page to draw the top header and bottom footer
+      // Header and footer on every page.
+      const exported = `Exported ${displayDate(new Date().toISOString())} by ${state.user?.name || ''}`;
+      const approved = version.status === 'approved';
+      const facts = [
+        ['Country', version.country || '—'],
+        ['Price level', version.priceLevel || '—'],
+        ['Revision', String(version.revision || 1)],
+        approved
+          ? ['Approved', `${version.approvedBy || '—'}${version.approvedAt ? ` · ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(version.approvedAt))}` : ''}`]
+          : ['Prices', 'Original upload'],
+      ];
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
 
-        // Top Header
-        doc.setFillColor(25, 24, 25);
-        doc.roundedRect(margin, 12, 22, 22, 3, 3, 'F');
+        // Brand mark, title and subtitle.
+        doc.setFillColor(...INK);
+        doc.roundedRect(margin, 14, 28, 28, 5, 5, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text('LRN', margin + 11, 26, { align: 'center' });
-
-        doc.setFontSize(11);
-        doc.setTextColor(23, 20, 23);
-        doc.text(doc.splitTextToSize(version.name || 'Price List', pageWidth * 0.55)[0], margin + 28, 23);
+        doc.setFontSize(8.5);
+        doc.text('LRN', margin + 14, 31, { align: 'center' });
+        doc.setTextColor(...INK);
+        doc.setFontSize(13);
+        doc.text(doc.splitTextToSize(version.name || 'Price List', pageWidth * 0.42)[0], margin + 38, 27);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(113, 98, 103);
-        const subtitle = ['LA ROSE NOIRE', version.priceLevel, version.country, 'Export Pricing'].filter(Boolean).join(' · ');
-        doc.text(subtitle + (scope ? `  ·  ${scope}` : ''), margin + 28, 32);
-
-        // Right side: approval stamp
-        doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
-        doc.setTextColor(23, 20, 23);
-        const approvalText = `Approved by ${version.approvedBy || '—'}${version.approvedAt ? ` · ${displayDate(version.approvedAt)}` : ''}`;
-        doc.text(approvalText, pageWidth - margin, 23, { align: 'right' });
+        doc.setTextColor(...MUTED);
+        doc.text(`La Rose Noire · Export price list${scope ? `  ·  Filtered: ${scope}` : ''}`, margin + 38, 38);
+
+        // Facts on the right, right to left: label above, value below.
+        let right = pageWidth - margin;
+        for (const [label, value] of [...facts].reverse()) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          const width = Math.max(doc.getTextWidth(value), (doc.setFontSize(6), doc.getTextWidth(label.toUpperCase()) + 4));
+          const x = right - width;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6);
+          doc.setTextColor(...MUTED);
+          doc.text(label.toUpperCase(), x, 25, { charSpace: 0.4 });
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(...(label === 'Approved' ? ROSE : INK));
+          doc.text(value, x, 37);
+          right = x - 22;
+        }
+        doc.setDrawColor(...ROSE);
+        doc.setLineWidth(1.1);
+        doc.line(margin, 49, pageWidth - margin, 49);
+
+        // Footer.
+        doc.setDrawColor(232, 210, 216);
+        doc.setLineWidth(0.5);
+        doc.line(margin, pageHeight - 26, pageWidth - margin, pageHeight - 26);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
-        doc.setTextColor(113, 98, 103);
-        doc.text(`Revision ${version.revision || 1} · Exported ${new Date().toLocaleString()} by ${state.user?.name || ''}`, pageWidth - margin, 32, { align: 'right' });
-
-        // Bottom Footer
-        doc.setFontSize(6.5);
-        doc.setTextColor(113, 98, 103);
-        doc.text('LA ROSE NOIRE · Commercial Price List · Strictly Confidential', margin, pageHeight - 12);
-        doc.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
+        doc.setTextColor(...MUTED);
+        doc.text('La Rose Noire · Commercial price list · Strictly confidential', margin, pageHeight - 14);
+        doc.text(`All prices in USD  ·  ${exported}`, pageWidth / 2, pageHeight - 14, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...INK);
+        doc.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 14, { align: 'right' });
       }
 
       doc.save(exportFileName(version, 'pdf'));
@@ -4813,6 +4824,71 @@
     const currentDestination = destination.value ? folderFromValue(destination.value) : '';
     destination.innerHTML = folderOptions(currentDestination);
     updateLibraryUploadLabel();
+    placeFolderIndicator(folderMoveQueued);
+    folderMoveQueued = false;
+  }
+
+  // --- Folder sidebar motion: it behaves like its own nav. A highlight slides to the folder you
+  // pick, and that folder's title, search and photos glide in from the direction you moved. ---
+  const folderIndicator = document.createElement('span');
+  folderIndicator.className = 'library-folder-indicator';
+  folderIndicator.setAttribute('aria-hidden', 'true');
+  let folderIndicatorBox = null; // where the highlight sits now, to glide from on the next change
+  let folderMoveQueued = false;  // set by a folder pick so the next render animates the highlight
+  const FOLDER_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  function placeFolderIndicator(glide = false) {
+    const nav = $('#libraryFolders');
+    if (!nav) return;
+    const active = nav.querySelector('.library-folder.is-active');
+    // Hidden (another page or tab): plain highlight on the button until it can be measured.
+    if (!active || !active.offsetParent) {
+      folderIndicator.remove();
+      nav.classList.remove('has-indicator');
+      folderIndicatorBox = null;
+      return;
+    }
+    if (folderIndicator.parentElement !== nav) nav.prepend(folderIndicator);
+    nav.classList.add('has-indicator');
+    const box = { x: active.offsetLeft, y: active.offsetTop, w: active.offsetWidth, h: active.offsetHeight };
+    const frame = b => ({ width: `${b.w}px`, height: `${b.h}px`, transform: `translate(${b.x}px, ${b.y}px)` });
+    Object.assign(folderIndicator.style, frame(box));
+    const from = folderIndicatorBox;
+    folderIndicatorBox = box;
+    if (glide && from && !reducedMotion()) {
+      const anim = folderIndicator.animate([frame(from), frame(box)], { duration: 520, easing: FOLDER_EASE });
+      setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 720); // lands even if frames pause
+    }
+  }
+  window.addEventListener('resize', () => placeFolderIndicator(false));
+  function folderPosition(folder) {
+    return [...($('#libraryFolders')?.querySelectorAll('[data-library-folder]') || [])].findIndex(button => button.dataset.libraryFolder === folderValue(folder));
+  }
+  /** After picking a folder: its contents glide in, up from below or down from above. */
+  function glideFolderContent(fromBelow) {
+    if (reducedMotion()) return;
+    const grid = $('#libraryGrid');
+    const parts = [$('.library-content-heading > div'), $('#libraryCard .image-settings-toolbar'), grid?.hidden ? $('#libraryEmpty') : grid].filter(Boolean);
+    const shift = fromBelow ? 20 : -20;
+    parts.forEach((el, index) => {
+      el.getAnimations().forEach(a => a.id === 'pla-folder' && a.cancel());
+      const anim = el.animate(
+        [{ opacity: 0, transform: `translate3d(0, ${shift}px, 0)` }, { opacity: 1, offset: 0.35 }, { opacity: 1, transform: 'translate3d(0, 0, 0)' }],
+        { duration: 580, delay: index * 50, easing: FOLDER_EASE, fill: 'backwards' }
+      );
+      anim.id = 'pla-folder';
+      setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 580 + index * 50 + 200);
+    });
+  }
+  /** Shows another folder with the sidebar motion (used by folder clicks and new folders). */
+  function openLibraryFolder(folder) {
+    const fromIndex = folderPosition(state.libraryFolder);
+    const changed = folder !== state.libraryFolder;
+    state.libraryFolder = folder;
+    state.librarySearch = '';
+    $('#librarySearchInput').value = '';
+    folderMoveQueued = changed;
+    renderLibrary();
+    if (changed) glideFolderContent(folderPosition(folder) >= fromIndex);
   }
   function updateLibraryUploadLabel() {
     const folder = folderFromValue($('#libraryUploadFolder')?.value);
@@ -4878,10 +4954,7 @@
   $('#libraryFolders')?.addEventListener('click', event => {
     const button = event.target.closest('[data-library-folder]');
     if (!button) return;
-    state.libraryFolder = folderFromValue(button.dataset.libraryFolder);
-    state.librarySearch = '';
-    $('#librarySearchInput').value = '';
-    renderLibrary();
+    openLibraryFolder(folderFromValue(button.dataset.libraryFolder));
     if (state.libraryFolder !== null) {
       $('#libraryUploadFolder').value = folderValue(state.libraryFolder);
       updateLibraryUploadLabel();
@@ -4905,12 +4978,9 @@
     try {
       const data = await api('library-folder', { method: 'POST', body: JSON.stringify({ category: $('#libraryFolderName').value.trim() }) });
       if (!state.photoFolders.some(folder => folderKey(folder) === folderKey(data.folder))) state.photoFolders.push(data.folder);
-      state.libraryFolder = data.folder;
-      state.librarySearch = '';
-      $('#librarySearchInput').value = '';
       $('#libraryFolderName').value = '';
       toggleFolderForm(false);
-      renderLibrary();
+      openLibraryFolder(data.folder);
       $('#libraryUploadFolder').value = folderValue(data.folder);
       updateLibraryUploadLabel();
       toast(`Folder ${data.folder} is ready for photos.`);

@@ -136,22 +136,32 @@
     place(false);
   }
 
-  // --- Pages: the new page sweeps in from the side of the tab you moved to --------------------
-  // A soft-edged mask sweeps across it while it slides a little the same way (no fade). Only the
-  // page being shown animates, and nothing stays on it afterwards, so menus and filters are unaffected.
+  // --- Pages: the new page glides in from the side of the tab you moved to (iOS-style) --------
+  // Its sections (title, tabs, cards) follow one another a beat apart. Only position, depth and a
+  // brief opacity ramp change, so the graphics card runs it without repainting the page each frame.
+  // Nothing stays on the page afterwards, so menus and filters are unaffected.
   const PAGE_ORDER = [...document.querySelectorAll('.nav-item')].map(item => item.dataset.panel);
   let shownPanel = document.querySelector('.panel:not([hidden])')?.id || null;
-  function sweepIn(panel, fromRight) {
-    panel.getAnimations().forEach(a => a.id === 'pla-page' && a.cancel());
-    const mask = `linear-gradient(${fromRight ? 'to left' : 'to right'}, #000 42%, transparent 58%)`;
-    const base = { maskImage: mask, webkitMaskImage: mask, maskSize: '300% 100%', webkitMaskSize: '300% 100%', maskRepeat: 'no-repeat', webkitMaskRepeat: 'no-repeat' };
-    const [from, to] = fromRight ? ['0% 0%', '100% 0%'] : ['100% 0%', '0% 0%'];
-    const anim = panel.animate([
-      { ...base, maskPosition: from, webkitMaskPosition: from, transform: `translateX(${fromRight ? 36 : -36}px)` },
-      { ...base, maskPosition: to, webkitMaskPosition: to, transform: 'none' },
-    ], { duration: 640, easing: IOS_EASE });
-    anim.id = 'pla-page';
-    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 800);
+  const PAGE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  function glideIn(panel, fromRight) {
+    const parts = [...panel.children]
+      .filter(el => !el.hidden && el.offsetParent !== null && el.tagName !== 'DIALOG')
+      .slice(0, 5);
+    const shift = fromRight ? 34 : -34;
+    parts.forEach((el, index) => {
+      el.getAnimations().forEach(a => a.id === 'pla-page' && a.cancel());
+      const delay = index * 55;
+      const anim = el.animate(
+        [
+          { opacity: 0, transform: `translate3d(${shift}px, 0, 0) scale(0.99)` },
+          { opacity: 1, offset: 0.35 },
+          { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+        ],
+        { duration: 680, delay, easing: PAGE_EASE, fill: 'backwards' }
+      );
+      anim.id = 'pla-page';
+      setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 680 + delay + 200);
+    });
   }
   const panelObserver = new MutationObserver(records => {
     for (const record of records) {
@@ -162,7 +172,9 @@
       shownPanel = panel.id;
       // Skip while the app is still loading, and when nothing changed.
       if (!previous || previous === panel.id || document.body.classList.contains('is-booting') || !animate()) continue;
-      sweepIn(panel, PAGE_ORDER.indexOf(panel.id) >= PAGE_ORDER.indexOf(previous));
+      // Leftover motion on the page being left stops at once.
+      document.getElementById(previous)?.querySelectorAll(':scope > *').forEach(el => el.getAnimations().forEach(a => a.id === 'pla-page' && a.finish()));
+      glideIn(panel, PAGE_ORDER.indexOf(panel.id) >= PAGE_ORDER.indexOf(previous));
     }
   });
   document.querySelectorAll('.panel').forEach(panel => panelObserver.observe(panel, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true }));
