@@ -34,7 +34,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=98">
+    <link rel="stylesheet" href="../styles/app.css?v=99">
     <script>
     (function() {
         try {
@@ -195,6 +195,8 @@ $panel = APP_PAGES[$page]['panel'];
                                         <polyline points="17 21 17 13 7 13 7 21"/>
                                         <polyline points="7 3 7 8 15 8"/>
                                     </svg>
+                                    <svg class="save-state-icon save-ring" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" pathLength="100"/></svg>
+                                    <svg class="save-state-icon save-check" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17.5 19 7" pathLength="100"/></svg>
                                 </button>
                             </div>
                         </div>
@@ -921,7 +923,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=6"></script>
-<script src="../scripts/app.js?v=92"></script>
+<script src="../scripts/app.js?v=93"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=8"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

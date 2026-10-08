@@ -3621,6 +3621,7 @@
   });
   $('#saveButton').addEventListener('click', event => {
     event.stopPropagation();
+    if ($('#saveButton').dataset.saveState === 'saving') return; // already saving
     if (!can('save')) return toast('You do not have permission to save price lists.');
     if (!state.active) return toast('Please upload or open a price list first before saving.');
     if (!state.active.isDraft && state.active.status === 'pending') return toast('This price list is already saved and waiting for approval. Make changes first to save a new version.');
@@ -3671,12 +3672,42 @@
     }
     if (!dom.saveConfirmCheck.checked) return toast('Confirm that you have reviewed the prices.');
     dom.saveDialog.close();
+    setSaveButtonState('saving');
     try {
       await save(name);
+      setSaveButtonState('done');
     } catch (error) {
+      setSaveButtonState('error');
       toast(error.message);
     }
   });
+  /**
+   * The Save button shows the save: its icon becomes a spinning ring while the server works, then a
+   * check draws itself (or the button shakes on an error) before the save icon comes back.
+   */
+  let saveFeedbackTimer = 0;
+  function setSaveButtonState(next) {
+    const button = $('#saveButton');
+    if (!button) return;
+    clearTimeout(saveFeedbackTimer);
+    if (!next) {
+      delete button.dataset.saveState;
+      button.removeAttribute('aria-busy');
+      return;
+    }
+    button.dataset.saveState = next;
+    button.setAttribute('aria-busy', String(next === 'saving'));
+    if (next === 'done') saveFeedbackTimer = setTimeout(() => setSaveButtonState(''), 1600);
+    if (next === 'error') {
+      if (!reducedMotion()) {
+        button.animate(
+          [{ translate: '0 0' }, { translate: '-4px 0' }, { translate: '4px 0' }, { translate: '-3px 0' }, { translate: '2px 0' }, { translate: '0 0' }],
+          { duration: 420, easing: 'ease-out' }
+        );
+      }
+      saveFeedbackTimer = setTimeout(() => setSaveButtonState(''), 480);
+    }
+  }
   dom.saveConfirmCheck?.addEventListener('change', () => { dom.confirmSave.disabled = !dom.saveConfirmCheck.checked; });
   $('#closeFileBtn')?.addEventListener('click', closeActiveFile);
   $('#editSaveMetaBtn')?.addEventListener('click', () => {

@@ -8629,6 +8629,35 @@ dialog.anchored-confirm::backdrop { background: transparent; backdrop-filter: no
    the animated size is the outer box, and content outside it is clipped until it settles. */
 .upload-modal-dialog.is-resizing { overflow: hidden; box-sizing: border-box; }
 
+/* Save button feedback (setSaveButtonState in scripts/app.js): the save icon gives way to a
+   spinning ring while saving, then to a check that draws itself. All three icons share one spot. */
+#workspacePanel #saveButton svg { transition: opacity .22s ease, transform .45s cubic-bezier(.22, 1, .36, 1), stroke .2s ease; }
+#workspacePanel #saveButton svg.save-state-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  transform: scale(.5);
+  pointer-events: none;
+}
+#workspacePanel #saveButton[data-save-state] svg.icon-save { opacity: 0; transform: scale(.5); }
+#workspacePanel #saveButton[data-save-state="saving"] svg.save-ring,
+#workspacePanel #saveButton[data-save-state="done"] svg.save-check { opacity: 1; transform: none; }
+#saveButton .save-ring circle {
+  stroke-dasharray: 30 100;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: save-ring-spin .8s linear infinite;
+}
+#saveButton[data-save-state="saving"] { cursor: progress; }
+#saveButton .save-check polyline { stroke-dasharray: 100; stroke-dashoffset: 100; }
+#saveButton[data-save-state="done"] .save-check polyline { animation: save-check-draw .5s cubic-bezier(.65, 0, .35, 1) .1s forwards; }
+#workspacePanel #saveButton[data-save-state="done"] svg.save-check { stroke: #15803d; }
+[data-theme="dark"] #workspacePanel #saveButton[data-save-state="done"] svg.save-check { stroke: #86efac; }
+#saveButton[data-save-state="done"] { border-color: rgba(21, 128, 61, .45); }
+@keyframes save-ring-spin { to { transform: rotate(360deg); } }
+@keyframes save-check-draw { to { stroke-dashoffset: 0; } }
+
 /* Photo folders: one highlight sits behind the folder buttons and glides to the active one
    (placeFolderIndicator in scripts/app.js). Until it can be measured, the button keeps its own. */
 .library-folders { position: relative; }
