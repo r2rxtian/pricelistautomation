@@ -19,18 +19,13 @@
   max-width: 830px;
 }
 
-.login-panel .brand-mark {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--pink);
-  color: var(--pink);
-  font: 700 .95rem var(--sans);
-  margin-bottom: 48px;
-  border-radius: 8px;
-  box-shadow: 0 0 20px var(--pink-subtle);
-}
+/* The PLA logo, larger than in the app's top bar. */
+.login-panel .login-logo { margin-bottom: 44px; }
+.login-panel .login-logo .pla-lockup { gap: 14px; }
+.login-panel .login-logo .pla-mark { width: 60px; height: 52px; }
+.login-panel .login-logo .pla-words { gap: 6px; }
+.login-panel .login-logo .pla-name { font-size: 2rem; }
+.login-panel .login-logo .pla-tagline { font-size: .78rem; }
 
 .login-panel h1 {
   font-family: var(--display);
@@ -121,14 +116,16 @@
 }
 
 /* Login Page Motion */
-.login-panel .brand-mark {
+.login-panel .login-logo {
   animation: login-fade-up .44s cubic-bezier(.22, 1, .36, 1) both 60ms;
-  transition: transform .32s cubic-bezier(.22, 1, .36, 1), box-shadow .3s ease, border-color .2s ease;
 }
 
-.login-panel .brand-mark:hover {
-  transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--pink) 40%, transparent);
+.login-panel .login-logo .pla-mark {
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+.login-panel .login-logo:hover .pla-mark {
+  transform: rotate(-4deg) scale(1.05);
 }
 
 .login-panel .kicker {
@@ -198,12 +195,6 @@
 [data-theme="dark"] .login-panel {
   background: #111216;
   border-color: #26292e;
-}
-
-[data-theme="dark"] .login-panel .brand-mark {
-  border-color: #eb97ae;
-  color: #eb97ae;
-  box-shadow: 0 0 20px rgba(235, 151, 174, 0.25);
 }
 
 [data-theme="dark"] .login-panel h1 {

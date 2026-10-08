@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../conn/db.php';
 
-const APP_NAME = 'LRN Price List Automation';
+const APP_NAME = 'PLA · Price List Automation';
 define('APP_ROOT', dirname(__DIR__));
 define('STORAGE_FILE', APP_ROOT . '/storage/app.json');
 

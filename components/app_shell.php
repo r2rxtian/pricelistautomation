@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/csrf.php';
+require_once __DIR__ . '/logo.php';
 
 const APP_PAGES = [
     'prices' => ['panel' => 'workspacePanel', 'title' => 'Prices'],
@@ -33,8 +34,9 @@ $panel = APP_PAGES[$page]['panel'];
     <title><?= htmlspecialchars(APP_PAGES[$page]['title'] . ' · ' . APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=99">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
+    <link rel="stylesheet" href="../styles/app.css?v=100">
     <script>
     (function() {
         try {
@@ -72,7 +74,7 @@ $panel = APP_PAGES[$page]['panel'];
     <div id="appLoading" class="app-loading" role="status"><div class="loader-orbit"><span class="orbit-ring ring-1"></span><span class="orbit-ring ring-2"></span><span class="orbit-core"></span></div><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <div class="topbar-left">
-            <a class="brand" href="#" aria-label="LRN Price List home"><span>LRN</span><b>Price List Automation</b></a>
+            <a class="brand" href="#" aria-label="PLA Price List Automation home"><?= pla_logo_lockup() ?></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
             <button class="nav-item active" data-panel="workspacePanel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg><strong>Prices</strong></button>

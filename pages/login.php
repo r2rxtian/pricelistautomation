@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../auth/csrf.php';
+require_once __DIR__ . '/../components/logo.php';
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
@@ -24,9 +25,10 @@ try {
     <title>Sign in · <?= htmlspecialchars(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=99">
-    <link rel="stylesheet" href="../styles/login.css?v=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
+    <link rel="stylesheet" href="../styles/app.css?v=100">
+    <link rel="stylesheet" href="../styles/login.css?v=2">
     <script>
     (function () {
         try {
@@ -60,7 +62,7 @@ try {
         <svg class="theme-icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
     </button>
     <section class="login-panel" aria-labelledby="loginTitle">
-        <div class="brand-mark" aria-hidden="true">LRN</div>
+        <div class="login-logo" role="img" aria-label="PLA Price List Automation"><?= pla_logo_lockup() ?></div>
         <p class="kicker">Export pricing operations</p>
         <h1 id="loginTitle">Price lists, without the spreadsheet drift.</h1>
         <p class="muted">Upload a price list, adjust prices by category, get it approved, then export it to Excel or PDF.</p>

@@ -291,26 +291,29 @@ p {
   color: var(--text-heading);
 }
 
-.brand span {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--pink);
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.75rem;
-  display: grid;
-  place-items: center;
-  font-family: var(--sans);
-  box-shadow: 0 0 14px var(--pink-glow);
+/* The PLA logo (components/logo.php): the mark, "PLA" with a maroon P, and the tagline. */
+:root {
+  --pla-maroon: #6e0f2b;
+  --pla-ink: #2f3035;
+  --pla-accent: #ef8a98;
 }
-
-.brand b {
-  font-family: var(--display);
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.pla-lockup { display: inline-flex; align-items: center; gap: 10px; }
+.pla-mark { display: block; flex: 0 0 auto; width: 37px; height: 32px; }
+.pla-words { display: grid; gap: 3px; line-height: 1; }
+.pla-name {
+  font: 800 1.22rem/1 'Montserrat', var(--sans);
+  letter-spacing: 0.03em;
+  color: var(--pla-ink);
 }
+.pla-name i { font-style: normal; color: var(--pla-maroon); }
+.pla-tagline {
+  font: 600 0.6rem/1 var(--sans);
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.brand .pla-mark { transition: transform .45s cubic-bezier(.22, 1, .36, 1); }
+.brand:hover .pla-mark { transform: rotate(-4deg) scale(1.05); }
 
 .top-nav {
   position: relative; /* the sliding nav indicator measures from here */
@@ -5118,14 +5121,11 @@ dialog[open]::backdrop {
   border-bottom-color: #1e2025;
 }
 
-[data-theme="dark"] .brand b {
-  color: #f4f4f6;
-}
-
-[data-theme="dark"] .brand span {
-  background: #961f32;
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(150, 31, 50, 0.5);
+/* Dark mode: the logo's charcoal turns light and its maroon lifts so both read on dark grey. */
+[data-theme="dark"] {
+  --pla-maroon: #d65a7a;
+  --pla-ink: #ececf0;
+  --pla-accent: #f4a3b0;
 }
 
 [data-theme="dark"] .top-nav .nav-item {
