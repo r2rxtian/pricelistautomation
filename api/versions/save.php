@@ -6,13 +6,24 @@ declare(strict_types=1);
  *   otherwise       – price changes: pending until approved (instantly approved for auto-approvers).
  */
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../../rules/workbook_import.php';
 
 $user = apiUser();
 requirePost();
 csrfVerify();
 requirePermission($user, 'save', 'Your role cannot save price lists.');
 
-$data = request_json();
+$multipart = str_starts_with(strtolower($_SERVER['CONTENT_TYPE'] ?? ''), 'multipart/form-data');
+$data = $multipart ? $_POST : request_json();
+$isUpload = ($data['kind'] ?? '') === 'upload';
+if ($isUpload) {
+    requirePermission($user, 'upload', 'Your role cannot upload price lists.');
+    if (!$multipart || count($_FILES) !== 1 || !isset($_FILES['workbook']) || !is_array($_FILES['workbook'])) {
+        json_response(['ok' => false, 'message' => 'Upload the original official .xlsx workbook. Browser-parsed rows are not accepted for uploads.'], 422);
+    }
+} elseif ($multipart) {
+    json_response(['ok' => false, 'message' => 'Invalid workbook upload request.'], 422);
+}
 $name = clean_text($data['name'] ?? '', 160);
 $priceLevelInput = clean_text($data['priceLevel'] ?? '', 120);
 $countryInput = clean_text($data['country'] ?? '', 120);
@@ -28,6 +39,30 @@ if ($country === null) {
 $priceLevel = canonical_price_level($priceLevelInput);
 if ($priceLevel === null) {
     json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not a valid price level. Choose Price Level 1 to " . count(PRICE_LEVELS) . '.'], 422);
+}
+
+if ($isUpload) {
+    try {
+        // Ignore any browser-supplied rows, headers or price indexes: derive all of them
+        // from the original file only after the complete workbook passes validation.
+        $data = array_merge($data, import_official_uploaded_workbook($_FILES['workbook'], $country, $priceLevel));
+        $data['adjustment'] = 0;
+        $data['categoryAdjustments'] = [];
+        $data['changes'] = [];
+    } catch (WorkbookTemplateException $error) {
+        json_response(['ok' => false, 'message' => $error->getMessage()], 422);
+    }
+} else {
+    // The edit route must not act as an alternate create/import endpoint.
+    requirePermission($user, 'update', 'Your role cannot update price lists.');
+    $editId = clean_text($data['id'] ?? '', 32);
+    if ($editId === '') json_response(['ok' => false, 'message' => 'Open an existing price list before saving changes. New lists require a validated official workbook upload.'], 422);
+    $editBase = find_open_version($user, $editId);
+    if (!empty($editBase['templateVersion'])) {
+        if (($data['headers'] ?? null) !== price_list_template()['normalizedHeaders'] || ($data['priceColumns'] ?? null) !== [8, 9]) {
+            json_response(['ok' => false, 'message' => 'The price list columns cannot be changed. Use the approved template layout.'], 422);
+        }
+    }
 }
 
 $headers = $data['headers'] ?? [];
@@ -96,7 +131,7 @@ $identity = ['name' => $name, 'country' => $country, 'priceLevel' => $priceLevel
 $sameName = array_values(array_filter($summaries, fn($v) => same_price_list($v, $identity)));
 
 // Uploads are stored as-is (original prices) and need no approval; only later price changes do.
-if (($data['kind'] ?? '') === 'upload') {
+if ($isUpload) {
     $revision = 1;
     foreach ($sameName as $summary) $revision = max($revision, (int) $summary['revision'] + 1);
     $version = [
@@ -128,6 +163,7 @@ if (($data['kind'] ?? '') === 'upload') {
         'rejectedBy' => null,
         'rejectionRemarks' => null,
         'basedOn' => null,
+        'templateVersion' => $data['templateVersion'],
     ];
     repo_save_version($version);
     supersede_older_approved($version);
@@ -136,6 +172,7 @@ if (($data['kind'] ?? '') === 'upload') {
         'versionId' => $version['id'], 'versionName' => $name, 'fileName' => $name, 'revision' => $revision,
         'priceLevel' => $priceLevel, 'country' => $country, 'rowCount' => count($cleanRows), 'categoryCount' => count($categories),
         'sourceFile' => clean_text($data['sourceFile'] ?? '', 200),
+        'templateVersion' => $data['templateVersion'],
     ]);
     notify(usernames_with_permission('export'), 'available', "New price list: {$name}", "{$user['name']} uploaded {$label}. It is available to open and export.", $version['id']);
     json_response(['ok' => true, 'active' => version_for_client($user, $version), 'message' => "Uploaded {$name}."]);
@@ -187,6 +224,7 @@ $version = [
     'rejectedBy' => null,
     'rejectionRemarks' => null,
     'basedOn' => $base['id'] ?? null,
+    'templateVersion' => $editBase['templateVersion'] ?? null,
 ];
 // Top approvers (e.g. Ms. Gen) publish directly: their saves are approved on the spot.
 $autoApproved = is_auto_approver($user['username']);

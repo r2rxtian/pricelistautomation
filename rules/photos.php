@@ -25,8 +25,19 @@ function normalize_uploaded_files(mixed $entry): array
     return $files;
 }
 
+/** Category folders are labels, never directories or user-supplied file paths. */
+function normalize_library_category(mixed $value): string
+{
+    if (!is_string($value) || !mb_check_encoding($value, 'UTF-8')) throw new InvalidArgumentException('Choose a valid photo folder.');
+    $category = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+    if (mb_strlen($category) > 120 || preg_match('/[\x00-\x1f\x7f]/u', $category)) {
+        throw new InvalidArgumentException('Folder names must be at most 120 characters and contain no control characters.');
+    }
+    return $category;
+}
+
 /** Validates one uploaded image, stores it in the photo library and returns its record. */
-function store_library_photo(array $file, array $user): array
+function store_library_photo(array $file, array $user, string $category = ''): array
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) throw new InvalidArgumentException('The upload did not complete.');
     $size = (int) ($file['size'] ?? 0);
@@ -39,6 +50,8 @@ function store_library_photo(array $file, array $user): array
     if (!$dimensions || $dimensions[0] < 120 || $dimensions[1] < 120 || $dimensions[0] > 6000 || $dimensions[1] > 6000) {
         throw new InvalidArgumentException('Images must be between 120 and 6,000 pixels in each direction.');
     }
+    $category = normalize_library_category($category);
+    if ($category !== '') $category = repo_add_library_folder($category);
     $directory = APP_ROOT . '/' . LIBRARY_DIR;
     if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
         throw new RuntimeException('Unable to create the photo library directory.');
@@ -52,6 +65,7 @@ function store_library_photo(array $file, array $user): array
     $photo = [
         'id' => $id,
         'name' => $name,
+        'category' => $category,
         'imagePath' => LIBRARY_DIR . '/' . $filename,
         'width' => (int) $dimensions[0],
         'height' => (int) $dimensions[1],

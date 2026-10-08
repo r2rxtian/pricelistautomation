@@ -16,7 +16,7 @@ require_once __DIR__ . '/../rules/workflow.php';
 
 function json_default_store(): array
 {
-    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => []];
+    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => [], 'photoFolders' => []];
 }
 
 function json_read_store(): array
@@ -25,7 +25,7 @@ function json_read_store(): array
     $decoded = json_decode((string) file_get_contents(STORAGE_FILE), true);
     $store = is_array($decoded) ? array_replace(json_default_store(), $decoded) : json_default_store();
     unset($store['active']);
-    foreach (['versions', 'auditLogs', 'notifications', 'productImages', 'photoLibrary'] as $key) {
+    foreach (['versions', 'auditLogs', 'notifications', 'productImages', 'photoLibrary', 'photoFolders'] as $key) {
         $store[$key] = is_array($store[$key]) ? array_values($store[$key]) : [];
     }
     $store['versions'] = array_map('normalize_version', $store['versions']);
@@ -225,6 +225,39 @@ function repo_add_library_photo(array $photo): void
     }
     json_mutate(function (array &$store) use ($photo) {
         array_unshift($store['photoLibrary'], $photo);
+    });
+}
+
+/** Folder names are category labels, independent of file-system paths. */
+function repo_list_library_folders(): array
+{
+    if (database_enabled()) return database_list_library_folders();
+    return array_values(array_filter(json_read_store()['photoFolders'], 'is_string'));
+}
+
+function repo_add_library_folder(string $category): string
+{
+    if ($category === '') return '';
+    if (database_enabled()) return database_add_library_folder($category);
+    return json_mutate(function (array &$store) use ($category) {
+        foreach ($store['photoFolders'] as $folder) {
+            if (is_string($folder) && mb_strtolower($folder) === mb_strtolower($category)) return $folder;
+        }
+        $store['photoFolders'][] = $category;
+        return $category;
+    });
+}
+
+function repo_move_library_photo(string $id, string $category): ?array
+{
+    if (database_enabled()) return database_move_library_photo($id, $category);
+    return json_mutate(function (array &$store) use ($id, $category) {
+        foreach ($store['photoLibrary'] as &$photo) {
+            if (($photo['id'] ?? '') !== $id) continue;
+            $photo['category'] = $category;
+            return $photo;
+        }
+        return null;
     });
 }
 

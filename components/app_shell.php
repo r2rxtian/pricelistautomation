@@ -34,7 +34,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=79">
+    <link rel="stylesheet" href="../styles/app.css?v=89">
     <script>
     (function() {
         try {
@@ -122,7 +122,7 @@ $panel = APP_PAGES[$page]['panel'];
                                     <line x1="8" y1="13" x2="16" y2="13"/>
                                     <line x1="8" y1="17" x2="16" y2="17"/>
                                 </svg>
-                                <span id="listMeta" class="list-subtitle">Upload an .xlsx or .xls file to open and edit prices.</span>
+                                <span id="listMeta" class="list-subtitle">Upload an official .xlsx template to open and edit prices.</span>
                             </div>
                             <div class="file-audit-row" id="savedMetaRow" hidden>
                                 <svg class="audit-clock-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -229,12 +229,12 @@ $panel = APP_PAGES[$page]['panel'];
                         </section>
                     </div>
                 </div>
-                <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
+                <input id="fileInput" type="file" accept=".xlsx" hidden>
 
                 <section id="emptyState" class="empty-state">
                     <div class="upload-icon-wrapper"><div class="upload-icon-glow"></div><div class="upload-icon">↗</div></div>
                     <h2 id="emptyStateTitle">Import your current price list</h2>
-                    <p id="emptyStateText">Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.</p>
+                    <p id="emptyStateText">Drop an official .xlsx workbook here or browse your computer. Download the template from the upload window.</p>
                     <button id="emptyUploadButton" class="button primary edit-only">Upload Excel file</button>
                     <button id="emptyBrowseListsButton" class="button secondary" type="button" hidden>Browse approved price lists</button>
                     <div class="empty-open-saved" id="emptyOpenSaved" hidden>
@@ -292,15 +292,12 @@ $panel = APP_PAGES[$page]['panel'];
                 </section>
             </section>
 
-            <section id="listsPanel" class="panel" hidden>
+            <section id="listsPanel" class="panel management-page" hidden>
                 <div class="page-heading history-heading">
                     <div class="heading-left">
                         <p class="kicker history-kicker">APPROVAL WORKFLOW</p>
                         <h1 class="history-title">Approvals</h1>
-                        <p class="muted history-subtitle" id="listsSubtitle">Price changes waiting for, or given, approval.</p>
-                    </div>
-                    <div class="heading-actions">
-                        <button id="listsBackBtn" class="button secondary history-back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg><span>Back to prices</span></button>
+                        <p class="muted history-subtitle" id="listsSubtitle">Review saved price changes and approval decisions.</p>
                     </div>
                 </div>
 
@@ -366,16 +363,16 @@ $panel = APP_PAGES[$page]['panel'];
                 </div>
             </section>
 
-            <section id="filesPanel" class="panel" hidden>
+            <section id="filesPanel" class="panel management-page" hidden>
                 <div class="page-heading history-heading">
                     <div class="heading-left">
                         <p class="kicker history-kicker">UPLOADED PRICE LISTS</p>
                         <h1 class="history-title">Files</h1>
-                        <p class="muted history-subtitle">Every uploaded price list, with its original prices. Uploads don't need approval; price changes made to them go to Approvals.</p>
+                        <p class="muted history-subtitle">Original uploaded price lists. Review price changes in Approvals.</p>
                     </div>
-                    <div class="heading-actions">
-                        <button type="button" id="filesUploadBtn" class="button primary perm-upload" hidden>Upload files</button>
-                    </div>
+                </div>
+                <div class="audit-tab-bar file-controls" aria-label="File actions">
+                    <button type="button" id="filesUploadBtn" class="button primary perm-upload" hidden>Upload files</button>
                 </div>
                 <div class="history-card">
                     <div class="history-tools">
@@ -410,15 +407,12 @@ $panel = APP_PAGES[$page]['panel'];
                     </div>
                 </div>
             </section>
-            <section id="historyPanel" class="panel" hidden>
+            <section id="historyPanel" class="panel management-page" hidden>
                 <div class="page-heading history-heading">
                     <div class="heading-left">
                         <p class="kicker history-kicker">COMPLIANCE & AUDIT TRAIL</p>
                         <h1 class="history-title">Audit Logs</h1>
-                        <p class="muted history-subtitle">Every upload, price adjustment, cell edit, save, approval, rejection, and export, in chronological order.</p>
-                    </div>
-                    <div class="heading-actions">
-                        <button id="backToPricesBtn" class="button secondary history-back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg><span>Back to prices</span></button>
+                        <p class="muted history-subtitle">Review uploads, price changes, approvals, and exports.</p>
                     </div>
                 </div>
 
@@ -571,14 +565,13 @@ $panel = APP_PAGES[$page]['panel'];
                 </dialog>
             </section>
 
-            <section id="settingsPanel" class="panel" hidden>
+            <section id="settingsPanel" class="panel management-page" hidden>
                 <div class="page-heading settings-heading">
                     <div class="heading-left">
                         <p class="kicker">Config</p>
                         <h1>Product photos</h1>
-                        <p class="muted">Upload photos once into the library, then pick one for each product type. Photos appear in the price table and PDF exports.</p>
+                        <p class="muted">Organize category folders and choose photos for each product type.</p>
                     </div>
-                    <div class="heading-actions"><button id="settingsBackButton" class="button secondary">Back to prices</button></div>
                 </div>
 
                 <div class="audit-tab-bar" role="tablist" aria-label="Photo settings">
@@ -586,18 +579,34 @@ $panel = APP_PAGES[$page]['panel'];
                     <button type="button" class="config-tab-btn audit-tab-btn" data-config-tab="types" role="tab" aria-selected="false"><span>Product type photos</span><span id="typesCountBadge" class="audit-tab-count">0</span></button>
                 </div>
 
-                <div class="image-settings-card" id="libraryCard">
-                    <div id="libraryDropZone" class="library-drop-zone" tabindex="0" role="button" aria-label="Upload photos to the library">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        <div><strong>Drop photos here or click to upload</strong><small>Select many at once · JPG, PNG or WebP · up to 6 MB each</small></div>
-                        <span id="libraryUploadStatus" class="library-upload-status"></span>
-                    </div>
+                <div class="image-settings-card library-workspace" id="libraryCard">
+                    <aside class="library-sidebar" aria-label="Photo folders">
+                        <div class="library-sidebar-heading"><h2>Folders</h2><button type="button" id="libraryNewFolder" class="library-new-folder" aria-label="Create category folder" title="New category folder" aria-expanded="false" aria-controls="libraryFolderForm">+</button></div>
+                        <form id="libraryFolderForm" class="library-folder-form" hidden>
+                            <label for="libraryFolderName">Category name</label>
+                            <input id="libraryFolderName" name="category" type="text" maxlength="120" placeholder="e.g. Chocolates" required autocomplete="off">
+                            <p id="libraryFolderError" class="library-folder-error" role="alert" hidden></p>
+                            <div class="library-folder-form-actions"><button type="submit" class="button primary">Create</button><button type="button" id="libraryFolderCancel" class="button secondary">Cancel</button></div>
+                        </form>
+                        <nav id="libraryFolders" class="library-folders" aria-label="Browse category folders"></nav>
+                        <p class="library-sidebar-note">Category folders also appear automatically from your price lists.</p>
+                    </aside>
+                    <section class="library-content" aria-labelledby="libraryFolderTitle">
+                        <div class="library-content-heading">
+                            <div><p class="kicker">Photo library</p><h2 id="libraryFolderTitle">All photos</h2><p id="libraryFolderDescription" class="muted">Browse your library or open a category folder.</p></div>
+                            <div class="library-upload-controls">
+                                <label class="library-upload-destination" for="libraryUploadFolder"><span>Upload to</span><select id="libraryUploadFolder" aria-label="Upload destination folder"></select></label>
+                                <button type="button" id="libraryUploadButton" class="button primary" title="JPG, PNG or WebP · up to 6 MB each">Upload photos</button>
+                                <span id="libraryUploadStatus" class="library-upload-status" role="status" aria-live="polite"></span>
+                            </div>
+                        </div>
                     <div class="image-settings-toolbar">
                         <label class="search settings-search"><span>Search photos</span><input id="librarySearchInput" type="search" placeholder="Search photos by name..."></label>
                         <span id="libraryCount" class="history-count"></span>
                     </div>
                     <div id="libraryGrid" class="library-grid" aria-live="polite"></div>
                     <div id="libraryEmpty" class="settings-empty" hidden><h2>The library is empty</h2><p>Upload product photos above. You can then pick them for any product type.</p></div>
+                    </section>
                 </div>
 
                 <div class="image-settings-card" id="typesCard" hidden>
@@ -616,127 +625,131 @@ $panel = APP_PAGES[$page]['panel'];
     </div>
 </div>
 
-<dialog id="uploadModal" class="upload-modal-dialog">
+<dialog id="uploadModal" class="upload-modal-dialog" aria-labelledby="uploadModalTitle" aria-describedby="uploadModalDescription">
     <div class="dialog-card upload-modal-card">
-        <div class="dialog-heading">
-            <div class="upload-modal-title-group">
-                <span class="upload-modal-icon-badge" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </span>
-                <div>
-                    <p class="kicker">EXCEL IMPORT</p>
-                    <h2>Upload Price List Excel File</h2>
+        <header class="dialog-heading upload-heading">
+            <div>
+                <h2 id="uploadModalTitle" tabindex="-1">Upload price lists</h2>
+                <p id="uploadModalDescription">Choose your workbook. We’ll validate it before saving.</p>
+            </div>
+            <button id="closeUploadModalBtn" type="button" class="icon-button" aria-label="Close upload window">×</button>
+        </header>
+
+        <div id="uploadMainView" class="upload-step upload-main-view">
+            <div class="upload-template-tools">
+                <span>Use the official workbook</span>
+                <div class="upload-help-actions">
+                    <button type="button" id="downloadTemplateBtn" class="upload-text-button">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>
+                        Download template
+                    </button>
+                    <button type="button" id="uploadTemplateRulesBtn" class="upload-text-button" aria-controls="uploadGuideView">
+                        Template rules <span aria-hidden="true">↗</span>
+                    </button>
                 </div>
             </div>
-            <button id="closeUploadModalBtn" type="button" class="icon-button" aria-label="Close">×</button>
+
+            <div id="modalDropZone" class="modal-drop-zone" role="group" aria-label="Choose or drop Excel workbooks">
+                <input id="modalFileInput" type="file" accept=".xlsx" multiple hidden>
+                <div class="drop-zone-content">
+                    <svg class="drop-zone-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6m-3 3 3-3 3 3"/></svg>
+                    <div class="drop-zone-text">
+                        <strong id="dropZonePrompt">Drop your workbook here</strong>
+                        <small>.xlsx only · 10 MB per file · up to 5 files</small>
+                    </div>
+                    <button type="button" id="browseFileBtn" class="button secondary upload-browse-button" autofocus>Browse files</button>
+                </div>
+            </div>
+
+            <div id="uploadValidationErrors" class="upload-validation-errors" role="alert" hidden></div>
+
+            <section id="stagedFilesPanel" class="staged-files" aria-label="Selected workbooks" hidden>
+                <div class="staged-apply-all">
+                    <span class="staged-apply-label">Set all files</span>
+                    <select id="applyAllCountry" aria-label="Country for all files"><option value="">Country…</option></select>
+                    <select id="applyAllPriceLevel" aria-label="Price level for all files"><option value="">Price level…</option></select>
+                    <button type="button" id="applyAllBtn" class="button secondary">Apply</button>
+                </div>
+                <div class="staged-table" role="table" aria-label="Files to upload">
+                    <div class="staged-row staged-head" role="row">
+                        <span role="columnheader">Workbook</span>
+                        <span role="columnheader">List name</span>
+                        <span role="columnheader">Country</span>
+                        <span role="columnheader">Price level</span>
+                        <span role="columnheader"><span class="sr-only">Remove</span></span>
+                    </div>
+                    <div id="stagedFilesList"></div>
+                </div>
+                <p id="stagedFilesHint" class="upload-meta-hint"></p>
+            </section>
         </div>
 
-        <p class="muted upload-modal-desc">
-            Upload an Excel workbook (<code>.xlsx</code> or <code>.xls</code>) to open and edit products, specifications, and prices directly in the spreadsheet editor.
-        </p>
-
-        <!-- Downloadable Official Template Card -->
-        <div class="template-download-card">
-            <div class="template-card-left">
-                <div class="template-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="18"/><line x1="15" y1="15" x2="12" y2="18"/></svg>
-                </div>
-                <div class="template-card-info">
-                    <strong>Need the exact Excel template?</strong>
-                    <span>Download the official workbook pre-formatted with exact worksheets, columns, and sample products ready for input.</span>
-                </div>
+        <section id="uploadGuideView" class="upload-step upload-guide-view" hidden aria-label="Official template requirements">
+            <div class="template-guide-intro">
+                <span id="templateVersionLabel" class="template-version">PLA-2</span>
+                <p>You don’t need every category. Keep the complete template headers on every sheet you include.</p>
             </div>
-            <button type="button" id="downloadTemplateBtn" class="button secondary download-template-btn" title="Download official Excel template">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Download Template (.xlsx)</span>
-            </button>
-        </div>
-
-        <!-- Template Column Guide / Visual Layout Preview -->
-        <div class="template-structure-preview">
-            <div class="structure-preview-header">
-                <strong>Exact Template Columns (12 Standard Fields)</strong>
-                <span class="structure-badge">Matches Active Editor</span>
+            <div class="template-layout-tabs" role="tablist" aria-label="Worksheet layout">
+                <button type="button" id="templateStandardTab" role="tab" class="template-layout-tab" data-template-layout="standard" aria-selected="true" aria-controls="templateLayout-standard">Standard products</button>
+                <button type="button" id="templatePresentationTab" role="tab" class="template-layout-tab" data-template-layout="presentation" aria-selected="false" aria-controls="templateLayout-presentation" tabindex="-1">Presentation Stands</button>
             </div>
-            <div class="structure-columns-table-wrap">
-                <table class="structure-mini-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Photo</th>
-                            <th>Code No</th>
-                            <th>Description</th>
-                            <th>Expiry</th>
-                            <th>Weight</th>
-                            <th>Pcs/Box</th>
-                            <th>Box Size</th>
-                            <th>Price/pc</th>
-                            <th>Price/Box</th>
-                            <th>Pallet 40ft (L/S)</th>
-                            <th>Pallet 20ft (L)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td><em>[Image]</em></td>
-                            <td><code>PRD-001</code></td>
-                            <td>Mini Tart Shells Round</td>
-                            <td>12 Mo</td>
-                            <td>15g</td>
-                            <td>120</td>
-                            <td>Medium Box</td>
-                            <td>$0.45</td>
-                            <td>$54.00</td>
-                            <td>16 Lrg / 2 Sml</td>
-                            <td>8 Lrg</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <datalist id="priceLevelOptions"></datalist>
-        <datalist id="countryOptions"></datalist>
-
-        <!-- File Upload Area (one or many workbooks) -->
-        <div id="modalDropZone" class="modal-drop-zone">
-            <input id="modalFileInput" type="file" accept=".xlsx,.xls" multiple hidden>
-            <div class="drop-zone-content">
-                <div class="drop-zone-icon" aria-hidden="true">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+            <div class="template-guide-content">
+                <section class="template-workbook-rules" aria-labelledby="templateWorkbookRulesTitle">
+                    <h3 id="templateWorkbookRulesTitle">Before you upload</h3>
+                    <ul>
+                        <li><strong>Use the official .xlsx</strong><span id="templateFileLimits">10 MB maximum · 15,000 products</span></li>
+                        <li><strong>Keep the Instructions sheet</strong><span>Use the current version without changing its contents.</span></li>
+                        <li><strong>Include at least one product</strong><span>Replace or delete the sample rows. Enter values, not formulas.</span></li>
+                    </ul>
+                </section>
+                <div class="template-guide-workspace">
+                    <div id="templateLayouts"></div>
+                    <aside class="template-validity" aria-labelledby="templateValidityTitle">
+                        <h3 id="templateValidityTitle">Presentation Stands rules</h3>
+                        <p class="template-validity-summary">The sheet is optional. Its headers are not.</p>
+                        <section class="template-validity-group is-accepted" aria-labelledby="templateAcceptedTitle">
+                            <h4 id="templateAcceptedTitle"><span aria-hidden="true">✓</span> Accepted</h4>
+                            <ul>
+                                <li><strong>No Stands sheet</strong><span>Another category has at least one valid product.</span></li>
+                                <li><strong>All headers, no stand products</strong><span>Keep the headers and remove the sample rows. Another category must contain products.</span></li>
+                                <li><strong>Only some stand products</strong><span>Any number is fine. Every listed stand must have its required values.</span></li>
+                            </ul>
+                        </section>
+                        <section class="template-validity-group is-rejected" aria-labelledby="templateRejectedTitle">
+                            <h4 id="templateRejectedTitle"><span aria-hidden="true">×</span> Rejected</h4>
+                            <ul>
+                                <li><strong>Missing or changed headers</strong><span>Don’t add, remove, rename, reorder or move columns—even optional-value columns.</span></li>
+                                <li><strong>An incomplete product row</strong><span>A required value is blank or invalid.</span></li>
+                                <li><strong>A completely blank Stands sheet</strong><span>Delete the unused sheet, or restore its complete headers.</span></li>
+                            </ul>
+                        </section>
+                    </aside>
                 </div>
-                <div class="drop-zone-text">
-                    <strong id="dropZonePrompt">Drag &amp; drop one or more Excel files here, or <button type="button" id="browseFileBtn" class="link-btn">browse files</button></strong>
-                    <small>Microsoft Excel (.xlsx, .xls) · up to 5 files at once</small>
+                <div class="template-validation-outcome" role="note">
+                    <strong>One invalid sheet rejects the whole workbook.</strong>
+                    <span>Nothing from that workbook is saved. The error explains what to fix; product-row errors include the sheet and cell.</span>
+                </div>
+                <div class="template-guide-notes">
+                    <p><strong>Approved categories:</strong> <span id="templateCategoryNames"></span>. Don’t add other sheets. Macros, hyperlinks, external links and hidden sheets are not accepted.</p>
                 </div>
             </div>
-        </div>
-
-        <section id="stagedFilesPanel" class="staged-files" hidden>
-            <div class="staged-apply-all">
-                <span class="staged-apply-label">Apply to all</span>
-                <select id="applyAllCountry" aria-label="Country for all files"><option value="">Country…</option></select>
-                <select id="applyAllPriceLevel" aria-label="Price level for all files"><option value="">Price level…</option></select>
-                <button type="button" id="applyAllBtn" class="button secondary">Apply</button>
-            </div>
-            <div class="staged-table" role="table" aria-label="Files to upload">
-                <div class="staged-row staged-head" role="row">
-                    <span role="columnheader">File</span>
-                    <span role="columnheader">Price list name</span>
-                    <span role="columnheader">Country</span>
-                    <span role="columnheader">Price level</span>
-                    <span role="columnheader"><span class="sr-only">Remove</span></span>
-                </div>
-                <div id="stagedFilesList"></div>
-            </div>
-            <p id="stagedFilesHint" class="upload-meta-hint"></p>
         </section>
 
-        <div class="dialog-actions">
-            <button id="cancelUploadBtn" type="button" class="button secondary">Cancel</button>
-            <button id="submitUploadBtn" type="button" class="button primary" disabled>Upload &amp; Open Editor</button>
-        </div>
+        <footer class="upload-footer">
+            <div id="uploadMainActions" class="upload-footer-actions">
+                <span class="upload-footer-note">Nothing is saved until validation passes.</span>
+                <div class="dialog-actions">
+                    <button id="cancelUploadBtn" type="button" class="button secondary">Cancel</button>
+                    <button id="submitUploadBtn" type="button" class="button primary" disabled>Upload &amp; open</button>
+                </div>
+            </div>
+            <div id="uploadGuideActions" class="upload-footer-actions" hidden>
+                <button id="uploadGuideBackBtn" type="button" class="upload-text-button"><span aria-hidden="true">←</span> Back to upload</button>
+                <button id="guideDownloadTemplateBtn" type="button" class="button secondary">Download template</button>
+            </div>
+        </footer>
+        <datalist id="priceLevelOptions"></datalist>
+        <datalist id="countryOptions"></datalist>
     </div>
 </dialog>
 
@@ -789,9 +802,11 @@ $panel = APP_PAGES[$page]['panel'];
             <button type="button" class="icon-button" id="photoPickerClose" aria-label="Close">×</button>
         </div>
         <div class="photo-picker-tools">
+            <label class="photo-picker-folder"><span>Folder</span><select id="photoPickerFolder" aria-label="Browse photo folder"></select></label>
             <label class="search"><span class="sr-only">Search photos</span><input id="photoPickerSearch" type="search" placeholder="Search photos..." autocomplete="off"></label>
             <button type="button" id="photoPickerUpload" class="button secondary">+ Upload new photos</button>
         </div>
+        <div class="photo-picker-context"><span id="photoPickerFolderSummary"></span><span id="photoPickerStatus" role="status" aria-live="polite"></span></div>
         <div id="photoPickerGrid" class="library-grid picker-grid" role="listbox" aria-label="Library photos"></div>
         <div id="photoPickerEmpty" class="settings-empty" hidden><h2>No photos yet</h2><p>Use “Upload new photos” to add some to the library.</p></div>
         <div class="dialog-actions">
@@ -888,7 +903,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=4"></script>
-<script src="../scripts/app.js?v=72"></script>
+<script src="../scripts/app.js?v=80"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=4"></script>
 <script src="../scripts/select-dropdown.js?v=2"></script>

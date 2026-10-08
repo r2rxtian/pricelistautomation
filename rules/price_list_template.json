@@ -1,0 +1,75 @@
+{
+  "version": "PLA-2",
+  "filename": "LRN_Price_List_Template.xlsx",
+  "maxFileBytes": 10485760,
+  "maxProducts": 15000,
+  "instructionsSheet": "Instructions",
+  "instructions": [
+    ["LRN Price List Template", "PLA-2"],
+    ["Use", "Replace or delete the sample product rows before uploading."],
+    ["Layouts", "Standard products and Presentation Stands have different approved columns."],
+    ["Worksheets", "Keep the original category names. Unused category sheets can be empty or removed."],
+    ["Presentation Stands", "Optional. Include this sheet only when the price list contains stands."],
+    ["Headers", "Do not add, remove, rename, reorder or move columns or header rows."],
+    ["Values", "Enter values only. Formulas, macros, hyperlinks and external links are not accepted."],
+    ["Required fields", "Code, description/item name, pieces per box, box size, both prices and product group."],
+    ["Standard specifications", "Expiry and weight are also required for standard products."],
+    ["Prices", "Use non-negative numbers in USD. Zero is allowed; blank prices are not."],
+    ["Limits", "10 MB per workbook; 15,000 product rows across all categories."],
+    ["Upload", "Choose the country and price level in the system. Keep this Instructions sheet unchanged."]
+  ],
+  "normalizedHeaders": ["Category", "Code No", "Description", "", "Expiry Date", "Weight gr/pc", "Pcs /box", "Box Size", "Price/pc USD", "Price/box in USD", "Large Pallet (16 pallets)", "Small Pallet (2 pallets)", "Large Pallet (8 pallets)", "NW(KG) / Box", "GW(KG) / Box", "MOQ", "", "Total Price Based on MOQ", "Product Group", "Price Level", "Country"],
+  "layouts": {
+    "standard": {
+      "label": "Standard products",
+      "headerRows": [
+        ["Code No", "Description", "Expiry Date", "Weight gr/pc", "Pcs /box", "Box Size", "Price/pc USD", "Price/box In USD", "PALLET PER CONTAINER", "", "", "Product Group"],
+        ["", "", "", "", "", "", "", "", "40ft Container", "", "20ft Container", ""],
+        ["", "", "", "", "", "", "", "", "Large Pallet (16 pallets)", "Small Pallet (2 pallets)", "Large Pallet (8 pallets)", ""]
+      ],
+      "merges": ["A1:A3", "B1:B3", "C1:C3", "D1:D3", "E1:E3", "F1:F3", "G1:G3", "H1:H3", "I1:K1", "I2:J2", "L1:L3"],
+      "columns": [
+        {"name":"Code No", "target":1, "type":"text", "required":true, "maxLength":80},
+        {"name":"Description", "target":2, "type":"text", "required":true, "maxLength":500},
+        {"name":"Expiry Date", "target":4, "type":"text", "required":true, "maxLength":80},
+        {"name":"Weight gr/pc", "target":5, "type":"number", "required":true, "positive":true},
+        {"name":"Pcs /box", "target":6, "type":"integer", "required":true, "positive":true},
+        {"name":"Box Size", "target":7, "type":"text", "required":true, "maxLength":120},
+        {"name":"Price/pc USD", "target":8, "type":"number", "required":true},
+        {"name":"Price/box In USD", "target":9, "type":"number", "required":true},
+        {"name":"Large Pallet (16 pallets)", "target":10, "type":"text", "maxLength":120},
+        {"name":"Small Pallet (2 pallets)", "target":11, "type":"text", "maxLength":120},
+        {"name":"Large Pallet (8 pallets)", "target":12, "type":"text", "maxLength":120},
+        {"name":"Product Group", "target":18, "type":"text", "required":true, "maxLength":120}
+      ],
+      "widths": [19, 38, 17, 16, 14, 19, 18, 19, 25, 25, 25, 27]
+    },
+    "presentation": {
+      "label": "Presentation Stands",
+      "headerRows": [["LRN code", "Item Name", "PC/Set Per Box", "Price/pc in USD", "Price/Box USD", "NW(KG) / Box", "GW(KG) / Box", "Box size", "MOQ", "Total Price Based on MOQ", "Product Group"]],
+      "merges": [],
+      "columns": [
+        {"name":"LRN code", "target":1, "type":"text", "required":true, "maxLength":80},
+        {"name":"Item Name", "target":2, "type":"text", "required":true, "maxLength":500},
+        {"name":"PC/Set Per Box", "target":6, "type":"integer", "required":true, "positive":true},
+        {"name":"Price/pc in USD", "target":8, "type":"number", "required":true},
+        {"name":"Price/Box USD", "target":9, "type":"number", "required":true},
+        {"name":"NW(KG) / Box", "target":13, "type":"number"},
+        {"name":"GW(KG) / Box", "target":14, "type":"number"},
+        {"name":"Box size", "target":7, "type":"text", "required":true, "maxLength":120},
+        {"name":"MOQ", "target":15, "type":"text", "maxLength":120},
+        {"name":"Total Price Based on MOQ", "target":17, "type":"number"},
+        {"name":"Product Group", "target":18, "type":"text", "required":true, "maxLength":120}
+      ],
+      "widths": [19, 43, 21, 21, 21, 19, 19, 21, 19, 29, 27]
+    }
+  },
+  "categories": [
+    {"name":"Breads", "layout":"standard", "samples":[["LRN-BRD-001", "Classic Baguette", "12 Months", 250, 24, "Large Box", 1.25, 30, "120 Boxes/Pallet", "90 Boxes/Pallet", "100 Boxes/Pallet", "Baguettes"]]},
+    {"name":"Tart Shells", "layout":"standard", "samples":[["LRN-TRT-001", "Sweet Round Tart Shell 50mm", "18 Months", 15, 120, "Medium Box", 0.38, 45.6, "168 Boxes/Pallet", "126 Boxes/Pallet", "144 Boxes/Pallet", "Round Tart Shells"]]},
+    {"name":"Pastries", "layout":"standard", "samples":[["LRN-PST-001", "Mini Butter Croissant 30g", "12 Months", 30, 120, "Medium Box", 0.48, 57.6, "120 Boxes/Pallet", "90 Boxes/Pallet", "100 Boxes/Pallet", "Croissants"]]},
+    {"name":"Cones & Baskets", "layout":"standard", "samples":[["LRN-CON-001", "Sweet Mini Waffle Cone 75mm", "12 Months", 10, 180, "Medium Box", 0.32, 57.6, "140 Boxes/Pallet", "105 Boxes/Pallet", "120 Boxes/Pallet", "Sweet Cones"]]},
+    {"name":"Chocolates", "layout":"standard", "samples":[["LRN-CHO-001", "Dark Chocolate Truffle 70%", "9 Months", 12, 144, "Small Box", 0.65, 93.6, "180 Boxes/Pallet", "135 Boxes/Pallet", "150 Boxes/Pallet", "Truffles"]]},
+    {"name":"Presentation Stands", "layout":"presentation", "samples":[["LRN-STD-001", "Acrylic 3-Tier Tart Stand", 4, 18.5, 74, 3.4, 4.2, "Display Box", "10 Sets", 740, "Acrylic Displays"]]}
+  ]
+}

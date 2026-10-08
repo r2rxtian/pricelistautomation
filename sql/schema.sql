@@ -135,6 +135,22 @@ END;
 GO
 
 -- ============================================================
+-- Category folders preserve empty folders; existing photos remain unfiled.
+-- Folder labels are metadata and do not change uploaded file paths.
+IF COL_LENGTH('dbo.PLA_ACD_PhotoLibrary', 'category_name') IS NULL
+    ALTER TABLE dbo.PLA_ACD_PhotoLibrary ADD category_name nvarchar(120) NULL;
+GO
+
+IF OBJECT_ID(N'dbo.PLA_ACD_PhotoFolders', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PLA_ACD_PhotoFolders (
+        folder_name nvarchar(120) NOT NULL PRIMARY KEY,
+        created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoFolderCreated DEFAULT SYSUTCDATETIME()
+    );
+END;
+GO
+
+-- ============================================================
 -- Storage: audit log
 -- ============================================================
 IF OBJECT_ID(N'dbo.PLA_ACD_AuditLog', N'U') IS NULL

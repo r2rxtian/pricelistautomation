@@ -56,7 +56,7 @@ pricelistautomation/
 ## Workflow
 
 1. **Sign in.**
-2. **Upload** an `.xlsx`/`.xls` price list and enter its **Price Level** (e.g. FOB Subic) and **Country**.
+2. **Upload** the official `.xlsx` template and choose its **Price Level** and **Country**. The complete workbook is validated on the server before it is saved.
 3. **Open the editor.** Filter by **Product Category**, **LRN Code**, **Price Level**, or **Country**, or search.
 4. **Adjust prices** by a percentage for selected categories or for all categories, or edit individual cells.
 5. Every upload, adjustment, cell edit, save, approval, rejection, and export is written to the **audit log**. Approvers and users get **notifications**.
@@ -94,9 +94,9 @@ The editor toolbar filters in this order: **Country → Level → List**, then *
 
 ## Product photos (Config)
 
-- **Photo library:** a "drawer" of reusable photos. Upload many at once (select several or drag and drop), search, or delete them. Deleting a photo that's in use removes it from those product types.
+- **Photo library:** reusable photos organized in category folders. Categories from price lists appear automatically; the + button beside Folders creates an empty folder. Select a folder or the Upload to destination, then click Upload photos to select several photos at once. Existing photos appear in Unfiled; each photo has a folder control to move it without affecting its product assignments. Search is limited to the folder being viewed. Deleting a photo that's in use removes it from those product types.
 - **Product type photos:** pick a library photo for each product type.
-- **Prices page:** "+ Add photo" / "Change" on a product group opens the same library picker. The picker also has "Upload new photos" and "Remove current photo".
+- **Prices page:** "+ Add photo" / "Change" on a product group opens the library picker in that product category's folder. Switch folders (or choose All photos) to reuse a photo from another category, or upload directly into the selected folder. Removing the current photo keeps it in the library.
 
 ## Developer tools (testing only)
 
@@ -113,10 +113,21 @@ Sign-in always uses SQL Server. Price lists, audit logs, notifications and photo
 
 ## Workbook behavior
 
-- The importer scans every worksheet, skips cover sheets, and normalizes repeated section headers and the `Presentation Stands` layout into one product list.
-- If a worksheet has `Price Level` or `Country` columns, each row keeps its own value. Other rows use the values entered at upload.
+- Download one official workbook (`PLA-2`) with an unchanged `Instructions` sheet and two approved layouts: standard products (12 columns, three header rows) and `Presentation Stands` (11 columns, one header row). Standard products end with the three pallet columns and Product Group; NW, GW, MOQ and Total Price Based on MOQ belong only to Presentation Stands.
+- The shared contract is `rules/price_list_template.json`. It drives the download, upload column guide, permitted category sheets, field rules and normalized column mapping. Category or layout changes require a deliberate template-version change.
+- Download a fresh PLA-2 template for new uploads. The superseded PLA-1 workbook layout is rejected; already saved lists remain readable and editable without migration.
+- Approved category worksheets are Breads, Tart Shells, Pastries, Cones & Baskets, Chocolates and Presentation Stands. Included sheets must keep their exact names, header values, order, positions and merges. Extra/missing/renamed/reordered columns, extra worksheets, duplicate product codes and invalid product values are rejected with a sheet/cell error.
+- Category sheets can be empty or absent, including Presentation Stands. At least one populated category is required. Replace or remove the sample product rows before uploading. Country and price level come only from the upload form.
+- Only genuine, unencrypted `.xlsx` files up to 10 MB and 15,000 total products are accepted. Formula cells, macros, hyperlinks, external links, embedded objects and hidden sheets are rejected. Archive size/expansion, XML, worksheet and cell limits are enforced. Fonts, colors and column widths do not determine acceptance.
+- The server reads the original multipart workbook; browser-provided headers/rows cannot create an uploaded list. Validation is all-or-nothing per workbook and occurs before repository writes, superseding older revisions, notifications or audit writes for successful imports. Existing saved lists and the price-change approval workflow are unchanged.
 - Only Price/pc and Price/box are adjusted: `adjusted price = original price × (1 + percentage / 100)`. A new percentage is always calculated from the uploaded price, so adjustments never compound.
 - Exports keep the workbook's layout: per-category sheets in Excel, and grouped tables with product photos in the PDF. The PDF header shows the price level, country, revision, and approver.
+
+### Import regression checks
+
+Run `node tests/workbook-import.test.cjs` (set `PLA_TEST_PHP` if PHP is not at `C:/xampp/php/php.exe`). The suite uses the actual template downloader and PHP workbook reader, disposable Excel files, and an isolated localhost upload API fixture. It checks both layouts, optional/empty categories, exact headers, invalid rows, archive/XML restrictions, size limits, multipart-only imports, CSRF/permissions, and existing-list saves without accessing company sessions or application storage. PHP requires its built-in Phar support plus DOM, Fileinfo, Mbstring and Zlib; a separate ZIP extension is not needed.
+
+The compact upload window keeps file selection and metadata separate from the optional Template rules view. Its header/actions stay visible; only long file queues, error details, or the help content scroll when needed. `node tests/upload-modal.test.cjs` checks the real UI in isolated headless Edge (override its path with `PLA_TEST_EDGE`), including responsive sizes, keyboard navigation, dropdowns, busy/error/retry states and dark mode. No real sessions or application data are used.
 
 ## Out of scope
 

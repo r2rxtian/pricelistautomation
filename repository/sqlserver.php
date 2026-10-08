@@ -113,6 +113,13 @@ function ensure_database_schema(PDO $connection): void
             uploaded_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoUploaded DEFAULT SYSUTCDATETIME(),
             uploaded_by nvarchar(180) NOT NULL
          )",
+        "IF COL_LENGTH('dbo.PLA_ACD_PhotoLibrary', 'category_name') IS NULL
+         ALTER TABLE dbo.PLA_ACD_PhotoLibrary ADD category_name nvarchar(120) NULL",
+        "IF OBJECT_ID(N'dbo.PLA_ACD_PhotoFolders', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ACD_PhotoFolders (
+            folder_name nvarchar(120) NOT NULL PRIMARY KEY,
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoFolderCreated DEFAULT SYSUTCDATETIME()
+         )",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_ACD_Notifications_Recipient')
          CREATE INDEX IX_PLA_ACD_Notifications_Recipient ON dbo.PLA_ACD_Notifications (recipient, created_at DESC)",
     ];
@@ -376,12 +383,13 @@ function database_delete_group_image(string $key): ?array
 function database_list_library(): array
 {
     $query = database_connection()->query(
-        'SELECT photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by
+        'SELECT photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by, category_name
          FROM dbo.PLA_ACD_PhotoLibrary ORDER BY uploaded_at DESC, photo_id DESC'
     );
     return array_map(static fn(array $record): array => [
         'id' => (string) $record['photo_id'],
         'name' => (string) $record['photo_name'],
+        'category' => (string) ($record['category_name'] ?? ''),
         'imagePath' => (string) $record['image_path'],
         'width' => (int) ($record['width'] ?? 0),
         'height' => (int) ($record['height'] ?? 0),
@@ -394,11 +402,11 @@ function database_list_library(): array
 function database_add_library_photo(array $photo): void
 {
     database_connection()->prepare(
-        'INSERT INTO dbo.PLA_ACD_PhotoLibrary (photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO dbo.PLA_ACD_PhotoLibrary (photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by, category_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $photo['id'], $photo['name'], $photo['imagePath'], $photo['width'], $photo['height'], $photo['size'],
-        database_datetime($photo['uploadedAt'] ?? null), $photo['uploadedBy'],
+        database_datetime($photo['uploadedAt'] ?? null), $photo['uploadedBy'], $photo['category'] ?? '',
     ]);
 }
 
@@ -408,6 +416,32 @@ function database_delete_library_photo(string $id): ?array
         if ($photo['id'] !== $id) continue;
         database_connection()->prepare('DELETE FROM dbo.PLA_ACD_PhotoLibrary WHERE photo_id = ?')->execute([$id]);
         return $photo;
+    }
+    return null;
+}
+
+function database_list_library_folders(): array
+{
+    return database_connection()->query('SELECT folder_name FROM dbo.PLA_ACD_PhotoFolders ORDER BY folder_name')->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function database_add_library_folder(string $category): string
+{
+    $connection = database_connection();
+    $connection->prepare('INSERT INTO dbo.PLA_ACD_PhotoFolders (folder_name)
+        SELECT ? WHERE NOT EXISTS (SELECT 1 FROM dbo.PLA_ACD_PhotoFolders WITH (UPDLOCK, HOLDLOCK) WHERE LOWER(folder_name) = LOWER(?))')->execute([$category, $category]);
+    $existing = $connection->prepare('SELECT folder_name FROM dbo.PLA_ACD_PhotoFolders WHERE LOWER(folder_name) = LOWER(?)');
+    $existing->execute([$category]);
+    $name = $existing->fetchColumn();
+    return $name !== false ? (string) $name : $category;
+}
+
+function database_move_library_photo(string $id, string $category): ?array
+{
+    foreach (database_list_library() as $photo) {
+        if ($photo['id'] !== $id) continue;
+        database_connection()->prepare('UPDATE dbo.PLA_ACD_PhotoLibrary SET category_name = ? WHERE photo_id = ?')->execute([$category, $id]);
+        return array_replace($photo, ['category' => $category]);
     }
     return null;
 }

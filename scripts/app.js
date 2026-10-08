@@ -2,7 +2,7 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], configTab: 'library', librarySearch: '' };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], photoFolders: [], libraryFolder: null, configTab: 'library', librarySearch: '' };
   // Normalised row layout (see parseWorkbook): 0 category … 18 product group, 19 price level, 20 country.
   const COL = { category: 0, code: 1, description: 2, priceLevel: 19, country: 20 };
   const ROW_WIDTH = 21;
@@ -17,7 +17,7 @@
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dom = {
-    appView: $('#appView'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), backToPricesBtn: $('#backToPricesBtn'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), settingsBackButton: $('#settingsBackButton'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
+    appView: $('#appView'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
     auditLogsNav: $('#auditLogsNav'), openAuditLogsFromBell: $('#openAuditLogsFromBell'), auditAllCountBadge: $('#auditAllCountBadge'), auditEditsCountBadge: $('#auditEditsCountBadge'), auditVersionsCountBadge: $('#auditVersionsCountBadge'), auditFileSelect: $('#auditFileSelect'), auditFileSelectWrapper: $('#auditFileSelectWrapper'), auditTypeSelect: $('#auditTypeSelect'), auditTypeSelectWrapper: $('#auditTypeSelectWrapper'), auditUserSelect: $('#auditUserSelect'), auditUserSelectWrapper: $('#auditUserSelectWrapper'), historyAdjustmentSelectWrapper: $('#historyAdjustmentSelectWrapper'), refreshAuditLogsBtn: $('#refreshAuditLogsBtn'), auditTableHead: $('#auditTableHead'), versionsTableHead: $('#versionsTableHead'), historyEmptyTitle: $('#historyEmptyTitle'), historyEmptySubtitle: $('#historyEmptySubtitle'), historyChangesKicker: $('#historyChangesKicker'), historyChangesActions: $('#historyChangesActions'),
     notificationBtn: $('#notificationBtn'), notificationBadge: $('#notificationBadge'), notificationsDropdown: $('#notificationsDropdown'), notificationsList: $('#notificationsList'), notificationsEmpty: $('#notificationsEmpty'), notificationsCountBadge: $('#notificationsCountBadge'), markAllReadBtn: $('#markAllReadBtn'), clearLogsBtn: $('#clearLogsBtn'),
     uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn'),
@@ -178,6 +178,7 @@
     'audit-logs': 'audit/list', 'log-activity': 'audit/log_activity',
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
+    'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
   };
@@ -467,6 +468,8 @@
       user: data.user, csrf: data.csrf, permissions: data.permissions || [], directory: data.directory || [],
       approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], priceLevels: data.priceLevels || [],
       versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
+      photoFolders: data.photoFolders || [],
+      importTemplate: data.importTemplate || null,
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
     });
@@ -502,7 +505,7 @@
     } else {
       renderWorkflowState();
     }
-    fillDatalists(); renderLists(); renderFiles(); renderHistory(); renderNotifications();
+    fillDatalists(); renderLists(); renderFiles(); renderHistory(); renderNotifications(); renderLibrary();
   }
   async function loadState(skipDraftCheck = false) {
     const data = await api('state');
@@ -561,9 +564,9 @@
       if (dom.bannerRejectBtn) dom.bannerRejectBtn.hidden = true;
       const canUpload = can('upload');
       dom.listTitle.textContent = canUpload ? 'Start with a workbook' : 'Open an approved price list';
-      dom.listMeta.textContent = canUpload ? 'Upload an .xlsx or .xls file to open and edit prices.' : 'Choose an approved price list to view and export.';
+      dom.listMeta.textContent = canUpload ? 'Upload an official .xlsx template to open and edit prices.' : 'Choose an approved price list to view and export.';
       if (dom.emptyStateTitle) dom.emptyStateTitle.textContent = canUpload ? 'Import your current price list' : 'No price list open';
-      if (dom.emptyStateText) dom.emptyStateText.textContent = canUpload ? 'Drag and drop your Excel spreadsheet (.xlsx, .xls) here or browse your computer.' : 'Approved price lists are listed under Approvals, where you can open or export them.';
+      if (dom.emptyStateText) dom.emptyStateText.textContent = canUpload ? 'Drop an official .xlsx workbook here or browse your computer. Download the template from the upload window.' : 'Approved price lists are listed under Approvals, where you can open or export them.';
       if (dom.emptyBrowseListsButton) dom.emptyBrowseListsButton.hidden = canUpload;
       dom.listMeta.title = '';
       setSavedMeta(''); dom.activeBadge.hidden = true;
@@ -2272,8 +2275,8 @@
     }
     if (dom.listsSubtitle) {
       dom.listsSubtitle.textContent = can('update')
-        ? 'Price changes saved by Chelsea or Margaret wait here for their approvers. Uploads are on the Files page; Ms. Gen’s changes are approved on save.'
-        : 'Approved price changes you can view and export. Uploaded files are on the Files page.';
+        ? 'Review saved price changes and approval decisions.'
+        : 'View and export approved price changes.';
     }
     $$('.list-tab-btn').forEach(button => {
       const active = button.dataset.listTab === state.listTab;
@@ -2362,16 +2365,17 @@
 
   /** Adds Excel files to the upload list (accepts a FileList, an array or a single file). */
   function stageFilesForUpload(input) {
+    if (bulkImporting) return;
     const files = input instanceof File ? [input] : [...(input || [])];
-    const excel = files.filter(file => /\.(xlsx|xls)$/i.test(file.name));
-    if (files.length && !excel.length) return toast('Please select Excel workbooks (.xlsx or .xls).');
-    if (excel.length < files.length) toast(`${files.length - excel.length} non-Excel file(s) skipped.`);
+    const excel = files.filter(file => /\.xlsx$/i.test(file.name) && file.size <= (state.importTemplate?.maxFileBytes || 10485760));
+    if (files.length && !excel.length) return toast('Choose official .xlsx workbooks, no more than 10 MB each. Legacy .xls files are not accepted.');
+    if (excel.length < files.length) toast(`${files.length - excel.length} unsupported or oversized file(s) skipped. Only .xlsx up to 10 MB is accepted.`);
     if (stagedFiles.some(item => item.status)) stagedFiles = []; // start fresh after a finished batch
     let overLimit = 0;
     excel.forEach(file => {
       if (stagedFiles.some(item => item.file.name === file.name && item.file.size === file.size)) return;
       if (stagedFiles.length >= MAX_BULK_FILES) { overLimit++; return; }
-      stagedFiles.push({ file, name: file.name.replace(/\.(xlsx|xls)$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '' });
+      stagedFiles.push({ file, name: file.name.replace(/\.xlsx$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '' });
     });
     if (overLimit) toast(`Up to ${MAX_BULK_FILES} files per batch. ${overLimit} file${overLimit === 1 ? ' was' : 's were'} not added.`);
     renderStagedFiles();
@@ -2383,20 +2387,24 @@
     panel.hidden = !stagedFiles.length;
     // The batch counts as finished only once the import loop is over (not when the first file completes).
     const finished = !bulkImporting && stagedFiles.some(item => item.status === 'saved' || item.status === 'failed');
+    const failed = stagedFiles.filter(item => item.status === 'failed');
+    const attr = value => escapeHtml(value).replace(/"/g, '&quot;');
     list.innerHTML = stagedFiles.map((item, index) => {
       const locked = bulkImporting || finished;
       const statusMarkup = item.status
-        ? `<span class="staged-status status-${item.status}" title="${escapeHtml(item.message)}">${{ working: '…', saved: '✓', failed: '✕' }[item.status] || ''}</span>`
-        : `<button type="button" class="icon-button staged-remove" data-index="${index}" aria-label="Remove ${escapeHtml(item.file.name)}" title="Remove">×</button>`;
+        ? `<span class="staged-status status-${item.status}" title="${attr(item.message)}">${{ working: '…', saved: '✓', failed: '✕' }[item.status] || ''}</span>`
+        : `<button type="button" class="icon-button staged-remove" data-index="${index}" aria-label="Remove ${attr(item.file.name)}" title="Remove">×</button>`;
       return `<div class="staged-row ${item.status ? `is-${item.status}` : ''}" role="row" data-index="${index}">
-        <span class="staged-file" role="cell" title="${escapeHtml(item.file.name)}"><strong>${escapeHtml(item.file.name)}</strong><small>${formatBytes(item.file.size)}${item.message ? ` · ${escapeHtml(item.message)}` : ''}</small></span>
-        <span role="cell"><input type="text" maxlength="160" data-field="name" value="${escapeHtml(item.name)}" aria-label="Price list name" ${locked ? 'disabled' : ''}></span>
+        <span class="staged-file" role="cell" title="${attr(item.file.name)}"><strong>${escapeHtml(item.file.name)}</strong><small>${formatBytes(item.file.size)}${item.message ? ` · ${item.status === 'failed' ? 'Upload failed' : escapeHtml(item.message)}` : ''}</small></span>
+        <span role="cell"><input type="text" maxlength="160" data-field="name" value="${attr(item.name)}" aria-label="Price list name" ${locked ? 'disabled' : ''}></span>
         <span role="cell"><select data-field="country" aria-label="Country" ${locked ? 'disabled' : ''}>${countryOptionsHtml(item.country, 'Select country…')}</select></span>
         <span role="cell"><select data-field="priceLevel" aria-label="Price level" ${locked ? 'disabled' : ''}>${priceLevelOptionsHtml(item.priceLevel)}</select></span>
         <span role="cell" class="staged-action">${statusMarkup}</span>
       </div>`;
     }).join('');
     const count = stagedFiles.length;
+    dom.uploadModal?.classList.toggle('has-files', count > 0);
+    dom.uploadModal?.setAttribute('aria-busy', String(bulkImporting));
     const button = dom.submitUploadBtn;
     if (button) {
       button.disabled = !count || bulkImporting;
@@ -2406,21 +2414,30 @@
     const hint = $('#stagedFilesHint');
     if (hint) {
       hint.textContent = finished
-        ? `${stagedFiles.filter(item => item.status === 'saved').length} of ${count} saved. Fix the files marked ✕ and upload them again; the saved ones are under Approvals.`
+        ? `${stagedFiles.filter(item => item.status === 'saved').length} of ${count} saved. Correct rejected files and select them again.`
         : count > 1
-          ? 'Each file is uploaded as its own price list with its original prices. No approval is needed; only later price changes go for approval.'
-          : 'The file is uploaded with its original prices and opened. Price changes you save later go for approval.';
+          ? 'Each workbook becomes a separate price list.'
+          : 'Choose the country and price level for this workbook.';
     }
     if (dom.cancelUploadBtn) dom.cancelUploadBtn.hidden = finished;
-    if (dom.modalDropZone) dom.modalDropZone.hidden = finished;
+    if (dom.modalDropZone) dom.modalDropZone.hidden = finished && !failed.length;
+    const errors = $('#uploadValidationErrors');
+    if (errors) {
+      errors.hidden = !failed.length;
+      errors.innerHTML = failed.length ? `<strong>${failed.length === 1 ? 'Workbook not accepted' : `${failed.length} workbooks not accepted`}</strong><ul>${failed.map(item => `<li><strong>${escapeHtml(item.file.name)}</strong>: ${escapeHtml(item.message)}</li>`).join('')}</ul><p>Correct the file and select it again. Validation failures save no products.</p>` : '';
+    }
     if (dom.dropZonePrompt) {
       const full = count >= MAX_BULK_FILES;
-      dom.dropZonePrompt.firstChild.textContent = full
-        ? `Limit reached: ${MAX_BULK_FILES} files per batch. Remove one to add another.`
-        : count ? `Add more Excel files (${count} of ${MAX_BULK_FILES}), or ` : 'Drag & drop one or more Excel files here, or ';
-      if (dom.browseFileBtn) dom.browseFileBtn.hidden = full;
+      dom.dropZonePrompt.textContent = finished ? 'Choose corrected files' : full ? `${MAX_BULK_FILES} workbooks selected` : count ? 'Add another workbook' : 'Drop your workbook here';
+      if (dom.browseFileBtn) {
+        dom.browseFileBtn.hidden = full && !finished;
+        dom.browseFileBtn.disabled = bulkImporting;
+        dom.browseFileBtn.textContent = finished ? 'Browse files' : count ? 'Add files' : 'Browse files';
+      }
       dom.modalDropZone?.classList.toggle('is-full', full);
+      dom.modalDropZone?.setAttribute('aria-disabled', String(bulkImporting || (full && !finished)));
     }
+    $$('#uploadTemplateRulesBtn, #downloadTemplateBtn, .staged-apply-all select, #applyAllBtn').forEach(control => { control.disabled = bulkImporting; });
   }
   function clearStagedFile() {
     stagedFiles = [];
@@ -2461,12 +2478,11 @@
       item.status = 'working'; item.message = 'Reading…';
       renderStagedFiles();
       try {
-        const list = await readWorkbook(item.file, { name: item.name, country: item.country, priceLevel: item.priceLevel });
-        item.message = `Uploading ${list.rows.length.toLocaleString()} products…`;
+        item.message = 'Validating the complete workbook…';
         renderStagedFiles();
-        const data = await uploadList(item.file, list);
+        const data = await uploadList(item.file, { name: item.name, country: item.country, priceLevel: item.priceLevel });
         item.status = 'saved';
-        item.message = `${list.rows.length.toLocaleString()} products · ${statusLabel(data.active?.status)}`;
+        item.message = `${Number(data.active?.productCount || data.active?.rows?.length || 0).toLocaleString()} products · ${statusLabel(data.active?.status)}`;
       } catch (error) {
         item.status = 'failed';
         item.message = error.message || 'Could not import this file.';
@@ -2492,6 +2508,8 @@
     if (state.active?.isDraft && !(await confirmDiscardDraft('Uploading a new file'))) return false;
     clearStagedFile();
     fillDatalists();
+    renderTemplateGuide();
+    setUploadGuide(false, false);
     if ($('#applyAllCountry')) $('#applyAllCountry').innerHTML = countryOptionsHtml('', 'Country…');
     if ($('#applyAllPriceLevel')) $('#applyAllPriceLevel').innerHTML = priceLevelOptionsHtml('', 'Price level…');
     if (!dom.uploadModal?.open) dom.uploadModal?.showModal();
@@ -2501,249 +2519,156 @@
   function closeUploadModal() {
     if (bulkImporting) return toast('Please wait until the files finish saving.');
     clearStagedFile();
+    setUploadGuide(false, false);
     dom.uploadModal?.close();
+  }
+
+  function setUploadGuide(show, focus = true) {
+    if (bulkImporting) return;
+    $('#uploadMainView').hidden = show;
+    $('#uploadGuideView').hidden = !show;
+    $('#uploadMainActions').hidden = show;
+    $('#uploadGuideActions').hidden = !show;
+    dom.uploadModal.classList.toggle('showing-guide', show);
+    $('#uploadModalTitle').textContent = show ? 'Template requirements' : 'Upload price lists';
+    $('#uploadModalDescription').textContent = show ? 'See the worksheet layouts and what makes an upload valid.' : 'Choose your workbook. We’ll validate it before saving.';
+    $('#uploadTemplateRulesBtn').setAttribute('aria-expanded', String(show));
+    if (focus) requestAnimationFrame(() => (show ? $('.template-layout-tab[aria-selected="true"]') : $('#uploadTemplateRulesBtn'))?.focus());
+  }
+
+  function selectTemplateLayout(key, focus = false) {
+    $$('.template-layout-tab').forEach(tab => {
+      const selected = tab.dataset.templateLayout === key;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focus) tab.focus();
+    });
+    $$('#templateLayouts [role="tabpanel"]').forEach(panel => { panel.hidden = panel.dataset.templateLayout !== key; });
+  }
+
+  function renderTemplateSheet(layout, category) {
+    if (!window.XLSX) return '<p class="template-layout-description">The worksheet preview could not be loaded. Refresh the page to load the Excel tools.</p>';
+    const merges = new Map(), covered = new Set();
+    layout.merges.forEach(address => {
+      const range = XLSX.utils.decode_range(address);
+      merges.set(`${range.s.r}:${range.s.c}`, range);
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        for (let column = range.s.c; column <= range.e.c; column++) {
+          if (row !== range.s.r || column !== range.s.c) covered.add(`${row}:${column}`);
+        }
+      }
+    });
+    const widths = layout.widths.map(width => Math.round(width * 6 + 8));
+    const headerRows = layout.headerRows.map((row, rowIndex) => `<tr>
+      <th class="template-row-number" scope="row">${rowIndex + 1}</th>
+      ${layout.columns.map((_, columnIndex) => {
+        const position = `${rowIndex}:${columnIndex}`;
+        if (covered.has(position)) return '';
+        const range = merges.get(position);
+        const spans = range ? ` rowspan="${range.e.r - range.s.r + 1}" colspan="${range.e.c - range.s.c + 1}"` : '';
+        return `<th data-cell="${XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })}"${spans}>${escapeHtml(row[columnIndex] || '')}</th>`;
+      }).join('')}
+    </tr>`).join('');
+    const sampleRows = category.samples.map((row, rowIndex) => `<tr>
+      <th class="template-row-number" scope="row">${layout.headerRows.length + rowIndex + 1}</th>
+      ${layout.columns.map((column, columnIndex) => {
+        const value = row[columnIndex] ?? '';
+        const numeric = typeof value === 'number' && column.type !== 'text';
+        const display = numeric ? value.toFixed(column.type === 'integer' ? 0 : 2) : value;
+        return `<td data-cell="${XLSX.utils.encode_cell({ r: layout.headerRows.length + rowIndex, c: columnIndex })}"${numeric ? ' class="template-number-cell"' : ''}>${escapeHtml(display)}</td>`;
+      }).join('')}
+    </tr>`).join('');
+    const blankRows = Array.from({ length: 2 }, (_, rowIndex) => `<tr aria-hidden="true">
+      <th class="template-row-number">${layout.headerRows.length + category.samples.length + rowIndex + 1}</th>
+      ${layout.columns.map(() => '<td></td>').join('')}
+    </tr>`).join('');
+    return `<div class="template-sheet">
+      <div class="template-sheet-heading"><strong>${escapeHtml(category.name)}</strong><span>Worksheet preview</span></div>
+      <div class="template-sheet-scroll" role="region" tabindex="0" aria-label="${escapeHtml(category.name)} worksheet preview. Scroll horizontally to see all columns.">
+        <table class="template-sheet-table" style="width:${34 + widths.reduce((total, width) => total + width, 0)}px">
+          <caption class="sr-only">${escapeHtml(category.name)}: exact template headers and example product row.</caption>
+          <colgroup><col style="width:34px">${widths.map(width => `<col style="width:${width}px">`).join('')}</colgroup>
+          <thead>
+            <tr class="template-column-ruler"><th class="template-row-number"><span class="sr-only">Row</span></th>${layout.columns.map((_, index) => `<th scope="col">${XLSX.utils.encode_col(index)}</th>`).join('')}</tr>
+            ${headerRows}
+          </thead>
+          <tbody>${sampleRows}${blankRows}</tbody>
+        </table>
+      </div>
+      <div class="template-sheet-footer"><span class="template-sheet-name">${escapeHtml(category.name)}</span><span>Scroll sideways for all ${layout.columns.length} columns <span aria-hidden="true">↔</span></span></div>
+    </div>`;
+  }
+
+  function renderTemplateGuide() {
+    const template = state.importTemplate;
+    const guide = $('#templateLayouts');
+    if (!template || !guide) return;
+    $('#templateVersionLabel').textContent = template.version;
+    $('#templateFileLimits').textContent = `${template.maxFileBytes / 1048576} MB maximum · ${Number(template.maxProducts).toLocaleString()} products`;
+    guide.innerHTML = Object.entries(template.layouts).map(([key, layout]) => {
+      const category = template.categories.find(category => category.layout === key);
+      const required = layout.columns.filter(column => column.required).map(column => column.name);
+      const optional = layout.columns.filter(column => !column.required).map(column => column.name);
+      return `<section id="templateLayout-${key}" role="tabpanel" aria-labelledby="${key === 'standard' ? 'templateStandardTab' : 'templatePresentationTab'}" data-template-layout="${key}" tabindex="0"${key !== 'standard' ? ' hidden' : ''}>
+        <p class="template-layout-description">${layout.columns.length} fixed columns · ${layout.headerRows.length} header row${layout.headerRows.length === 1 ? '' : 's'} · products start on row ${layout.headerRows.length + 1}${key === 'presentation' ? '. This worksheet is optional.' : '.'}</p>
+        ${renderTemplateSheet(layout, category)}
+        <dl class="template-field-rules">
+          <div><dt>Required in each product row</dt><dd class="template-required-values">${required.map(escapeHtml).join(', ')}.</dd></div>
+          <div><dt>Values may be blank</dt><dd class="template-optional-values">${optional.map(escapeHtml).join(', ')}. <strong>Keep these headers, even when their values are blank.</strong></dd></div>
+        </dl>
+        <p class="template-value-rules">Pieces per box must be a positive whole number. Prices must be numbers greater than or equal to zero.${key === 'standard' ? ' Weight must be greater than zero.' : ' NW, GW and Total Price must also be non-negative numbers when filled.'} Product Group identifies the product type for grouping and photos.</p>
+      </section>`;
+    }).join('');
+    $('#templateCategoryNames').textContent = template.categories.map(category => category.name).join(', ');
+    selectTemplateLayout('standard');
   }
 
   function downloadExcelTemplate() {
     if (!window.XLSX) return toast('Excel tools are not available.');
+    const template = state.importTemplate;
+    if (!template) return toast('The template could not be loaded. Refresh the page.');
     const wb = XLSX.utils.book_new();
-
-    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
-    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', '', '', '', '', ''];
-    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', '', '', '', '', ''];
-    const standardMerges = [
-      { s: { r: 0, c: 0 }, e: { r: 2, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 2, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 2, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 2, c: 3 } },
-      { s: { r: 0, c: 4 }, e: { r: 2, c: 4 } },
-      { s: { r: 0, c: 5 }, e: { r: 2, c: 5 } },
-      { s: { r: 0, c: 6 }, e: { r: 2, c: 6 } },
-      { s: { r: 0, c: 7 }, e: { r: 2, c: 7 } },
-      { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
-      { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
-      { s: { r: 1, c: 10 }, e: { r: 1, c: 10 } },
-      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } },
-      { s: { r: 0, c: 12 }, e: { r: 2, c: 12 } },
-      { s: { r: 0, c: 13 }, e: { r: 2, c: 13 } },
-      { s: { r: 0, c: 14 }, e: { r: 2, c: 14 } },
-      { s: { r: 0, c: 15 }, e: { r: 2, c: 15 } }
-    ];
-
-    const sheets = [
-      {
-        name: 'Tart Shells',
-        rows: [
-          ['LRN-TRT-001', 'Sweet Round Tart Shell 50mm', '18 Months', '15', '120', 'Medium Box', 0.38, 45.60, '168 Boxes/Pallet', '126 Boxes/Pallet', '144 Boxes/Pallet', '1.8', '2.4', '60 Boxes', 2736.00, 'Round Tart Shells'],
-          ['LRN-TRT-002', 'Chocolate Square Tart Shell 45mm', '18 Months', '14', '96', 'Medium Box', 0.42, 40.32, '168 Boxes/Pallet', '126 Boxes/Pallet', '144 Boxes/Pallet', '1.5', '2.1', '60 Boxes', 2419.20, 'Square Tart Shells'],
-          ['LRN-TRT-003', 'Vanilla Tartlet 80mm', '18 Months', '25', '72', 'Large Box', 0.58, 41.76, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '2.0', '2.7', '45 Boxes', 1879.20, 'Large Tartlets']
-        ]
-      },
-      {
-        name: 'Pastries',
-        rows: [
-          ['LRN-PST-001', 'Mini Butter Croissant 30g', '12 Months', '30', '120', 'Medium Box', 0.48, 57.60, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '3.6', '4.2', '50 Boxes', 2880.00, 'Croissants'],
-          ['LRN-PST-002', 'Pain Au Chocolat 35g', '12 Months', '35', '96', 'Medium Box', 0.54, 51.84, '120 Boxes/Pallet', '90 Boxes/Pallet', '100 Boxes/Pallet', '3.4', '4.0', '50 Boxes', 2592.00, 'Croissants'],
-          ['LRN-PST-003', 'Apple Cinnamon Danish', '12 Months', '40', '80', 'Large Box', 0.62, 49.60, '100 Boxes/Pallet', '75 Boxes/Pallet', '80 Boxes/Pallet', '3.2', '3.9', '40 Boxes', 1984.00, 'Danishes']
-        ]
-      },
-      {
-        name: 'Cones & Baskets',
-        rows: [
-          ['LRN-CON-001', 'Sweet Mini Waffle Cone 75mm', '12 Months', '10', '180', 'Medium Box', 0.32, 57.60, '140 Boxes/Pallet', '105 Boxes/Pallet', '120 Boxes/Pallet', '1.8', '2.5', '50 Boxes', 2880.00, 'Sweet Cones'],
-          ['LRN-CON-002', 'Savory Sesame Cone 75mm', '12 Months', '10', '180', 'Medium Box', 0.34, 61.20, '140 Boxes/Pallet', '105 Boxes/Pallet', '120 Boxes/Pallet', '1.8', '2.5', '50 Boxes', 3060.00, 'Savory Cones']
-        ]
-      },
-      {
-        name: 'Chocolates',
-        rows: [
-          ['LRN-CHO-001', 'Dark Chocolate Truffle 70%', '9 Months', '12', '144', 'Small Box', 0.65, 93.60, '180 Boxes/Pallet', '135 Boxes/Pallet', '150 Boxes/Pallet', '1.7', '2.2', '30 Boxes', 2808.00, 'Truffles'],
-          ['LRN-CHO-002', 'Praline Hazelnut Bonbon', '9 Months', '11', '144', 'Small Box', 0.68, 97.92, '180 Boxes/Pallet', '135 Boxes/Pallet', '150 Boxes/Pallet', '1.6', '2.1', '30 Boxes', 2937.60, 'Bonbons']
-        ]
-      },
-      {
-        name: 'Presentation Stands',
-        isPresentation: true,
-        headers: ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ', 'Product Group'],
-        rows: [
-          ['LRN-STD-001', 'Acrylic 3-Tier Tart Stand', '4', 18.50, 74.00, '3.4', '4.2', 'Display Box', '10 Sets', 740.00, 'Acrylic Displays']
-        ]
-      }
-    ];
-
-    sheets.forEach(sheet => {
-      let wsData;
-      let ws;
-      if (sheet.isPresentation) {
-        wsData = [sheet.headers, ...sheet.rows];
-        ws = XLSX.utils.aoa_to_sheet(wsData);
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-      } else {
-        wsData = [standardHeaderRow1, standardHeaderRow2, standardHeaderRow3, ...sheet.rows];
-        ws = XLSX.utils.aoa_to_sheet(wsData);
-        ws['!merges'] = standardMerges;
-        ws['!freeze'] = { xSplit: 0, ySplit: 3 };
-      }
-      XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+    const instructions = XLSX.utils.aoa_to_sheet(template.instructions);
+    instructions['!cols'] = [{ wch: 26 }, { wch: 110 }];
+    instructions['!rows'] = template.instructions.map(() => ({ hpt: 24 }));
+    XLSX.utils.book_append_sheet(wb, instructions, template.instructionsSheet);
+    template.categories.forEach(category => {
+      const layout = template.layouts[category.layout];
+      const ws = XLSX.utils.aoa_to_sheet([...layout.headerRows, ...category.samples]);
+      ws['!merges'] = layout.merges.map(range => XLSX.utils.decode_range(range));
+      ws['!cols'] = layout.widths.map(wch => ({ wch }));
+      ws['!rows'] = [...layout.headerRows.map(() => ({ hpt: 26 })), ...category.samples.map(() => ({ hpt: 24 }))];
+      layout.columns.forEach((column, columnIndex) => {
+        if (column.type === 'text') return;
+        category.samples.forEach((_, rowIndex) => {
+          const cell = ws[XLSX.utils.encode_cell({ r: layout.headerRows.length + rowIndex, c: columnIndex })];
+          if (cell) cell.z = column.type === 'integer' ? '0' : '0.00';
+        });
+      });
+      XLSX.utils.book_append_sheet(wb, ws, category.name);
     });
-
-    XLSX.writeFile(wb, 'LRN_Price_List_Template.xlsx');
-    toast('Downloaded official Excel template: LRN_Price_List_Template.xlsx');
+    XLSX.writeFile(wb, template.filename, { bookType: 'xlsx', compression: true });
+    toast(`Downloaded official template ${template.version}. Replace or delete the sample rows before uploading.`);
   }
 
-  /** Reads one workbook into the normalised price list layout (no side effects). */
-  async function readWorkbook(file, meta = {}) {
+  /** Send the original workbook, never browser-derived headers/rows, for strict server validation. */
+  async function uploadList(file, meta = {}) {
     if (!can('upload')) throw new Error('Your role cannot upload price lists.');
-    const listPriceLevel = String(meta.priceLevel || '').trim();
-    const listCountry = String(meta.country || '').trim();
-    if (!listPriceLevel || !listCountry) throw new Error('Enter the price level and country for this price list.');
-    if (!file || !/\.(xlsx|xls)$/i.test(file.name)) {
-      throw new Error('Please select a valid Excel file (.xlsx or .xls).');
-    }
-    if (!window.XLSX) throw new Error('Excel tools did not load. Check the internet connection and refresh.');
-    let workbook;
-    try {
-      workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-    } catch {
-      throw new Error('Unable to read this file as an Excel workbook.');
-    }
-    const headers = ['Category', 'Code No', 'Description', '', 'Expiry Date', 'Weight   gr/pc', 'Pcs\n/box', 'Box Size', 'Price/pc    USD', 'Price/box in USD', 'Large Pallet\n(16 pallets)', 'Small Pallet\n(2 pallets)', 'Large Pallet\n(8 pallets)', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', '', 'Total Price Based on MOQ', 'Product Group', 'Price Level', 'Country'];
-    const products = [];
-    const usedSheets = new Set();
-    for (const sheetName of workbook.SheetNames) {
-      const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: true });
-      if (!matrix || !matrix.length) continue;
-      let map = null;
-      let currentSection = sheetName;
-      for (let rIdx = 0; rIdx < matrix.length; rIdx++) {
-        const row = matrix[rIdx];
-        const labels = row.map(value => String(value ?? '').replace(/[\r\n]+/g, ' ').trim());
-        const nonEmptyLabels = labels.filter(Boolean);
-        if (nonEmptyLabels.length === 1 && nonEmptyLabels[0].length > 2 && !/price list|don't miss|la rose noire|homepage|facebook|instagram|twitter|tel:/i.test(nonEmptyLabels[0])) {
-          currentSection = nonEmptyLabels[0];
-        }
-        const codeIndex = labels.findIndex(value => /(^|\s)(code no|lrn code|code)(\s|$)/i.test(value));
-        const hasPrice = labels.some(value => /price\s*\/\s*(pc|box)|total price/i.test(value));
-        if (codeIndex >= 0 && hasPrice) {
-          const findInRow = (r, pattern) => (r || []).findIndex(value => pattern.test(String(value ?? '').replace(/[\r\n]+/g, ' ').trim()));
-          const find = pattern => findInRow(row, pattern);
-
-          // Find pallet columns across current row and neighboring rows (up to 3 rows above or below)
-          let p40L = find(/16\s*pallet|large.*16|40ft.*large/i);
-          let p40S = find(/2\s*pallet|small.*2|40ft.*small/i);
-          let p20L = find(/8\s*pallet|large.*8|20ft.*large/i);
-
-          for (let offset = -3; offset <= 3; offset++) {
-            if (offset === 0) continue;
-            const neighborRow = matrix[rIdx + offset];
-            if (!neighborRow || !Array.isArray(neighborRow)) continue;
-            if (p40L < 0) p40L = findInRow(neighborRow, /16\s*pallet|large.*16|40ft.*large/i);
-            if (p40S < 0) p40S = findInRow(neighborRow, /2\s*pallet|small.*2|40ft.*small/i);
-            if (p20L < 0) p20L = findInRow(neighborRow, /8\s*pallet|large.*8|20ft.*large/i);
-          }
-
-          if (p40L < 0) {
-            let palletContainerIdx = find(/pallet\s*per\s*container|pallet.*container|container.*pallet/i);
-            if (palletContainerIdx < 0) {
-              for (let offset = -3; offset <= 3; offset++) {
-                const neighborRow = matrix[rIdx + offset];
-                if (!neighborRow || !Array.isArray(neighborRow)) continue;
-                const testIdx = findInRow(neighborRow, /pallet\s*per\s*container|pallet.*container|container.*pallet/i);
-                if (testIdx >= 0) { palletContainerIdx = testIdx; break; }
-              }
-            }
-            if (palletContainerIdx >= 0) {
-              p40L = palletContainerIdx;
-              if (p40S < 0) p40S = palletContainerIdx + 1;
-              if (p20L < 0) p20L = palletContainerIdx + 2;
-            }
-          }
-
-          const boxPriceIdx = find(/price\s*\/\s*box/i);
-          if (p40L < 0 && boxPriceIdx >= 0 && !/presentation stands/i.test(sheetName)) {
-            p40L = boxPriceIdx + 1;
-            p40S = boxPriceIdx + 2;
-            p20L = boxPriceIdx + 3;
-          } else {
-            if (p40S < 0 && p40L >= 0) p40S = p40L + 1;
-            if (p20L < 0 && p40L >= 0) p20L = p40L + 2;
-          }
-
-          const catColIdx = labels.findIndex(value => /^(worksheet|category|section)$/i.test(value));
-
-          map = {
-            code: codeIndex,
-            categoryCol: catColIdx,
-            description: find(/description|item name/i),
-            details: /presentation stands/i.test(sheetName) ? find(/item name/i) + 1 : -1,
-            expiry: find(/expiry/i),
-            weight: find(/weight/i),
-            pieces: find(/pcs\s*\/\s*box|pc\s*\/\s*set/i),
-            boxSize: find(/^box size$/i),
-            unitPrice: find(/price\s*\/\s*pc/i),
-            boxPrice: boxPriceIdx,
-            pallet40Large: p40L,
-            pallet40Small: p40S,
-            pallet20Large: p20L,
-            netWeight: find(/^nw/i),
-            grossWeight: find(/^gw/i),
-            moq: find(/^moq$/i),
-            moqQuantity: find(/^moq$/i) >= 0 ? find(/^moq$/i) + 1 : -1,
-            totalPrice: find(/total price/i),
-            productGroup: find(/product group/i),
-            priceLevel: find(/^price\s*level$/i),
-            country: find(/^(country|market|destination)$/i)
-          };
-          continue;
-        }
-
-        if (!map) continue;
-        const code = String(row[map.code] ?? '').trim();
-        if (!code || /^(code no|lrn code|code|description|item name|total)$/i.test(code)) continue;
-
-        const unitPrice = map.unitPrice >= 0 ? row[map.unitPrice] : '';
-        const boxPrice = map.boxPrice >= 0 ? row[map.boxPrice] : '';
-        const totalPrice = map.totalPrice >= 0 ? row[map.totalPrice] : '';
-        if (![unitPrice, boxPrice, totalPrice].some(isNumeric)) continue;
-
-        const take = index => (index !== null && index !== undefined && index >= 0) ? (row[index] ?? '') : '';
-        const groupFromRow = map.productGroup >= 0 ? String(row[map.productGroup] ?? '').trim() : '';
-        const catFromRow = map.categoryCol >= 0 ? String(row[map.categoryCol] ?? '').trim() : '';
-        const categoryName = catFromRow || sheetName;
-
-        products.push([
-          categoryName, code, take(map.description), take(map.details), take(map.expiry), take(map.weight),
-          take(map.pieces), take(map.boxSize), unitPrice, boxPrice, take(map.pallet40Large),
-          take(map.pallet40Small), take(map.pallet20Large), take(map.netWeight), take(map.grossWeight),
-          take(map.moq), take(map.moqQuantity), totalPrice, groupFromRow || currentSection,
-          String(take(map.priceLevel)).trim() || listPriceLevel, String(take(map.country)).trim() || listCountry
-        ]);
-        usedSheets.add(sheetName);
-      }
-    }
-    if (!products.length) throw new Error('No product rows with price values were detected in this workbook.');
-    const normalized = [headers, ...products];
-    const headerIndex = 0;
-    const rawHeaders = normalized[headerIndex] || [];
-    const width = Math.max(rawHeaders.length, ...normalized.slice(headerIndex + 1).map(row => row.length));
-    const finalHeaders = Array.from({ length: width }, (_, index) => String(rawHeaders[index] || `Column ${index + 1}`).trim());
-    const priceColumns = finalHeaders.map((header, index) => /price\s*\/\s*(pc|box)/i.test(header) ? index : -1).filter(index => index >= 0);
-    const rows = normalized.slice(headerIndex + 1).filter(row => row.some(value => value !== '')).map(row => Array.from({ length: width }, (_, index) => row[index] ?? ''));
-    const name = String(meta.name || '').trim() || file.name.replace(/\.(xlsx|xls)$/i, '');
-    return { name, priceLevel: listPriceLevel, country: listCountry, headers: finalHeaders, rows, priceColumns, categoryCount: new Set(rows.map(row => row[COL.category])).size };
-  }
-  /** Stores a read workbook as an uploaded file (original prices, no approval). The server logs the upload. */
-  function uploadList(file, list) {
-    return api('save', {
-      method: 'POST',
-      body: JSON.stringify({ kind: 'upload', sourceFile: file.name, name: list.name, priceLevel: list.priceLevel, country: list.country, headers: list.headers, rows: list.rows, priceColumns: list.priceColumns, adjustment: 0, categoryAdjustments: {}, changes: [] })
-    });
+    if (!file || !/\.xlsx$/i.test(file.name)) throw new Error('Only the official .xlsx template is accepted. Legacy .xls files are not supported.');
+    if (!file.size || file.size > (state.importTemplate?.maxFileBytes || 10485760)) throw new Error('Workbook must be no more than 10 MB.');
+    if (!String(meta.country || '').trim() || !String(meta.priceLevel || '').trim()) throw new Error('Choose the country and price level for this price list.');
+    const body = new FormData();
+    body.append('kind', 'upload');
+    body.append('name', String(meta.name || '').trim() || file.name.replace(/\.xlsx$/i, ''));
+    body.append('country', String(meta.country).trim());
+    body.append('priceLevel', String(meta.priceLevel).trim());
+    body.append('workbook', file);
+    return api('save', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body });
   }
 
-  /** Reads one workbook, uploads it (no approval needed) and opens it in the editor. */
+  /** A failed validation never changes the active file or discards its draft. */
   async function parseWorkbook(file, meta = {}) {
-    const list = await readWorkbook(file, meta);
-    const data = await uploadList(file, list);
+    const data = await uploadList(file, meta);
     if (can('update')) await removeDraft(draftKey());
     resetFilters();
     state.category = '';
@@ -2751,7 +2676,7 @@
     loadActive(data.active);
     switchPanel('workspacePanel', true);
     refreshState().catch(() => { });
-    toast(`Uploaded ${list.name} (${list.rows.length.toLocaleString()} products). ${state.autoApprove ? 'Price changes you save are approved right away.' : 'Price changes you save will go for approval.'}`);
+    toast(`Uploaded ${data.active.name} (${Number(data.active.productCount || data.active.rows.length).toLocaleString()} products). ${state.autoApprove ? 'Price changes you save are approved right away.' : 'Price changes you save will go for approval.'}`);
   }
   function resetFilters() {
     state.search = ''; state.codeFilter = ''; state.priceLevelFilter = ''; state.countryFilter = '';
@@ -2951,9 +2876,9 @@
       categoryMap.get(cat).push(row);
     });
 
-    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'NW(KG) / Box', 'GW(KG) / Box', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
-    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', '', '', '', '', ''];
-    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', '', '', '', '', ''];
+    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'Product Group'];
+    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', ''];
+    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', ''];
     const standardMerges = [
       { s: { r: 0, c: 0 }, e: { r: 2, c: 0 } },
       { s: { r: 0, c: 1 }, e: { r: 2, c: 1 } },
@@ -2965,12 +2890,7 @@
       { s: { r: 0, c: 7 }, e: { r: 2, c: 7 } },
       { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
       { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
-      { s: { r: 1, c: 10 }, e: { r: 1, c: 10 } },
-      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } },
-      { s: { r: 0, c: 12 }, e: { r: 2, c: 12 } },
-      { s: { r: 0, c: 13 }, e: { r: 2, c: 13 } },
-      { s: { r: 0, c: 14 }, e: { r: 2, c: 14 } },
-      { s: { r: 0, c: 15 }, e: { r: 2, c: 15 } }
+      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } }
     ];
 
     const presentationHeaders = ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
@@ -3012,10 +2932,6 @@
             row[10],
             row[11],
             row[12],
-            row[13],
-            row[14],
-            row[15],
-            isNumeric(row[17]) ? Number(row[17]) : row[17],
             row[18] || catName
           ]);
         });
@@ -3418,7 +3334,7 @@
     const files = [...(event.dataTransfer?.files || [])];
     if (!files.length) return;
     if (!can('upload')) return toast('Your role cannot upload price lists.');
-    if (!files.some(file => /\.(xlsx|xls)$/i.test(file.name))) return toast('Please drop Excel files (.xlsx or .xls).');
+    if (!files.some(file => /\.xlsx$/i.test(file.name))) return toast('Please drop official .xlsx workbooks. Legacy .xls files are not accepted.');
     if (await openUploadModal()) stageFilesForUpload(files);
   });
   $('#editButton').addEventListener('click', event => {
@@ -3786,7 +3702,6 @@
   $('#refreshListsBtn')?.addEventListener('click', async () => {
     try { await refreshState(); toast('Approvals refreshed.'); } catch (error) { toast(error.message); }
   });
-  $('#listsBackBtn')?.addEventListener('click', () => switchPanel('workspacePanel', true));
   dom.bannerApproveBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('approve', state.active.id));
   dom.bannerRejectBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('reject', state.active.id));
   // The tab title is "<page> · <app name>" (set by components/app_shell.php).
@@ -4035,9 +3950,7 @@
     }
   });
 
-  dom.backToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
   dom.emptyGoToPricesBtn?.addEventListener('click', () => $$('.nav-item')[0].click());
-  dom.settingsBackButton?.addEventListener('click', () => $$('.nav-item')[0].click());
   dom.imageCategoryFilter?.addEventListener('change', () => {
     state.imageCategory = dom.imageCategoryFilter.value;
     renderImageSettings();
@@ -4413,9 +4326,24 @@
   dom.closeUploadModalBtn?.addEventListener('click', closeUploadModal);
   dom.cancelUploadBtn?.addEventListener('click', closeUploadModal);
   dom.downloadTemplateBtn?.addEventListener('click', downloadExcelTemplate);
-  dom.browseFileBtn?.addEventListener('click', () => dom.modalFileInput?.click());
+  $('#guideDownloadTemplateBtn')?.addEventListener('click', downloadExcelTemplate);
+  $('#uploadTemplateRulesBtn')?.addEventListener('click', () => setUploadGuide(true));
+  $('#uploadGuideBackBtn')?.addEventListener('click', () => setUploadGuide(false));
+  $('.template-layout-tabs')?.addEventListener('click', event => {
+    const tab = event.target.closest('[data-template-layout]');
+    if (tab) selectTemplateLayout(tab.dataset.templateLayout);
+  });
+  $('.template-layout-tabs')?.addEventListener('keydown', event => {
+    const tabs = $$('.template-layout-tab');
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    selectTemplateLayout(tabs[next].dataset.templateLayout, true);
+  });
+  dom.browseFileBtn?.addEventListener('click', () => { if (!bulkImporting) dom.modalFileInput?.click(); });
   dom.modalDropZone?.addEventListener('click', event => {
-    if (event.target !== dom.browseFileBtn && !bulkImporting && stagedFiles.length < MAX_BULK_FILES) dom.modalFileInput?.click();
+    if (!event.target.closest('button, input') && !bulkImporting && (stagedFiles.length < MAX_BULK_FILES || stagedFiles.some(item => item.status))) dom.modalFileInput?.click();
   });
   dom.modalFileInput?.addEventListener('change', () => {
     stageFilesForUpload(dom.modalFileInput.files);
@@ -4444,7 +4372,13 @@
     });
     renderStagedFiles();
   });
-  dom.uploadModal?.addEventListener('cancel', event => { if (bulkImporting) event.preventDefault(); });
+  dom.uploadModal?.addEventListener('cancel', event => {
+    if (bulkImporting || !$('#uploadGuideView').hidden) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!bulkImporting) setUploadGuide(false);
+    }
+  });
   dom.modalDropZone?.addEventListener('dragover', event => {
     event.preventDefault();
     dom.modalDropZone.classList.add('dragover');
@@ -4460,19 +4394,26 @@
   dom.submitUploadBtn?.addEventListener('click', async () => {
     if (!stagedFiles.length || bulkImporting) return;
     if (stagedFiles.every(item => item.status === 'saved' || item.status === 'failed')) {
+      const hasSaved = stagedFiles.some(item => item.status === 'saved');
       closeUploadModal();
-      switchPanel('listsPanel', true);
+      if (hasSaved) switchPanel('filesPanel', true);
       return;
     }
     const problem = validateStagedFiles();
     if (problem) return toast(problem);
     if (stagedFiles.length === 1) {
       const [item] = stagedFiles;
-      closeUploadModal();
+      bulkImporting = true;
+      item.status = 'working'; item.message = 'Validating the complete workbook…';
+      renderStagedFiles();
       try {
         await parseWorkbook(item.file, { name: item.name, country: item.country, priceLevel: item.priceLevel });
+        bulkImporting = false;
+        closeUploadModal();
       } catch (err) {
-        toast(err.message || 'Failed to process Excel workbook.');
+        bulkImporting = false;
+        item.status = 'failed'; item.message = err.message || 'Failed to process Excel workbook.';
+        renderStagedFiles();
       }
       return;
     }
@@ -4648,38 +4589,93 @@
   window.addEventListener('focus', pollUpdates);
   setInterval(pollUpdates, 20000);
 
-  // --- Photo library ("drawer") and photo picker ---
+  // --- Category folders, reusable photo library and photo picker ---
+  const libraryFolderIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="M3 7h18"/></svg>';
+  function photoAttr(value) { return escapeHtml(value).replace(/"/g, '&quot;'); }
+  function folderKey(value) { return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function folderValue(folder) { return folder === null ? 'all' : `folder:${folder}`; }
+  function folderFromValue(value) { return value === 'all' ? null : String(value || '').replace(/^folder:/, ''); }
+  function folderLabel(folder) { return folder === null ? 'All photos' : folder || 'Unfiled'; }
+  function libraryFolderNames(extra = '') {
+    const names = new Map();
+    const categories = [
+      ...(state.photoFolders || []),
+      ...state.versions.flatMap(version => Array.isArray(version.categories) ? version.categories : []),
+      ...state.rows.map(row => row[COL.category]),
+      ...state.productImages.map(image => image.category),
+      ...state.photoLibrary.map(photo => photo.category), extra,
+    ];
+    categories.forEach(value => {
+      const name = String(value || '').trim().replace(/\s+/g, ' ');
+      if (name && !names.has(folderKey(name))) names.set(folderKey(name), name);
+    });
+    return [...names.values()].sort((a, b) => a.localeCompare(b));
+  }
+  function folderOptions(folder, { includeAll = false, extra = '' } = {}) {
+    const names = [...(includeAll ? [null] : []), '', ...libraryFolderNames(extra)];
+    return names.map(name => {
+      const selected = name === null ? folder === null : folder !== null && folderKey(name) === folderKey(folder);
+      return `<option value="${photoAttr(folderValue(name))}"${selected ? ' selected' : ''}>${escapeHtml(folderLabel(name))}</option>`;
+    }).join('');
+  }
+  function renderLibraryFolders() {
+    const folders = $('#libraryFolders');
+    if (!folders) return;
+    folders.innerHTML = [null, ...libraryFolderNames(), ''].map(folder => {
+      const count = filteredLibrary('', folder).length;
+      const active = folder === null ? state.libraryFolder === null : state.libraryFolder !== null && folderKey(folder) === folderKey(state.libraryFolder);
+      return `<button type="button" class="library-folder${active ? ' is-active' : ''}" data-library-folder="${photoAttr(folderValue(folder))}"${active ? ' aria-current="true"' : ''}>${libraryFolderIcon}<span>${escapeHtml(folderLabel(folder))}</span><small>${count}</small></button>`;
+    }).join('');
+    const destination = $('#libraryUploadFolder');
+    const currentDestination = destination.value ? folderFromValue(destination.value) : '';
+    destination.innerHTML = folderOptions(currentDestination);
+    updateLibraryUploadLabel();
+  }
+  function updateLibraryUploadLabel() {
+    const folder = folderFromValue($('#libraryUploadFolder')?.value);
+    $('#libraryUploadButton').setAttribute('aria-label', `Upload photos to ${folderLabel(folder)}`);
+  }
   function photoUsage(photoId) {
     return (state.productImages || []).filter(image => image.libraryId === photoId);
   }
   function photoCardMarkup(photo, { selected = false, current = false, deletable = false } = {}) {
     const usage = photoUsage(photo.id).length;
-    return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-photo-id="${escapeHtml(photo.id)}" role="option" tabindex="0" aria-selected="${selected}" title="${escapeHtml(photo.name)}">
-      <div class="library-thumb"><img src="${escapeHtml(mediaUrl(photo.imagePath))}" alt="${escapeHtml(photo.name)}" loading="lazy"></div>
+    return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-photo-id="${photoAttr(photo.id)}" ${deletable ? 'role="group"' : `role="option" tabindex="0" aria-selected="${selected}"`} aria-label="${photoAttr(photo.name)}" title="${photoAttr(photo.name)}">
+      <div class="library-thumb"><img src="${photoAttr(mediaUrl(photo.imagePath))}" alt="${photoAttr(photo.name)}" loading="lazy"></div>
       <div class="library-meta">
         <strong>${escapeHtml(photo.name)}</strong>
         <small>${current ? 'Current photo' : usage ? `Used by ${usage} product type${usage === 1 ? '' : 's'}` : 'Not used yet'}</small>
+        ${deletable ? `<label class="library-photo-folder-control"><span>Folder</span><select class="library-photo-folder" data-photo-id="${photoAttr(photo.id)}" aria-label="Move ${photoAttr(photo.name)} to folder">${folderOptions(photo.category || '')}</select></label>` : `<small class="library-photo-category">${escapeHtml(folderLabel(photo.category || ''))}</small>`}
       </div>
-      ${deletable ? `<button type="button" class="library-delete" data-photo-id="${escapeHtml(photo.id)}" aria-label="Delete ${escapeHtml(photo.name)}" title="Delete photo">
+      ${deletable ? `<button type="button" class="library-delete" data-photo-id="${photoAttr(photo.id)}" aria-label="Delete ${photoAttr(photo.name)}" title="Delete photo">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>` : ''}
       ${selected ? '<span class="library-check" aria-hidden="true">✓</span>' : ''}
     </div>`;
   }
-  function filteredLibrary(query) {
+  function filteredLibrary(query, folder = null) {
     const q = String(query || '').trim().toLowerCase();
-    return (state.photoLibrary || []).filter(photo => !q || photo.name.toLowerCase().includes(q));
+    return (state.photoLibrary || []).filter(photo =>
+      (folder === null || folderKey(photo.category) === folderKey(folder)) &&
+      (!q || String(photo.name || '').toLowerCase().includes(q)));
   }
   function renderLibrary() {
     const grid = $('#libraryGrid');
     if (!grid) return;
     const all = state.photoLibrary || [];
-    const visible = filteredLibrary(state.librarySearch);
+    const visible = filteredLibrary(state.librarySearch, state.libraryFolder);
+    renderLibraryFolders();
+    $('#libraryFolderTitle').textContent = folderLabel(state.libraryFolder);
+    $('#libraryFolderDescription').textContent = state.libraryFolder === null
+      ? 'Browse every photo, or open a category folder on the left.'
+      : state.libraryFolder === '' ? 'Photos without a category. Use the folder control on each photo to organize them.'
+      : `Photos for ${state.libraryFolder}. Upload here or move existing photos into this folder.`;
     $('#libraryCountBadge').textContent = String(all.length);
     $('#libraryCount').textContent = `${visible.length} photo${visible.length === 1 ? '' : 's'}`;
     $('#libraryEmpty').hidden = visible.length > 0;
-    if (!visible.length && all.length) $('#libraryEmpty').innerHTML = '<h2>No matching photos</h2><p>Try a different search.</p>';
-    else if (!all.length) $('#libraryEmpty').innerHTML = '<h2>The library is empty</h2><p>Upload product photos above. You can then pick them for any product type.</p>';
+    if (!visible.length) $('#libraryEmpty').innerHTML = state.librarySearch.trim()
+      ? '<h2>No matching photos</h2><p>Try another name or browse a different folder.</p>'
+      : '<h2>No photos in this folder yet</h2><p>Choose an upload destination above, then select Upload photos.</p>';
     grid.hidden = !visible.length;
     grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
   }
@@ -4696,14 +4692,74 @@
   }
   $$('.config-tab-btn').forEach(button => button.addEventListener('click', () => switchConfigTab(button.dataset.configTab)));
   $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; renderLibrary(); });
+  $('#libraryFolders')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-library-folder]');
+    if (!button) return;
+    state.libraryFolder = folderFromValue(button.dataset.libraryFolder);
+    state.librarySearch = '';
+    $('#librarySearchInput').value = '';
+    renderLibrary();
+    if (state.libraryFolder !== null) {
+      $('#libraryUploadFolder').value = folderValue(state.libraryFolder);
+      updateLibraryUploadLabel();
+    }
+    [...$('#libraryFolders').querySelectorAll('button')].find(item => item.dataset.libraryFolder === button.dataset.libraryFolder)?.focus();
+  });
+  $('#libraryUploadFolder')?.addEventListener('change', updateLibraryUploadLabel);
+  function toggleFolderForm(open) {
+    $('#libraryFolderForm').hidden = !open;
+    $('#libraryNewFolder').setAttribute('aria-expanded', String(open));
+    $('#libraryFolderError').hidden = true;
+    if (open) $('#libraryFolderName').focus(); else $('#libraryNewFolder').focus();
+  }
+  $('#libraryNewFolder')?.addEventListener('click', () => toggleFolderForm($('#libraryFolderForm').hidden));
+  $('#libraryFolderCancel')?.addEventListener('click', () => toggleFolderForm(false));
+  $('#libraryFolderForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    button.disabled = true;
+    $('#libraryFolderError').hidden = true;
+    try {
+      const data = await api('library-folder', { method: 'POST', body: JSON.stringify({ category: $('#libraryFolderName').value.trim() }) });
+      if (!state.photoFolders.some(folder => folderKey(folder) === folderKey(data.folder))) state.photoFolders.push(data.folder);
+      state.libraryFolder = data.folder;
+      state.librarySearch = '';
+      $('#librarySearchInput').value = '';
+      $('#libraryFolderName').value = '';
+      toggleFolderForm(false);
+      renderLibrary();
+      $('#libraryUploadFolder').value = folderValue(data.folder);
+      updateLibraryUploadLabel();
+      toast(`Folder ${data.folder} is ready for photos.`);
+    } catch (error) {
+      $('#libraryFolderError').textContent = error.message;
+      $('#libraryFolderError').hidden = false;
+    } finally { button.disabled = false; }
+  });
+  $('#libraryGrid')?.addEventListener('change', async event => {
+    const select = event.target.closest('.library-photo-folder');
+    if (!select) return;
+    select.disabled = true;
+    try {
+      const data = await api('library-move', { method: 'POST', body: JSON.stringify({ id: select.dataset.photoId, category: folderFromValue(select.value) }) });
+      state.photoLibrary = state.photoLibrary.map(photo => photo.id === data.photo.id ? data.photo : photo);
+      renderLibrary();
+      toast(data.message);
+    } catch (error) { renderLibrary(); toast(error.message); }
+  });
 
   /** Uploads several files to the library; resolves with the newly added photos. */
-  let libraryUploadTarget = null;
-  async function uploadLibraryFiles(fileList) {
+  let libraryUploadContext = { target: 'library', category: '' };
+  let libraryUploading = false;
+  async function uploadLibraryFiles(fileList, { target = 'library', category = '' } = {}) {
+    if (libraryUploading) { toast('Wait for the current upload to finish.'); return []; }
     const files = [...(fileList || [])].filter(file => /^image\/(jpeg|png|webp)$/.test(file.type));
     const skipped = (fileList?.length || 0) - files.length;
     if (!files.length) { toast('Choose JPG, PNG, or WebP images.'); return []; }
-    const status = $('#libraryUploadStatus');
+    libraryUploading = true;
+    $('#libraryUploadButton').disabled = true;
+    $('#photoPickerUpload').disabled = true;
+    const status = target === 'picker' ? $('#photoPickerStatus') : $('#libraryUploadStatus');
     const added = [];
     const errors = [];
     // Send in batches so very large selections stay under the server's upload limits.
@@ -4711,6 +4767,7 @@
       const batch = files.slice(start, start + 10);
       if (status) status.textContent = `Uploading ${Math.min(start + batch.length, files.length)} of ${files.length}…`;
       const form = new FormData();
+      form.append('category', category);
       batch.forEach(file => form.append('images[]', file));
       try {
         const data = await api('library-upload', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
@@ -4721,29 +4778,27 @@
       }
     }
     if (status) status.textContent = '';
+    libraryUploading = false;
+    $('#libraryUploadButton').disabled = false;
+    $('#photoPickerUpload').disabled = false;
     state.photoLibrary = [...added, ...(state.photoLibrary || [])];
     renderLibrary();
     const problems = errors.length + skipped;
-    toast(added.length ? `${added.length} photo${added.length === 1 ? '' : 's'} added to the library${problems ? ` · ${problems} skipped` : ''}.` : (errors[0] || 'No photos were added.'));
+    toast(added.length ? `${added.length} photo${added.length === 1 ? '' : 's'} added to ${folderLabel(category)}${problems ? ` · ${problems} skipped` : ''}.` : (errors[0] || 'No photos were added.'));
     return added;
   }
   const libraryInput = $('#libraryFileInput');
-  const libraryDrop = $('#libraryDropZone');
-  libraryDrop?.addEventListener('click', () => { libraryUploadTarget = 'library'; libraryInput.value = ''; libraryInput.click(); });
-  libraryDrop?.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); libraryDrop.click(); } });
-  libraryDrop?.addEventListener('dragover', event => { event.preventDefault(); libraryDrop.classList.add('dragover'); });
-  libraryDrop?.addEventListener('dragleave', () => libraryDrop.classList.remove('dragover'));
-  libraryDrop?.addEventListener('drop', async event => {
-    event.preventDefault();
-    libraryDrop.classList.remove('dragover');
-    await uploadLibraryFiles(event.dataTransfer?.files);
+  $('#libraryUploadButton')?.addEventListener('click', () => {
+    if (libraryUploading) return;
+    libraryUploadContext = { target: 'library', category: folderFromValue($('#libraryUploadFolder').value) };
+    libraryInput.value = ''; libraryInput.click();
   });
   libraryInput?.addEventListener('change', async () => {
-    const target = libraryUploadTarget;
-    const added = await uploadLibraryFiles(libraryInput.files);
+    const context = { ...libraryUploadContext };
+    const added = await uploadLibraryFiles(libraryInput.files, context);
     libraryInput.value = '';
-    if (target === 'picker') {
-      if (added.length) picker.selectedId = added[0].id;
+    if (context.target === 'picker') {
+      if (added.length) { picker.selectedId = added[0].id; $('#photoPickerSearch').value = ''; }
       renderPicker();
     }
   });
@@ -4777,11 +4832,18 @@
   });
 
   // Picker modal: used from the price table ("+ Add photo" / "Change") and from Config › Product type photos.
-  const picker = { category: '', groupName: '', selectedId: '', currentId: '', currentKey: '' };
+  const picker = { category: '', folder: '', groupName: '', selectedId: '', currentId: '', currentKey: '' };
   function renderPicker() {
     const grid = $('#photoPickerGrid');
-    const visible = filteredLibrary($('#photoPickerSearch').value);
+    const visible = filteredLibrary($('#photoPickerSearch').value, picker.folder);
+    $('#photoPickerFolder').innerHTML = folderOptions(picker.folder, { includeAll: true, extra: picker.category });
+    $('#photoPickerFolderSummary').textContent = `${folderLabel(picker.folder)} · ${visible.length} photo${visible.length === 1 ? '' : 's'}`;
+    $('#photoPickerUpload').textContent = `+ Upload to ${folderLabel(picker.folder === null ? picker.category : picker.folder)}`;
+    if (picker.selectedId && !visible.some(photo => photo.id === picker.selectedId)) picker.selectedId = '';
     $('#photoPickerEmpty').hidden = visible.length > 0;
+    $('#photoPickerEmpty').innerHTML = $('#photoPickerSearch').value.trim()
+      ? '<h2>No matching photos</h2><p>Try another name or choose a different folder.</p>'
+      : `<h2>No photos in ${escapeHtml(folderLabel(picker.folder))}</h2><p>Upload photos to this folder, or use the folder selector to browse another category.</p>`;
     grid.hidden = !visible.length;
     grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { selected: photo.id === picker.selectedId, current: photo.id === picker.currentId })).join('');
     $('#photoPickerConfirm').disabled = !picker.selectedId || picker.selectedId === picker.currentId;
@@ -4790,7 +4852,7 @@
   function openPhotoPicker(category, groupName) {
     if (!can('manageImages')) return toast('You do not have permission to manage product photos.');
     const current = imageOverride(category, groupName);
-    Object.assign(picker, { category, groupName, currentId: current?.libraryId || '', currentKey: current?.key || '', selectedId: current?.libraryId || '' });
+    Object.assign(picker, { category, folder: category, groupName, currentId: current?.libraryId || '', currentKey: current?.key || '', selectedId: current?.libraryId || '' });
     $('#photoPickerTitle').textContent = `Choose a photo for ${groupName}`;
     $('#photoPickerSearch').value = '';
     renderPicker();
@@ -4836,10 +4898,20 @@
     }
   });
   $('#photoPickerSearch')?.addEventListener('input', renderPicker);
+  $('#photoPickerFolder')?.addEventListener('change', event => {
+    picker.folder = folderFromValue(event.target.value);
+    picker.selectedId = '';
+    $('#photoPickerSearch').value = '';
+    renderPicker();
+  });
   $('#photoPickerConfirm')?.addEventListener('click', confirmPicker);
   $('#photoPickerCancel')?.addEventListener('click', () => $('#photoPickerDialog').close());
   $('#photoPickerClose')?.addEventListener('click', () => $('#photoPickerDialog').close());
-  $('#photoPickerUpload')?.addEventListener('click', () => { libraryUploadTarget = 'picker'; libraryInput.value = ''; libraryInput.click(); });
+  $('#photoPickerUpload')?.addEventListener('click', () => {
+    if (libraryUploading) return;
+    libraryUploadContext = { target: 'picker', category: picker.folder === null ? picker.category : picker.folder };
+    libraryInput.value = ''; libraryInput.click();
+  });
   $('#photoPickerRemove')?.addEventListener('click', async () => {
     if (!picker.currentKey) return;
     try {

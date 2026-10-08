@@ -16,7 +16,7 @@ if ($category === '' || $groupName === '') json_response(['ok' => false, 'messag
 $files = normalize_uploaded_files($_FILES['image'] ?? null);
 if (!$files) json_response(['ok' => false, 'message' => 'Choose a valid image file.'], 422);
 try {
-    $photo = store_library_photo($files[0], $user);
+    $photo = store_library_photo($files[0], $user, $category);
 } catch (InvalidArgumentException $error) {
     json_response(['ok' => false, 'message' => $error->getMessage()], 422);
 }

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 /** Everything the app needs on load and refresh: user, permissions, lists, photos, logs, notifications. */
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../../rules/workbook_import.php';
 
 $user = apiUser();
 
@@ -18,10 +19,12 @@ json_response([
     'autoApprove' => user_can($user, 'save') && is_auto_approver($user['username']),
     'countries' => COUNTRIES,
     'priceLevels' => PRICE_LEVELS,
+    'importTemplate' => user_can($user, 'upload') ? price_list_template() : null,
     'directory' => directory_payload(),
     'versions' => $versions,
     'productImages' => repo_list_images(),
     'photoLibrary' => user_can($user, 'manageImages') ? repo_list_library() : [],
+    'photoFolders' => user_can($user, 'manageImages') ? repo_list_library_folders() : [],
     'auditLogs' => user_can($user, 'viewAudit') ? repo_list_audit(1000) : [],
     'devTools' => DEV_TOOLS_ENABLED && user_can($user, 'update'),
 ] + notifications_payload($user));
