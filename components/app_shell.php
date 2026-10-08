@@ -34,7 +34,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles/app.css?v=89">
+    <link rel="stylesheet" href="../styles/app.css?v=97">
     <script>
     (function() {
         try {
@@ -48,11 +48,27 @@ $panel = APP_PAGES[$page]['panel'];
         } catch (e) {}
     })();
     </script>
+    <script>
+    // Opened by signing in or out: start hidden; scripts/theme.js grows the page from the button's spot.
+    (function () {
+        try {
+            var hand = JSON.parse(sessionStorage.getItem('pla_reveal') || 'null');
+            sessionStorage.removeItem('pla_reveal');
+            var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!hand || reduced || Date.now() - hand.at > 15000) return;
+            var root = document.documentElement;
+            root.classList.add('reveal-pending');
+            root.style.setProperty('--reveal-x', hand.x + 'px');
+            root.style.setProperty('--reveal-y', hand.y + 'px');
+            setTimeout(function () { root.classList.remove('reveal-pending'); }, 3000);
+        } catch (e) {}
+    })();
+    </script>
 </head>
 <body class="is-booting" data-authenticated="true" data-panel="<?= $panel ?>">
 <noscript>This application requires JavaScript for Excel import and export.</noscript>
 
-<div id="appView" class="app-shell">
+<div id="appView" class="app-shell" data-reveal-root>
     <div id="appLoading" class="app-loading" role="status"><div class="loader-orbit"><span class="orbit-ring ring-1"></span><span class="orbit-ring ring-2"></span><span class="orbit-core"></span></div><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <div class="topbar-left">
@@ -104,6 +120,8 @@ $panel = APP_PAGES[$page]['panel'];
                 </div>
             </div>
             <div class="user-menu"><span id="userName"></span><span id="roleBadge" class="badge"></span><button id="logoutButton" class="text-button">Sign out</button></div>
+            <span class="topbar-divider" aria-hidden="true"></span>
+            <img class="powered-by-logo" src="../assets/images/logofooter.png" alt="Powered by Information Technology" width="125" height="30">
         </div>
     </header>
 
@@ -833,17 +851,17 @@ $panel = APP_PAGES[$page]['panel'];
 
 <dialog id="deleteDialog">
     <form method="dialog" class="dialog-card delete-dialog" id="deleteForm">
-        <div class="dialog-heading"><div><p class="kicker">Permanent action</p><h2>Delete saved version?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p>This removes <strong id="deleteVersionName"></strong> from history. This action cannot be undone.</p>
+        <div class="dialog-heading"><div><p class="kicker" id="deleteDialogKicker">Permanent action</p><h2 id="deleteDialogTitle">Delete saved version?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p id="deleteDialogText">This removes <strong id="deleteVersionName"></strong>. This action cannot be undone.</p>
         <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmDelete" value="default" class="button danger">Delete version</button></div>
     </form>
 </dialog>
 
-<dialog id="resetPricesDialog">
-    <form method="dialog" class="dialog-card" id="resetPricesForm">
-        <div class="dialog-heading"><div><p class="kicker">Reset adjustments</p><h2>Reset prices to 0%?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
-        <p class="muted">This will reset all category percentage adjustments back to 0% and restore the original prices from your uploaded file. Your file and products will stay loaded.</p>
-        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmResetPrices" value="default" class="button danger">Reset to original prices</button></div>
+<dialog id="resetPricesDialog" class="anchored-confirm" aria-labelledby="resetPricesTitle" aria-describedby="resetPricesText">
+    <form method="dialog" class="confirm-pop" id="resetPricesForm">
+        <strong id="resetPricesTitle">Reset prices to 0%?</strong>
+        <p id="resetPricesText">Clears every adjustment and restores the uploaded prices.</p>
+        <div class="confirm-pop-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirmResetPrices" value="default" class="button danger">Reset</button></div>
     </form>
 </dialog>
 
@@ -870,7 +888,7 @@ $panel = APP_PAGES[$page]['panel'];
     </button>
     <section id="devToolsPanel" class="dev-tools-panel" role="dialog" aria-labelledby="devToolsTitle" hidden>
         <header class="dev-tools-head">
-            <div><strong id="devToolsTitle">Clear test data</strong><small>For testing only. Turn off before go-live in config.local.php:<br><code>'dev_tools' =&gt; false</code></small></div>
+            <div><strong id="devToolsTitle">Clear test data</strong><small>For testing only. Turn off before go-live in conn/config.php:<br><code>PLA_DEV_TOOLS = false</code></small></div>
             <button type="button" id="devToolsClose" class="icon-button" aria-label="Close developer tools">×</button>
         </header>
         <div class="dev-tools-options">
@@ -902,10 +920,10 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/xlsx.full.min.js"></script>
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="../scripts/theme.js?v=4"></script>
-<script src="../scripts/app.js?v=80"></script>
+<script src="../scripts/theme.js?v=6"></script>
+<script src="../scripts/app.js?v=88"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=4"></script>
-<script src="../scripts/select-dropdown.js?v=2"></script>
+<script src="../scripts/motion.js?v=7"></script>
+<script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>

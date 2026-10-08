@@ -16,6 +16,7 @@
     try { return sessionStorage.getItem(CATEGORY_KEY) || ''; } catch { return ''; }
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let suppressRowEnter = false; // set while a price roll re-renders the table (see rollPrices)
   const dom = {
     appView: $('#appView'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
     auditLogsNav: $('#auditLogsNav'), openAuditLogsFromBell: $('#openAuditLogsFromBell'), auditAllCountBadge: $('#auditAllCountBadge'), auditEditsCountBadge: $('#auditEditsCountBadge'), auditVersionsCountBadge: $('#auditVersionsCountBadge'), auditFileSelect: $('#auditFileSelect'), auditFileSelectWrapper: $('#auditFileSelectWrapper'), auditTypeSelect: $('#auditTypeSelect'), auditTypeSelectWrapper: $('#auditTypeSelectWrapper'), auditUserSelect: $('#auditUserSelect'), auditUserSelectWrapper: $('#auditUserSelectWrapper'), historyAdjustmentSelectWrapper: $('#historyAdjustmentSelectWrapper'), refreshAuditLogsBtn: $('#refreshAuditLogsBtn'), auditTableHead: $('#auditTableHead'), versionsTableHead: $('#versionsTableHead'), historyEmptyTitle: $('#historyEmptyTitle'), historyEmptySubtitle: $('#historyEmptySubtitle'), historyChangesKicker: $('#historyChangesKicker'), historyChangesActions: $('#historyChangesActions'),
@@ -975,6 +976,8 @@
     let previousCategory = null;
     // Every view shows the category strip, including a single selected category.
     const showCategoryDividers = groups.length > 0;
+    // A price roll re-renders the same rows; they stay put instead of sliding in again.
+    $('tbody', dom.table).toggleAttribute('data-still', suppressRowEnter);
     $('tbody', dom.table).innerHTML = groups.map(group => {
       const isPresentation = String(group.category || '').toLowerCase() === 'presentation stands';
       const columnCount = 13;
@@ -2523,8 +2526,45 @@
     dom.uploadModal?.close();
   }
 
+  /**
+   * Switches the upload window between the upload view and Template rules. While open, the window
+   * glides to its new size and the new view slides in (rules from the right, upload from the left).
+   */
+  let uploadGuideSwap = 0;
   function setUploadGuide(show, focus = true) {
     if (bulkImporting) return;
+    const dialog = dom.uploadModal;
+    const changing = show === $('#uploadGuideView').hidden;
+    const smooth = changing && dialog?.open && typeof dialog.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const from = smooth ? dialog.getBoundingClientRect() : null;
+    applyUploadGuide(show);
+    if (smooth) {
+      const swap = ++uploadGuideSwap;
+      const to = dialog.getBoundingClientRect();
+      const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';
+      dialog.getAnimations().forEach(a => a.id === 'upload-swap' && a.cancel());
+      dialog.classList.add('is-resizing');
+      const resize = dialog.animate(
+        [{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }],
+        { duration: 460, easing: ease }
+      );
+      resize.id = 'upload-swap';
+      const settle = () => { if (swap === uploadGuideSwap) dialog.classList.remove('is-resizing'); };
+      resize.finished.then(settle, () => { });
+      setTimeout(settle, 700); // never left clipped if frames stall
+      const shift = show ? 22 : -22;
+      [show ? '#uploadGuideView' : '#uploadMainView', show ? '#uploadGuideActions' : '#uploadMainActions'].forEach((selector, index) => {
+        const el = $(selector);
+        el?.animate(
+          [{ opacity: 0, transform: `translateX(${shift}px)` }, { opacity: 1, transform: 'none' }],
+          { duration: 420, delay: 70 + index * 40, easing: ease, fill: 'backwards' }
+        );
+      });
+      $('.upload-heading > div')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' });
+    }
+    if (focus) requestAnimationFrame(() => (show ? $('.template-layout-tab[aria-selected="true"]') : $('#uploadTemplateRulesBtn'))?.focus());
+  }
+  function applyUploadGuide(show) {
     $('#uploadMainView').hidden = show;
     $('#uploadGuideView').hidden = !show;
     $('#uploadMainActions').hidden = show;
@@ -2533,7 +2573,8 @@
     $('#uploadModalTitle').textContent = show ? 'Template requirements' : 'Upload price lists';
     $('#uploadModalDescription').textContent = show ? 'See the worksheet layouts and what makes an upload valid.' : 'Choose your workbook. We’ll validate it before saving.';
     $('#uploadTemplateRulesBtn').setAttribute('aria-expanded', String(show));
-    if (focus) requestAnimationFrame(() => (show ? $('.template-layout-tab[aria-selected="true"]') : $('#uploadTemplateRulesBtn'))?.focus());
+    dom.closeUploadModalBtn?.setAttribute('aria-label', show ? 'Back to upload' : 'Close upload window');
+    if (dom.closeUploadModalBtn) dom.closeUploadModalBtn.title = show ? 'Back to upload' : 'Close';
   }
 
   function selectTemplateLayout(key, focus = false) {
@@ -2812,6 +2853,8 @@
       })
     });
     await removeDraft(draftKey());
+    // Auto-approvers' saves are approved on the spot, so they get the stamp too.
+    if (data.active?.status === 'approved') stampDecision('approve');
     loadActive(data.active);
     await refreshState();
     toast(data.message);
@@ -3318,7 +3361,21 @@
     if (event.submitter && event.submitter.value === 'cancel') return;
     // A fresh sign-in starts on "All categories".
     rememberCategory('');
-    window.location.href = '../auth/logout.php';
+    const leave = () => { window.location.href = '../auth/logout.php'; };
+    const app = dom.appView;
+    if (reducedMotion() || !app?.animate) return leave();
+    // The page closes in a circle into the Sign out button (the reverse of the theme switch).
+    const box = $('#logoutButton').getBoundingClientRect();
+    const x = box.left + box.width / 2, y = box.top + box.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    document.body.classList.add('is-signing-out');
+    window.plaHandOff?.(x, y); // the sign-in page opens from this same point
+    const shrink = app.animate(
+      { clipPath: [`circle(${radius}px at ${x}px ${y}px)`, `circle(0px at ${x}px ${y}px)`] },
+      { duration: 560, easing: 'cubic-bezier(.55, 0, .75, .1)', fill: 'forwards' }
+    );
+    shrink.finished.then(leave, leave);
+    setTimeout(leave, 900); // in case frames stall
   });
   $('#uploadButton').addEventListener('click', openUploadModal); $('#emptyUploadButton').addEventListener('click', openUploadModal);
   dom.emptyState.addEventListener('dragover', event => {
@@ -3353,6 +3410,84 @@
     if (await openUploadModal()) stageFilesForUpload(files);
   });
 
+  // --- Price roll: after Apply or Reset, every changed digit on screen rolls like an odometer
+  // wheel to its new value (up when the price rises, down when it falls), in a wave down the
+  // table, with a green or red flash behind the price. ---
+  const reducedMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let rollTimer = 0;
+  function priceValueOf(td) {
+    const row = state.rows[Number(td.dataset.row)];
+    const raw = row?.[Number(td.dataset.col)];
+    return isNumeric(raw) ? adjusted(numeric(raw), String(row[0] ?? '')) : null;
+  }
+  /** Remembers the prices on screen and keeps the next re-render from replaying the row entrance. */
+  function capturePrices() {
+    if (reducedMotion() || !dom.table) return null;
+    const before = new Map();
+    dom.table.querySelectorAll('td.price-cell').forEach(td => before.set(`${td.dataset.row}:${td.dataset.col}`, priceValueOf(td)));
+    suppressRowEnter = true;
+    return before;
+  }
+  /** One price as odometer wheels: unchanged characters stay still, changed digits get a strip. */
+  function odometerMarkup(fromText, toText, rising) {
+    const width = Math.max(fromText.length, toText.length);
+    const from = fromText.padStart(width, ' '), to = toText.padStart(width, ' ');
+    let spinsLeft = 0;
+    return [...to].map((char, index) => {
+      const old = from[index];
+      if (old === char) return `<span class="odo-char">${char === ' ' ? '' : escapeHtml(char)}</span>`;
+      if (!/\d/.test(char)) return `<span class="odo-char odo-new">${escapeHtml(char)}</span>`;
+      // Count through the digits in between; the last two wheels also spin one extra turn.
+      const start = /\d/.test(old) ? Number(old) : 0;
+      const end = Number(char);
+      const extra = index >= width - 2 ? 10 : 0;
+      const steps = (rising ? (end - start + 10) % 10 : (start - end + 10) % 10) + extra || 10;
+      const digits = Array.from({ length: steps + 1 }, (_, i) => (rising ? start + i : start - i + 100) % 10);
+      if (!/\d/.test(old)) digits[0] = '';
+      const strip = rising ? digits : [...digits].reverse();
+      spinsLeft++;
+      return `<span class="odo-wheel" data-steps="${steps}" style="--odo-order:${width - index}"><span class="odo-strip">${strip.map(d => `<span>${d}</span>`).join('')}</span><span class="odo-sizer">${char}</span></span>`;
+    }).join('');
+  }
+  function rollPrices(before) {
+    suppressRowEnter = false;
+    if (!before) return;
+    clearTimeout(rollTimer);
+    const frame = dom.table.closest('.table-frame')?.getBoundingClientRect();
+    const top = Math.max(0, frame?.top || 0), bottom = Math.min(innerHeight, frame?.bottom ?? innerHeight);
+    let longest = 0;
+    const rolled = [];
+    dom.table.querySelectorAll('td.price-cell').forEach(td => {
+      const from = before.get(`${td.dataset.row}:${td.dataset.col}`);
+      const to = priceValueOf(td);
+      if (from == null || to == null || from === to) return;
+      const box = td.getBoundingClientRect();
+      // Only prices in view roll; the rest already show their new value.
+      if (box.bottom < top || box.top > bottom) return;
+      const rising = to > from;
+      const delay = Math.round(Math.min(450, Math.max(0, box.top - top) * 0.5));
+      td.style.setProperty('--roll-delay', `${delay}ms`);
+      td.classList.remove('price-rise', 'price-fall');
+      void td.offsetWidth;
+      td.classList.add(rising ? 'price-rise' : 'price-fall');
+      td.innerHTML = `<span class="odo" aria-label="${money.format(to)}">${odometerMarkup(money.format(from), money.format(to), rising)}</span>`;
+      td.querySelectorAll('.odo-wheel').forEach(wheel => {
+        const steps = Number(wheel.dataset.steps);
+        const duration = 650 + Math.min(steps, 20) * 22 + (Number(wheel.style.getPropertyValue('--odo-order')) < 3 ? 120 : 0);
+        const travel = `${-steps * 1.25}em`;
+        const strip = wheel.firstElementChild;
+        strip.animate(
+          rising ? [{ transform: 'translateY(0)' }, { transform: `translateY(${travel})` }] : [{ transform: `translateY(${travel})` }, { transform: 'translateY(0)' }],
+          { duration, delay, easing: 'cubic-bezier(.2, .75, .25, 1.03)', fill: 'both' }
+        );
+        longest = Math.max(longest, delay + duration);
+      });
+      rolled.push({ td, to });
+    });
+    // Afterwards the cells hold plain text again, as the editor expects.
+    if (rolled.length) rollTimer = setTimeout(() => rolled.forEach(({ td, to }) => { if (td.isConnected && td.querySelector('.odo')) td.textContent = money.format(to); }), longest + 80);
+  }
+
   async function applyPriceAdjustment() {
     const rawVal = String(dom.percentage.value ?? '').trim();
     if (rawVal === '') {
@@ -3371,6 +3506,7 @@
       return toast('Please select at least one category to apply the adjustment.');
     }
 
+    const pricesBefore = capturePrices();
     selectedCats.forEach(cat => {
       state.categoryAdjustments[cat] = value;
     });
@@ -3393,6 +3529,7 @@
       updateMetrics();
       renderTable();
     }
+    rollPrices(pricesBefore);
     setPriceEditor(false);
 
     const scopeText = isAll ? 'all categories' : selectedCats.length === 1 ? selectedCats[0] : `${selectedCats.length} categories`;
@@ -3569,12 +3706,30 @@
       requestAnimationFrame(() => dom.rejectRemarks.focus());
     }
   }
+  /** A rubber stamp lands mid-screen after a decision: APPROVED (pink) or RETURNED (red). */
+  function stampDecision(kind) {
+    if (reducedMotion()) return;
+    const approved = kind === 'approve';
+    const today = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date());
+    const stamp = document.createElement('div');
+    stamp.className = `decision-stamp ${approved ? 'is-approved' : 'is-returned'}`;
+    stamp.setAttribute('aria-hidden', 'true');
+    stamp.innerHTML = `<div class="decision-stamp-body"><div class="decision-stamp-ink"><strong>${approved ? 'Approved' : 'Returned'}</strong><span>${escapeHtml(today)} · ${escapeHtml(state.user?.name || '')}</span></div></div>`;
+    document.body.appendChild(stamp);
+    // The page takes the hit as the stamp lands.
+    setTimeout(() => $('.content')?.animate(
+      [{ transform: 'translateY(0)' }, { transform: 'translateY(3px)' }, { transform: 'translateY(-1px)' }, { transform: 'translateY(0)' }],
+      { duration: 240, easing: 'ease-out' }
+    ), 300);
+    setTimeout(() => stamp.remove(), 1900);
+  }
   async function submitDecision(kind, remarks) {
     const decision = state.pendingDecision;
     if (!decision || decision.kind !== kind) return;
     try {
       const data = await api(kind, { method: 'POST', body: JSON.stringify({ id: decision.id, remarks }) });
       state.pendingDecision = null;
+      stampDecision(kind);
       if (String(state.active?.id) === String(decision.id) && !state.active.isDraft) loadActive(data.active);
       await refreshState();
       toast(data.message);
@@ -3607,8 +3762,17 @@
     } else if (action === 'export-excel' || action === 'export-pdf') {
       await requestExport(action === 'export-pdf' ? 'pdf' : 'excel', id);
     } else if (action === 'delete') {
+      if (!version.canDelete) return toast('Approved price lists are kept as the record of published prices.');
+      const withdraw = version.status === 'pending';
       state.pendingDelete = id;
+      $('#deleteDialogKicker').textContent = withdraw ? 'Approval request' : 'Permanent action';
+      $('#deleteDialogTitle').textContent = withdraw ? 'Withdraw approval request?' : version.source === 'upload' ? 'Delete uploaded file?' : 'Delete rejected price list?';
+      $('#deleteDialogText').innerHTML = withdraw
+        ? 'This withdraws <strong id="deleteVersionName"></strong> from approval. Approvers will no longer see it. This cannot be undone.'
+        : 'This removes <strong id="deleteVersionName"></strong>. This action cannot be undone.';
+      dom.deleteVersionName = $('#deleteVersionName');
       dom.deleteVersionName.textContent = version.name;
+      $('#confirmDelete').textContent = withdraw ? 'Withdraw request' : 'Delete';
       dom.deleteDialog.showModal();
     }
   }
@@ -3647,7 +3811,8 @@
         item('export-excel', 'Export Excel', { disabled: !exportable, hint: exportable ? '.xlsx' : 'After approval' }),
         item('export-pdf', 'Export PDF', { disabled: !exportable, hint: exportable ? '.pdf' : 'After approval' })
       ] : [],
-      can('update') ? [item('delete', 'Delete', { danger: true })] : []
+      // Approved lists are the record of published prices; only pending, rejected and unused uploads go.
+      version.canDelete ? [item('delete', version.status === 'pending' ? 'Withdraw request' : 'Delete', { danger: true })] : []
     ].filter(group => group.length);
     rowMenu.innerHTML = groups.map(group => group.join('')).join('<div class="row-menu-sep" role="separator"></div>');
     rowMenu.dataset.id = version.id;
@@ -3727,6 +3892,11 @@
     if (!targetButton) return;
     const finalPanelId = targetButton.dataset.panel;
     setPriceEditor(false);
+    // Nothing from the page being left stays floating over the next one.
+    toggleSwitcher(false);
+    toggleCategoryMenu(false);
+    closeRowMenu();
+    toggleNotifications(false);
 
     document.documentElement.removeAttribute('data-initial-panel');
 
@@ -4146,9 +4316,16 @@
     if (!state.canEdit) return toast('You do not have permission to reset prices.');
     if (!state.active) return toast('Please upload or open a price list first.');
     if (!hasPriceAdjustments()) return toast('No price adjustments to reset (already at 0%).');
+    // A small confirm card hanging from the Reset prices button, not a full-screen modal.
+    const box = dom.resetPricesButton.getBoundingClientRect();
+    dom.resetPricesDialog.style.top = `${Math.round(box.bottom + 10)}px`;
+    dom.resetPricesDialog.style.right = `${Math.max(12, Math.round(innerWidth - box.right))}px`;
     dom.resetPricesDialog.showModal();
     requestAnimationFrame(() => $('#confirmResetPrices')?.focus());
   });
+  // Clicking outside the card (its transparent backdrop) or resizing cancels it.
+  dom.resetPricesDialog?.addEventListener('click', event => { if (event.target === dom.resetPricesDialog) dom.resetPricesDialog.close(); });
+  window.addEventListener('resize', () => { if (dom.resetPricesDialog?.open) dom.resetPricesDialog.close(); });
   dom.resetPricesDialog?.addEventListener('keydown', event => {
     if (event.key === 'Enter' && event.target !== dom.resetPricesDialog.querySelector('button[value="cancel"]')) {
       event.preventDefault();
@@ -4175,6 +4352,7 @@
     }
     dom.resetPricesDialog.close();
     const previous = Object.entries(state.categoryAdjustments || {}).filter(([, v]) => Number(v) !== 0).map(([c, v]) => `${c} ${Number(v) > 0 ? '+' : ''}${v}%`);
+    const pricesBefore = capturePrices();
     state.adjustment = 0;
     state.categoryAdjustments = {};
     if (state.active) {
@@ -4184,6 +4362,7 @@
     dom.percentage.value = 0;
     updateMetrics();
     renderTable();
+    rollPrices(pricesBefore);
     toast('All price adjustments reset to original (0%). Uploaded file retained.');
   });
 
@@ -4323,7 +4502,11 @@
 
 
   // Upload Modal Listeners
-  dom.closeUploadModalBtn?.addEventListener('click', closeUploadModal);
+  // In the Template rules view the × goes back to the upload view (like Esc) instead of closing.
+  dom.closeUploadModalBtn?.addEventListener('click', () => {
+    if (!$('#uploadGuideView').hidden) setUploadGuide(false);
+    else closeUploadModal();
+  });
   dom.cancelUploadBtn?.addEventListener('click', closeUploadModal);
   dom.downloadTemplateBtn?.addEventListener('click', downloadExcelTemplate);
   $('#guideDownloadTemplateBtn')?.addEventListener('click', downloadExcelTemplate);

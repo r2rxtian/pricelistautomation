@@ -104,9 +104,28 @@
     menu.dataset.side = openUp ? 'top' : 'bottom';
   }
 
+  const motion = () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches && typeof menu.animate === 'function';
+  const SHIFT = side => side === 'top' ? 'translateY(6px) scale(0.98)' : 'translateY(-6px) scale(0.98)';
+  let closing = null;   // the running close animation, if any
+  let foldPoint = null; // where the menu unfolded from, so it folds back there
+
+  function hideMenu() {
+    if (usePopover) { if (menu.matches(':popover-open')) menu.hidePopover(); } else menu.hidden = true;
+  }
+  /** Ends a close that is still animating, hiding the menu at once. */
+  function settleClose() {
+    if (!closing) return;
+    const anim = closing;
+    closing = null;
+    hideMenu();
+    menu.classList.remove('is-closing');
+    anim.cancel();
+  }
+
   function open(select) {
     if (select.disabled) return;
     if (isOpen()) close(false);
+    settleClose();
     current = select;
     // An open modal dialog makes everything outside it inert, so the menu must live inside the
     // dialog that holds the select (or back in <body> otherwise).
@@ -124,9 +143,12 @@
     position(); // again, now that the menu has a size
     if (items[active]) items[active].el.scrollIntoView({ block: 'center' });
     (showSearch ? search : menu).focus({ preventScroll: true });
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && menu.animate) {
-      const from = menu.dataset.side === 'top' ? 'translateY(6px) scale(0.98)' : 'translateY(-6px) scale(0.98)';
-      menu.animate([{ opacity: 0, transform: from }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    if (motion()) {
+      // Unfolds from the select's edge (scripts/motion.js); a plain slide if that isn't loaded.
+      const r = select.getBoundingClientRect();
+      foldPoint = { x: r.left + r.width / 2, y: menu.dataset.side === 'top' ? r.top : r.bottom };
+      if (window.plaMotion) window.plaMotion.unfold(menu, foldPoint, 400);
+      else menu.animate([{ opacity: 0, transform: SHIFT(menu.dataset.side) }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
     }
   }
 
@@ -136,8 +158,20 @@
     current = null;
     select.classList.remove('sd-open');
     select.setAttribute('aria-expanded', 'false');
-    if (usePopover) { if (menu.matches(':popover-open')) menu.hidePopover(); } else menu.hidden = true;
     if (refocus) select.focus({ preventScroll: true });
+    if (!motion()) { hideMenu(); return; }
+    // The opening motion in reverse (folds back into the select); it ignores the pointer meanwhile.
+    menu.getAnimations().forEach(a => a.finish());
+    menu.classList.add('is-closing');
+    const anim = window.plaMotion
+      ? window.plaMotion.fold(menu, foldPoint, 240)
+      : menu.animate(
+        [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: SHIFT(menu.dataset.side) }],
+        { duration: 200, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', fill: 'forwards' }
+      );
+    closing = anim;
+    anim.onfinish = () => { if (closing === anim) settleClose(); };
+    setTimeout(() => { if (closing === anim) settleClose(); }, 400); // never left half-closed
   }
 
   function choose(index) {

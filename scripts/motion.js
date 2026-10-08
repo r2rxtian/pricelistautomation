@@ -23,6 +23,8 @@
 
   // iOS motion: a fast start that settles slowly.
   const IOS_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+  // Closing: the same path in reverse, easing out of view without a hard stop.
+  const CLOSE_EASE = 'cubic-bezier(0.4, 0, 0.6, 1)';
 
   /**
    * Plays a short entrance from `from` (opacity/transform) to the element's normal look.
@@ -40,6 +42,70 @@
     setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, duration + 150);
     return anim;
   }
+
+  // --- Unfold / fold: a box grows out of a point, or shrinks back into it ---------------------
+  // Dialogs and popups open and close this way instead of fading: the content stays in place while
+  // the box's rounded edges move, like the upload window resizing between its two views.
+  let lastPointer = null;
+  document.addEventListener('pointerdown', event => { lastPointer = { x: event.clientX, y: event.clientY, at: performance.now() }; }, true);
+  /** Where the person just acted: a click in the last moment, else the focused control. */
+  function actionPoint() {
+    if (lastPointer && performance.now() - lastPointer.at < 1500) return lastPointer;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.getBoundingClientRect) {
+      const r = active.getBoundingClientRect();
+      if (r.width || r.height) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    return null;
+  }
+  /** A corner or edge of the element ('top right', 'bottom left', …). */
+  function cornerPoint(el, origin = 'center') {
+    const r = el.getBoundingClientRect();
+    return {
+      x: /left/.test(origin) ? r.left : /right/.test(origin) ? r.right : r.left + r.width / 2,
+      y: /top/.test(origin) ? r.top : /bottom/.test(origin) ? r.bottom : r.top + r.height / 2,
+    };
+  }
+  /** Clip shapes: a small box at the point nearest `point` inside the element, the element, and the
+   *  element plus room for its shadow. */
+  function clipBoxes(el, point) {
+    const r = el.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+    const w = Math.min(W, Math.max(64, W * 0.24)), h = Math.min(H, Math.max(32, H * 0.14));
+    const p = point || { x: r.left + W / 2, y: r.top + H / 2 };
+    const cx = Math.min(Math.max(p.x - r.left, w / 2), W - w / 2);
+    const cy = Math.min(Math.max(p.y - r.top, h / 2), H - h / 2);
+    const px = value => `${Math.round(value * 10) / 10}px`;
+    return {
+      small: `inset(${px(cy - h / 2)} ${px(W - cx - w / 2)} ${px(H - cy - h / 2)} ${px(cx - w / 2)} round ${px(Math.min(radius, h / 2))})`,
+      full: `inset(0px 0px 0px 0px round ${px(radius)})`,
+      shadow: `inset(-90px -90px -90px -90px round ${px(radius)})`,
+    };
+  }
+  function unfold(el, point, duration = 480) {
+    if (!animate()) return null;
+    el.getAnimations().forEach(a => (a.id === 'pla-motion' || a.id === 'pla-fold') && a.cancel());
+    const box = clipBoxes(el, point);
+    const anim = el.animate(
+      [{ clipPath: box.small, opacity: 0 }, { opacity: 1, offset: 0.1 }, { clipPath: box.full, offset: 0.8 }, { clipPath: box.shadow, opacity: 1 }],
+      { duration, easing: IOS_EASE }
+    );
+    anim.id = 'pla-motion';
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, duration + 150);
+    return anim;
+  }
+  function fold(el, point, duration = 300) {
+    const box = clipBoxes(el, point);
+    const anim = el.animate(
+      [{ clipPath: box.shadow, opacity: 1 }, { clipPath: box.full, offset: 0.12 }, { clipPath: box.small, opacity: 1, offset: 0.88 }, { clipPath: box.small, opacity: 0 }],
+      { duration, easing: CLOSE_EASE, fill: 'forwards' }
+    );
+    anim.id = 'pla-fold';
+    return anim;
+  }
+  // The select menus (scripts/select-dropdown.js) use the same motion.
+  window.plaMotion = { unfold, fold, animate };
 
   // --- Top nav: one underline that slides to the active page (GSAP) --------------------------
   const nav = document.querySelector('.top-nav');
@@ -70,13 +136,33 @@
     place(false);
   }
 
-  // --- Pages: the page being opened glides up and fades in -----------------------------------
+  // --- Pages: the new page sweeps in from the side of the tab you moved to --------------------
+  // A soft-edged mask sweeps across it while it slides a little the same way (no fade). Only the
+  // page being shown animates, and nothing stays on it afterwards, so menus and filters are unaffected.
+  const PAGE_ORDER = [...document.querySelectorAll('.nav-item')].map(item => item.dataset.panel);
+  let shownPanel = document.querySelector('.panel:not([hidden])')?.id || null;
+  function sweepIn(panel, fromRight) {
+    panel.getAnimations().forEach(a => a.id === 'pla-page' && a.cancel());
+    const mask = `linear-gradient(${fromRight ? 'to left' : 'to right'}, #000 42%, transparent 58%)`;
+    const base = { maskImage: mask, webkitMaskImage: mask, maskSize: '300% 100%', webkitMaskSize: '300% 100%', maskRepeat: 'no-repeat', webkitMaskRepeat: 'no-repeat' };
+    const [from, to] = fromRight ? ['0% 0%', '100% 0%'] : ['100% 0%', '0% 0%'];
+    const anim = panel.animate([
+      { ...base, maskPosition: from, webkitMaskPosition: from, transform: `translateX(${fromRight ? 36 : -36}px)` },
+      { ...base, maskPosition: to, webkitMaskPosition: to, transform: 'none' },
+    ], { duration: 640, easing: IOS_EASE });
+    anim.id = 'pla-page';
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 800);
+  }
   const panelObserver = new MutationObserver(records => {
     for (const record of records) {
       const panel = record.target;
-      // Only when it goes from hidden (oldValue "") to shown; skip while the app is still loading.
-      if (panel.hidden || record.oldValue === null || document.body.classList.contains('is-booting')) continue;
-      animateIn(panel, 'translateY(14px)', { duration: 550 });
+      // Only when it goes from hidden (oldValue "") to shown.
+      if (panel.hidden || record.oldValue === null) continue;
+      const previous = shownPanel;
+      shownPanel = panel.id;
+      // Skip while the app is still loading, and when nothing changed.
+      if (!previous || previous === panel.id || document.body.classList.contains('is-booting') || !animate()) continue;
+      sweepIn(panel, PAGE_ORDER.indexOf(panel.id) >= PAGE_ORDER.indexOf(previous));
     }
   });
   document.querySelectorAll('.panel').forEach(panel => panelObserver.observe(panel, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true }));
@@ -94,18 +180,64 @@
     for (const record of records) {
       const el = record.target;
       if (el.hidden || record.oldValue === null) continue;
-      // Runs after the app has positioned the popup, so its measurements are unaffected.
-      animateIn(el, 'translateY(-6px) scale(0.96)', { duration: 420, origin: el.dataset.motionOrigin });
+      // Runs after the app has positioned the popup. It unfolds from the button that opened it
+      // (or its anchored corner) and later folds back into the same spot.
+      el.__foldPoint = actionPoint() || cornerPoint(el, el.dataset.motionOrigin);
+      unfold(el, el.__foldPoint, 440);
     }
   });
   for (const [selector, origin] of POPUPS) {
     document.querySelectorAll(selector).forEach(el => {
       el.dataset.motionOrigin = origin;
       popupObserver.observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
+      animateClosing(el);
     });
   }
 
-  // --- Dialogs: scale in on open, quick fade out on close ------------------------------------
+  /**
+   * Popups close with their opening motion in reverse. The app hides them with `el.hidden = true`:
+   * from that moment `el.hidden` reads true (so the app's open/closed checks stay right), while the
+   * popup stays on screen, ignoring clicks, until the motion ends. Reopened mid-close, it glides back.
+   */
+  function animateClosing(el) {
+    const prop = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'hidden');
+    if (!prop?.get || !prop.set || Object.prototype.hasOwnProperty.call(el, 'hidden')) return;
+    let closing = null;
+    const done = anim => {
+      if (closing !== anim) return;
+      closing = null;
+      prop.set.call(el, true);
+      el.style.pointerEvents = '';
+      anim.cancel();
+    };
+    Object.defineProperty(el, 'hidden', {
+      configurable: true,
+      get() { return closing ? true : prop.get.call(el); },
+      set(value) {
+        const hide = Boolean(value);
+        if (closing && !hide) {
+          // Reopened while closing: play the close backwards to fully open.
+          const anim = closing;
+          closing = null;
+          el.style.pointerEvents = '';
+          anim.onfinish = () => anim.cancel();
+          anim.reverse();
+          setTimeout(() => anim.cancel(), 400);
+          return;
+        }
+        if (closing) return; // already on its way out
+        if (!hide || prop.get.call(el) || !animate()) { prop.set.call(el, hide); return; }
+        el.getAnimations().forEach(a => a.id === 'pla-motion' && a.finish());
+        el.style.pointerEvents = 'none';
+        const anim = fold(el, el.__foldPoint || cornerPoint(el, el.dataset.motionOrigin), 260);
+        closing = anim;
+        anim.onfinish = () => done(anim);
+        setTimeout(() => done(anim), 420); // never left half-closed if frames stall
+      },
+    });
+  }
+
+  // --- Dialogs: unfold on open, fold back on close -------------------------------------------
   const proto = window.HTMLDialogElement?.prototype;
   if (proto && !proto.__plaMotion) {
     proto.__plaMotion = true;
@@ -130,17 +262,17 @@
           this.close();
         });
       }
-      animateIn(this, 'translateY(12px) scale(0.94)', { duration: 500 });
+      // Unfolds from the button that opened it; closing folds it back into the same spot.
+      this.__foldPoint = actionPoint();
+      unfold(this, this.__foldPoint, 520);
     };
 
     proto.close = function (returnValue) {
       if (!this.open || !animate()) return nativeClose.call(this, returnValue);
       if (this.__closing) return;
       this.classList.add('is-closing');
-      const anim = this.animate(
-        [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px) scale(0.97)' }],
-        { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
-      );
+      this.getAnimations().forEach(a => a.id === 'pla-motion' && a.finish());
+      const anim = fold(this, this.__foldPoint, 280);
       this.__closing = anim;
       const finish = () => {
         if (this.__closing !== anim) return;

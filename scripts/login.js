@@ -36,7 +36,23 @@
         showMessage(data.message, 'success');
         // A fresh sign-in starts on "All categories".
         try { sessionStorage.removeItem('pla_view_category'); } catch { }
-        window.location.href = data.data && data.data.redirect ? data.data.redirect : 'prices.php';
+        const target = data.data && data.data.redirect ? data.data.redirect : 'prices.php';
+        let left = false;
+        const go = () => { if (!left) { left = true; window.location.href = target; } };
+        // The sign-in page closes in a circle into the Sign in button; the app then opens from that
+        // same point (the reverse of signing out, see scripts/theme.js).
+        const shell = document.querySelector('.login-shell');
+        const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced || !shell?.animate) return go();
+        const box = button.getBoundingClientRect();
+        const x = box.left + box.width / 2, y = box.top + box.height / 2;
+        const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        window.plaHandOff?.(x, y);
+        shell.animate(
+          { clipPath: [`circle(${radius}px at ${x}px ${y}px)`, `circle(0px at ${x}px ${y}px)`] },
+          { duration: 560, easing: 'cubic-bezier(.55, 0, .75, .1)', fill: 'forwards' }
+        ).finished.then(go, go);
+        setTimeout(go, 900); // in case frames stall
         return;
       }
       showMessage(data.message || 'Sign-in failed. Please try again.', 'error');
