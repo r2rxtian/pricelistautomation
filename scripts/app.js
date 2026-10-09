@@ -4479,17 +4479,20 @@
   // Notification Bell -> Audit Hub Navigation
   dom.openAuditLogsFromBell?.addEventListener('click', () => {
     toggleNotifications(false);
+    state.listTab = 'mine'; // straight to "Awaiting my approval"
     switchPanel('listsPanel', true);
   });
   async function activateNotification(item) {
     if (!item) return;
     toggleNotifications(false);
-    if (item.classList.contains('is-unread')) markNotificationsRead([item.dataset.id]);
-    const versionId = item.dataset.versionId;
-    if (versionId && versionSummaryById(versionId)) {
-      try { await openVersion(versionId); } catch (error) { toast(error.message); }
+    if (item.classList.contains('is-unread')) markNotificationsRead(item.dataset.id.split(',').filter(Boolean));
+    // An approval request opens that list to review; an update opens the list's current prices.
+    const summary = item.dataset.versionId ? versionSummaryById(item.dataset.versionId) : null;
+    const target = summary ? (item.dataset.type === 'approval_request' ? summary : liveRevisionOf(summary) || summary) : null;
+    if (target) {
+      try { await openVersion(target.id); } catch (error) { toast(error.message); }
     } else {
-      switchPanel('listsPanel', true);
+      toast('That price list is no longer available.');
     }
   }
   dom.notificationsList?.addEventListener('click', event => activateNotification(event.target.closest('.notification-item')));
@@ -4862,36 +4865,89 @@
     }
   }
 
+  // --- Notification bell: "Needs your action" (approvals waiting for you) and "Updates" (one row
+  // per price list, newest first, with a count of earlier updates instead of repeats). ---
+  const NOTIFICATION_KINDS = {
+    approval_request: 'Approval needed', approved: 'Approved', partial_approval: 'Partly approved', rejected: 'Rejected',
+  };
+  const notifiedStale = new Set(); // stale requests already sent to be marked read
+  function notificationKind(item) {
+    if (item.type === 'available') return /^new price list/i.test(item.title || '') ? 'New price list' : 'Ready to export';
+    return NOTIFICATION_KINDS[item.type] || 'Update';
+  }
+  function notificationListName(item) {
+    const summary = item.versionId ? versionSummaryById(item.versionId) : null;
+    return summary?.name || String(item.title || 'Notification').replace(/^[^:]+:\s*/, '');
+  }
+  function notificationGroupKey(item) {
+    const summary = item.versionId ? versionSummaryById(item.versionId) : null;
+    return summary ? [summary.name, summary.country, summary.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|') : `title:${notificationListName(item).toLowerCase()}`;
+  }
+  /** A short second line: the reason for a rejection, otherwise where the list applies. */
+  function notificationDetail(item) {
+    if (item.type === 'rejected') {
+      const reason = String(item.message || '').split(/Reason:\s*/)[1];
+      if (reason) return `Reason: ${reason}`;
+    }
+    const summary = item.versionId ? versionSummaryById(item.versionId) : null;
+    if (item.type === 'approval_request' && summary) return `Saved by ${summary.savedBy || 'a user'} · ${[summary.country, summary.priceLevel].filter(Boolean).join(' · ')}`;
+    if (summary) return [summary.country, summary.priceLevel].filter(Boolean).join(' · ');
+    return String(item.message || '');
+  }
   function renderNotifications() {
     const items = state.notifications || [];
-    const unread = Number(state.unreadCount || 0);
+    // An approval request is actionable only while its list is still waiting for this user.
+    const actionable = item => item.type === 'approval_request' && Boolean(versionSummaryById(item.versionId)?.canApprove);
+    const stale = items.filter(item => item.type === 'approval_request' && !item.read && !actionable(item) && !notifiedStale.has(item.id));
+    if (stale.length) {
+      // Requests that were already decided elsewhere clear themselves.
+      stale.forEach(item => notifiedStale.add(item.id));
+      markNotificationsRead(stale.map(item => item.id));
+    }
+    const unread = Math.max(0, Number(state.unreadCount || 0) - stale.length);
     if (dom.notificationBadge) {
       dom.notificationBadge.hidden = unread === 0;
       dom.notificationBadge.textContent = unread > 99 ? '99+' : String(unread);
     }
     if (dom.notificationsCountBadge) {
-      dom.notificationsCountBadge.textContent = unread ? `${unread} unread` : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
-      dom.notificationsCountBadge.classList.toggle('is-quiet', !unread); // only unread counts look like an alert
+      dom.notificationsCountBadge.textContent = unread ? `${unread} new` : 'All caught up';
+      dom.notificationsCountBadge.classList.toggle('is-quiet', !unread);
     }
+    if (dom.markAllReadBtn) dom.markAllReadBtn.hidden = !unread;
+    const actions = items.filter(actionable);
+    // Updates: everything else, one row per price list (newest first).
+    const groups = new Map();
+    items.filter(item => !actionable(item) && item.type !== 'approval_request').forEach(item => {
+      const key = notificationGroupKey(item);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    const footer = $('#notificationsDropdown .notifications-footer');
+    if (footer) footer.hidden = !actions.length;
+    const footerLabel = $('#openAuditLogsFromBell span');
+    if (footerLabel) footerLabel.textContent = `Review ${actions.length} approval${actions.length === 1 ? '' : 's'}`;
     if (!dom.notificationsList) return;
-    if (!items.length) {
-      dom.notificationsList.innerHTML = '';
-      if (dom.notificationsEmpty) dom.notificationsEmpty.hidden = false;
-      return;
-    }
-    if (dom.notificationsEmpty) dom.notificationsEmpty.hidden = true;
-    dom.notificationsList.innerHTML = items.map(item => `
-        <div class="notification-item ${item.read ? '' : 'is-unread'}" data-type="${escapeHtml(item.type || 'info')}" data-id="${escapeHtml(item.id || '')}" data-version-id="${escapeHtml(item.versionId || '')}" role="button" tabindex="0">
+    const empty = !actions.length && !groups.size;
+    if (dom.notificationsEmpty) dom.notificationsEmpty.hidden = !empty;
+    if (empty) { dom.notificationsList.innerHTML = ''; return; }
+    const row = (item, { ids = [item.id], earlier = 0, unreadRow = !item.read, review = false } = {}) => `
+        <div class="notification-item ${unreadRow ? 'is-unread' : ''}" data-type="${escapeHtml(item.type || 'info')}" data-id="${escapeHtml(ids.join(','))}" data-version-id="${escapeHtml(item.versionId || '')}" role="button" tabindex="0" title="${escapeHtml(item.message || '')}">
           <div class="notification-icon-wrap" aria-hidden="true">${getNotificationIcon(item.type)}</div>
           <div class="notification-content">
             <div class="notification-row-top">
-              <span class="notification-actor">${escapeHtml(item.title || 'Notification')}</span>
+              <span class="notification-actor">${escapeHtml(notificationListName(item))}</span>
               <time class="notification-time" datetime="${escapeHtml(item.createdAt || '')}">${formatRelativeTime(item.createdAt)}</time>
             </div>
-            ${item.message ? `<div class="notification-details-text">${escapeHtml(item.message)}</div>` : ''}
+            <div class="notification-meta"><span class="notification-kind kind-${escapeHtml(item.type || 'info')}">${escapeHtml(notificationKind(item))}</span>${earlier ? `<span class="notification-earlier">+${earlier} earlier</span>` : ''}</div>
+            <div class="notification-details-text">${escapeHtml(notificationDetail(item))}</div>
           </div>
-        </div>`).join('');
+          ${review ? '<span class="notification-review" aria-hidden="true">Review</span>' : ''}
+        </div>`;
+    dom.notificationsList.innerHTML =
+      (actions.length ? `<p class="notifications-section-title">Needs your action <span>${actions.length}</span></p>${actions.map(item => row(item, { unreadRow: true, review: true })).join('')}` : '')
+      + (groups.size ? `<p class="notifications-section-title">Updates</p>${[...groups.values()].map(list => row(list[0], { ids: list.map(item => item.id), earlier: list.length - 1, unreadRow: list.some(item => !item.read) })).join('')}` : '');
   }
+
 
   async function markNotificationsRead(ids = null) {
     try {

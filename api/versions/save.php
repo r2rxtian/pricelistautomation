@@ -253,6 +253,8 @@ if ($autoApproved) {
     json_response(['ok' => true, 'active' => version_for_client($user, $version), 'message' => 'Saved and approved. It is ready for export.']);
 }
 
+// Saving again while it waits replaces the earlier request rather than adding another.
+if ($inPlace) repo_resolve_notifications($version['id'], ['approval_request']);
 record_audit('save_version', "Saved '{$name}' for approval", "{$label} saved by {$user['name']} with {$adjustText}; " . count($changes) . ' cell edit(s). Awaiting approval.', $auditMeta);
 notify($version['requiredApprovers'], 'approval_request', "Approval needed: {$name}",
     "{$user['name']} saved {$label} and needs your approval before it can be exported.", $version['id']);

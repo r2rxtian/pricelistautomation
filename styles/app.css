@@ -9154,3 +9154,81 @@ html[data-theme="dark"] .file-actions .file-save-btn.is-clean:not([data-save-sta
 [data-theme="dark"] .lsm-footer { border-color: #2a2c33; }
 [data-theme="dark"] .lsm-upload { color: #f0a3b7; border-color: #4e2a36; }
 [data-theme="dark"] .lsm-upload:hover { background: #24191e; border-color: #eb97ae; }
+
+/* ==========================================================================
+   Notification bell, organized: "Needs your action" and "Updates" sections, one compact row per
+   price list (name, a coloured kind label, time, one line of detail).
+   ========================================================================== */
+.notifications-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 16px 4px;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.notifications-section-title span {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 0.6rem;
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: 0;
+}
+.notifications-list .notification-item { align-items: center; padding: 9px 16px; cursor: pointer; }
+.notifications-list .notification-content { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.notifications-list .notification-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.notifications-list .notification-actor { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
+.notification-meta { display: flex; align-items: center; gap: 6px; }
+.notification-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: var(--surface-elevated, #f6f0f2);
+  color: var(--text-muted);
+}
+.notification-kind.kind-approval_request { background: #fff1e0; color: #b45309; }
+.notification-kind.kind-approved,
+.notification-kind.kind-partial_approval { background: #e3f6ea; color: #15803d; }
+.notification-kind.kind-available { background: #e8effd; color: #1d4ed8; }
+.notification-kind.kind-rejected { background: #fde8e8; color: #b91c1c; }
+.notification-earlier { font-size: 0.64rem; color: var(--text-subtle); }
+.notifications-list .notification-details-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+.notification-review {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border-radius: 7px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+.notification-item:hover .notification-review { transform: translateX(-2px); }
+.notifications-footer[hidden] { display: none; }
+#markAllReadBtn[hidden] { display: none; }
+
+[data-theme="dark"] .notification-kind { background: #1f2026; color: #a6a8b2; }
+[data-theme="dark"] .notification-kind.kind-approval_request { background: #2b1f10; color: #fbbf24; }
+[data-theme="dark"] .notification-kind.kind-approved,
+[data-theme="dark"] .notification-kind.kind-partial_approval { background: #12261a; color: #86efac; }
+[data-theme="dark"] .notification-kind.kind-available { background: #141d33; color: #93c5fd; }
+[data-theme="dark"] .notification-kind.kind-rejected { background: #2a1414; color: #fca5a5; }
+[data-theme="dark"] .notification-review { background: #eb97ae; color: #1a0f14; }
+[data-theme="dark"] .notifications-section-title span { background: #eb97ae; color: #1a0f14; }

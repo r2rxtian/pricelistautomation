@@ -20,6 +20,7 @@ $version['rejectedAt'] = gmdate('c');
 $version['rejectedBy'] = $user['name'];
 $version['rejectionRemarks'] = $remarks;
 repo_save_version($version);
+repo_resolve_notifications($version['id'], ['approval_request']); // decided: nobody's request is outstanding
 record_audit('reject_version', "Rejected '{$version['name']}'", "{$user['name']} rejected {$label}: {$remarks}", [
     'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'remarks' => $remarks,
 ]);

@@ -197,6 +197,25 @@ function repo_mark_notifications_read(string $username, ?array $ids): void
     });
 }
 
+/**
+ * Marks notifications about a price list version as read for everyone (e.g. "Approval needed"
+ * once the version is approved, rejected, withdrawn or replaced), so stale requests don't linger.
+ */
+function repo_resolve_notifications(string $versionId, array $types): void
+{
+    if ($versionId === '' || !$types) return;
+    if (database_enabled()) {
+        database_resolve_notifications($versionId, $types);
+        return;
+    }
+    json_mutate(function (array &$store) use ($versionId, $types) {
+        foreach ($store['notifications'] as &$notification) {
+            if (($notification['versionId'] ?? '') === $versionId && in_array($notification['type'] ?? '', $types, true)) $notification['read'] = true;
+        }
+        unset($notification);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Photo library (the "drawer" of reusable product photos)
 // ---------------------------------------------------------------------------

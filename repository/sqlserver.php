@@ -311,6 +311,15 @@ function database_mark_notifications_read(string $username, ?array $ids): void
         ->execute(array_merge([$username], $ids));
 }
 
+function database_resolve_notifications(string $versionId, array $types): void
+{
+    $types = array_values(array_filter($types, 'is_string'));
+    if (!$types) return;
+    $placeholders = implode(',', array_fill(0, count($types), '?'));
+    database_connection()->prepare("UPDATE dbo.PLA_ACD_Notifications SET is_read = 1 WHERE version_id = ? AND is_read = 0 AND notification_type IN ({$placeholders})")
+        ->execute(array_merge([$versionId], $types));
+}
+
 // ---------------------------------------------------------------------------
 // Product type images
 // ---------------------------------------------------------------------------

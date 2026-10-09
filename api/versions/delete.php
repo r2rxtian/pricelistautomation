@@ -17,6 +17,7 @@ $version = normalize_version($version);
 $blocked = version_delete_block($version);
 if ($blocked !== null) json_response(['ok' => false, 'message' => $blocked], 409);
 if (!repo_delete_version($version['id'])) json_response(['ok' => false, 'message' => 'Saved version not found.'], 404);
+repo_resolve_notifications($version['id'], ['approval_request']); // a withdrawn request needs no action
 
 $withdrawn = $version['status'] === 'pending';
 record_audit('delete_version', ($withdrawn ? 'Withdrew' : 'Deleted') . " '{$version['name']}'",

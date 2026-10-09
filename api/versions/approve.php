@@ -23,13 +23,19 @@ if ($complete) {
 }
 repo_save_version($version);
 
+// This approver has acted; once fully approved, nobody's "Approval needed" is outstanding.
+if ($complete) repo_resolve_notifications($version['id'], ['approval_request']);
+else repo_mark_notifications_read($user['username'], array_column(array_filter(repo_list_notifications($user['username'], 200),
+    fn($n) => ($n['versionId'] ?? '') === $version['id'] && ($n['type'] ?? '') === 'approval_request'), 'id'));
+
 if ($complete) {
     supersede_older_approved($version);
     record_audit('approve_version', "Approved '{$version['name']}'", "{$user['name']} approved {$label}. It is now available for export." . ($remarks !== '' ? " Remarks: {$remarks}" : ''), [
         'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'remarks' => $remarks,
     ]);
     notify([$submitter], 'approved', "Approved: {$version['name']}", "{$user['name']} approved {$label}. It is ready for export.", $version['id']);
-    notify(usernames_with_permission('export'), 'available', "Ready for export: {$version['name']}", "{$label} was approved and is available for export.", $version['id']);
+    // Everyone who exports hears it's ready, except the submitter, who already got "Approved".
+    notify(array_diff(usernames_with_permission('export'), [$submitter]), 'available', "Ready for export: {$version['name']}", "{$label} was approved and is available for export.", $version['id']);
     $message = 'Price list approved and available for export.';
 } else {
     $waiting = array_diff($version['requiredApprovers'], array_map(fn($a) => $a['username'], $version['approvals']));
