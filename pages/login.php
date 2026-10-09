@@ -27,7 +27,7 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=102">
+    <link rel="stylesheet" href="../styles/app.css?v=108">
     <link rel="stylesheet" href="../styles/login.css?v=3">
     <script>
     (function () {
@@ -102,7 +102,7 @@ try {
         <div class="capability"><span>04</span><strong>Export</strong><small>Excel or PDF</small></div>
     </aside>
 </main>
-<script src="../scripts/theme.js?v=6"></script>
+<script src="../scripts/theme.js?v=7"></script>
 <script src="../scripts/login.js?v=4"></script>
 </body>
 </html>

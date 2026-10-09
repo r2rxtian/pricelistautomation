@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=102">
+    <link rel="stylesheet" href="../styles/app.css?v=108">
     <script>
     (function() {
         try {
@@ -154,7 +154,6 @@ $panel = APP_PAGES[$page]['panel'];
                             <div class="file-tags-row" id="listTagsRow" hidden>
                                 <span class="list-tag list-tag-country" title="Country"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><small>Country</small><strong id="listCountry">—</strong></span>
                                 <span class="list-tag" title="Price level"><small>Price level</small><strong id="listPriceLevel">—</strong></span>
-                                <span class="list-tag" id="listRevisionTag" hidden><small>Revision</small><strong id="listRevision">1</strong></span>
                                 <span id="approvalBanner" class="workflow-note" role="status" aria-live="polite" hidden>
                                     <span id="approvalBannerIcon" class="workflow-note-icon" aria-hidden="true"></span>
                                     <span id="approvalBannerText" class="workflow-note-text"></span>
@@ -173,34 +172,38 @@ $panel = APP_PAGES[$page]['panel'];
                         <div class="metric-item"><strong id="currentAdjustment">0%</strong><span>Adjustment</span></div>
                     </div>
                     <div class="heading-actions">
-                        <div class="main" id="cloverActions" hidden>
-                            <div class="up">
-                                <button id="excelButton" class="card1 export-icon export-excel" type="button" title="Export Excel" aria-label="Export Excel" data-tooltip="Export Excel">
-                                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="12" x2="16" y2="18"/><line x1="16" y1="12" x2="8" y2="18"/></svg>
+                        <!-- Actions for the open file only: export it, save it. (Upload lives in the price list switcher.) -->
+                        <div class="file-actions" id="cloverActions" hidden>
+                            <div class="export-menu-wrap">
+                                <button type="button" id="exportMenuBtn" class="button secondary file-export-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">
+                                    <span class="export-btn-icon" aria-hidden="true">
+                                        <svg class="icon-download" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><g class="dl-arrow"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g></svg>
+                                        <svg class="lock-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                                    </span>
+                                    <span>Export</span>
+                                    <svg class="export-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                                 </button>
-                                <button id="pdfButton" class="card2 export-icon export-pdf" type="button" title="Export PDF" aria-label="Export PDF" data-tooltip="Export PDF">
-                                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></svg>
-                                </button>
+                                <div id="exportMenu" class="export-menu" role="menu" aria-label="Export this price list" hidden>
+                                    <button type="button" role="menuitem" id="excelButton" class="export-menu-item export-excel">
+                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><rect class="xl-cell" x="7.2" y="11.6" width="4.1" height="2.7" rx=".5"/><rect class="xl-cell" x="12.7" y="11.6" width="4.1" height="2.7" rx=".5"/><rect class="xl-cell" x="7.2" y="15.7" width="4.1" height="2.7" rx=".5"/><rect class="xl-cell" x="12.7" y="15.7" width="4.1" height="2.7" rx=".5"/></svg>
+                                        <span><strong>Excel</strong><small>.xlsx, one sheet per category</small></span>
+                                    </button>
+                                    <button type="button" role="menuitem" id="pdfButton" class="export-menu-item export-pdf">
+                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path class="pdf-fold" d="M14 2l6 6h-6z"/><g class="pdf-arrow"><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></g></svg>
+                                        <span><strong>PDF</strong><small>Print-ready, with photos</small></span>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="down">
-                                <button id="uploadButton" class="card3 perm-update" type="button" title="Upload Excel" aria-label="Upload Excel" data-tooltip="Upload Excel">
-                                    <svg class="icon-upload" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                        <polyline points="14 2 14 8 20 8"/>
-                                        <line x1="12" y1="18" x2="12" y2="12"/>
-                                        <polyline points="9 15 12 12 15 15"/>
-                                    </svg>
-                                </button>
-                                <button id="saveButton" class="card4 perm-update is-disabled" type="button" title="Save version" aria-label="Save version" data-tooltip="Save version" aria-disabled="true">
-                                    <svg class="icon-save" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                        <polyline points="17 21 17 13 7 13 7 21"/>
-                                        <polyline points="7 3 7 8 15 8"/>
-                                    </svg>
-                                    <svg class="save-state-icon save-ring" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" pathLength="100"/></svg>
-                                    <svg class="save-state-icon save-check" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17.5 19 7" pathLength="100"/></svg>
-                                </button>
-                            </div>
+                            <button type="button" id="saveButton" class="button primary file-save-btn perm-update is-disabled" aria-disabled="true" aria-label="Save changes (Ctrl+S)">
+                                <span class="unsaved-dot" aria-hidden="true"></span>
+                                <span class="save-icons" aria-hidden="true">
+                                    <svg class="icon-save" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline class="save-shutter" points="7 3 7 8 15 8"/></svg>
+                                    <svg class="save-state-icon save-ring" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5" pathLength="100"/></svg>
+                                    <svg class="save-state-icon save-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17.5 19 7" pathLength="100"/></svg>
+                                </span>
+                                <span class="save-label">Saved</span>
+                                <kbd class="save-kbd">Ctrl S</kbd>
+                            </button>
                         </div>
                         <section id="adjustmentBar" class="adjustment-bar price-popover" role="dialog" aria-modal="false" aria-labelledby="adjustmentTitle" hidden>
                             <form id="adjustmentForm" class="adjustment-form-wrap" onsubmit="return false;">
@@ -350,7 +353,7 @@ $panel = APP_PAGES[$page]['panel'];
                                     <option value="pending">Pending approval</option>
                                     <option value="approved">Approved</option>
                                     <option value="rejected">Rejected</option>
-                                    <option value="superseded">Superseded</option>
+                                    <option value="superseded">Older versions</option>
                                 </select>
                                 <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </div>
@@ -912,6 +915,7 @@ $panel = APP_PAGES[$page]['panel'];
         <div class="lsm-col"><p class="lsm-heading">Price level</p><div id="lsmLevels" role="listbox" aria-label="Price levels"></div></div>
         <div class="lsm-col lsm-col-lists"><p class="lsm-heading">Price list</p><div id="lsmLists" role="listbox" aria-label="Price lists"></div></div>
     </div>
+    <div class="lsm-footer perm-upload" hidden><button type="button" id="uploadButton" class="lsm-upload"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span><strong>Upload a new price list</strong><small>Start from an official .xlsx workbook</small></span></button></div>
 </div>
 <div id="categoryMenu" class="list-switcher-menu category-menu" role="dialog" aria-label="Product category" hidden>
     <div class="lsm-search" id="categoryMenuSearchWrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="categoryMenuSearch" placeholder="Search categories…" autocomplete="off" aria-label="Search categories"></div>
@@ -924,10 +928,10 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/xlsx.full.min.js"></script>
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="../scripts/theme.js?v=6"></script>
-<script src="../scripts/app.js?v=98"></script>
+<script src="../scripts/theme.js?v=7"></script>
+<script src="../scripts/app.js?v=104"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=8"></script>
+<script src="../scripts/motion.js?v=9"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>

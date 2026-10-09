@@ -186,6 +186,7 @@
     ['#listSwitcherMenu', 'top left'],
     ['#categoryMenu', 'top left'],
     ['#rowMenu', 'top right'],
+    ['#exportMenu', 'top right'],
     ['.dev-tools-panel', 'bottom left'],
   ];
   const popupObserver = new MutationObserver(records => {

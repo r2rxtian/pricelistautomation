@@ -47,6 +47,16 @@
     root.classList.remove('reveal-pending');
   })();
 
+  // --- Buttons: the soft light on primary/secondary buttons follows the cursor (styles/app.css) ---
+  // Lives here because this script is loaded on every page, including sign-in.
+  document.addEventListener('pointermove', event => {
+    const button = event.target.closest?.('.button.primary, .button.secondary');
+    if (!button) return;
+    const box = button.getBoundingClientRect();
+    button.style.setProperty('--mx', `${Math.round(event.clientX - box.left)}px`);
+    button.style.setProperty('--my', `${Math.round(event.clientY - box.top)}px`);
+  }, { passive: true });
+
   let saved = null;
   try { saved = localStorage.getItem(KEY); } catch { }
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;

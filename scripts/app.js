@@ -23,7 +23,7 @@
     notificationBtn: $('#notificationBtn'), notificationBadge: $('#notificationBadge'), notificationsDropdown: $('#notificationsDropdown'), notificationsList: $('#notificationsList'), notificationsEmpty: $('#notificationsEmpty'), notificationsCountBadge: $('#notificationsCountBadge'), markAllReadBtn: $('#markAllReadBtn'), clearLogsBtn: $('#clearLogsBtn'),
     uploadModal: $('#uploadModal'), closeUploadModalBtn: $('#closeUploadModalBtn'), cancelUploadBtn: $('#cancelUploadBtn'), submitUploadBtn: $('#submitUploadBtn'), downloadTemplateBtn: $('#downloadTemplateBtn'), modalDropZone: $('#modalDropZone'), modalFileInput: $('#modalFileInput'), browseFileBtn: $('#browseFileBtn'), dropZonePrompt: $('#dropZonePrompt'), selectedFileInfo: $('#selectedFileInfo'), selectedFileName: $('#selectedFileName'), selectedFileSize: $('#selectedFileSize'), removeSelectedFileBtn: $('#removeSelectedFileBtn'),
     codeFilterInput: $('#codeFilterInput'), codeFilterOptions: $('#codeFilterOptions'), priceLevelSelect: $('#priceLevelSelect'), countrySelect: $('#countrySelect'), clearFiltersBtn: $('#clearFiltersBtn'), exportLockNote: $('#exportLockNote'),
-    listTagsRow: $('#listTagsRow'), listPriceLevel: $('#listPriceLevel'), listCountry: $('#listCountry'), listRevisionTag: $('#listRevisionTag'), listRevision: $('#listRevision'),
+    listTagsRow: $('#listTagsRow'), listPriceLevel: $('#listPriceLevel'), listCountry: $('#listCountry'),
     approvalBanner: $('#approvalBanner'), approvalBannerIcon: $('#approvalBannerIcon'), approvalBannerTitle: $('#approvalBannerTitle'), approvalBannerText: $('#approvalBannerText'), bannerApproveBtn: $('#bannerApproveBtn'), bannerRejectBtn: $('#bannerRejectBtn'),
     emptyStateTitle: $('#emptyStateTitle'), emptyStateText: $('#emptyStateText'), emptyBrowseListsButton: $('#emptyBrowseListsButton'),
     uploadPriceLevel: $('#uploadPriceLevel'), uploadCountry: $('#uploadCountry'), priceLevelOptions: $('#priceLevelOptions'), countryOptions: $('#countryOptions'),
@@ -322,6 +322,9 @@
     const cluster = $('#cloverActions');
     // Header icons: export (anyone with export access) plus upload/save (editors only, via .perm-update).
     if (cluster) cluster.hidden = !state.active || (!can('update') && !can('export'));
+    const exportWrap = $('.export-menu-wrap');
+    if (exportWrap) exportWrap.hidden = !can('export');
+    if (!state.active) closeExportMenu();
     const closeButton = $('#closeFileBtn');
     if (closeButton) closeButton.hidden = !state.active;
     renderNavigator();
@@ -340,16 +343,45 @@
     rememberCategory('');
     state.rows = []; state.headers = []; state.priceColumns = [];
     state.adjustment = 0; state.categoryAdjustments = {};
+    const leaving = await foldAwayOpenFile();
     loadActive(null);
+    leaving.forEach(animation => animation.cancel()); // the hidden parts must not stay faded for the next file
+    riseInStartScreen();
     renderLists();
     renderFiles();
     toast(`Closed ${name}.`);
+  }
+  /**
+   * Closing a file: the table card shrinks back toward the "Close file" button and fades while the
+   * file's actions and stats slide away. Resolves once that has played (at most ~0.4 s).
+   */
+  async function foldAwayOpenFile() {
+    if (reducedMotion() || dom.dataView.hidden) return [];
+    const card = dom.dataView;
+    const box = card.getBoundingClientRect();
+    const button = $('#closeFileBtn')?.getBoundingClientRect();
+    const origin = button ? `${Math.round(button.left + button.width / 2 - box.left)}px ${Math.round(button.top + button.height / 2 - box.top)}px` : 'top left';
+    const ease = 'cubic-bezier(0.4, 0, 0.9, 0.6)';
+    const animations = [
+      card.animate([{ opacity: 1, transform: 'none', transformOrigin: origin }, { opacity: 0, transform: 'scale(0.9)', transformOrigin: origin }], { duration: 300, easing: ease, fill: 'forwards' }),
+      ...[$('#cloverActions'), $('#metricGroup'), dom.listTagsRow, dom.savedMetaRow].filter(el => el && !el.hidden).map((el, index) =>
+        el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-6px)' }], { duration: 220, delay: index * 30, easing: ease, fill: 'forwards' })),
+    ];
+    await Promise.race([Promise.all(animations.map(animation => animation.finished.catch(() => { }))), new Promise(resolve => setTimeout(resolve, 420))]);
+    return animations;
+  }
+  /** After closing: the start screen rises into place and the title cross-fades in. */
+  function riseInStartScreen() {
+    if (reducedMotion()) return;
+    const ease = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    dom.emptyState.animate([{ opacity: 0, transform: 'translateY(18px) scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 560, easing: ease });
+    $('#workspacePanel .heading-left')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 360, easing: 'ease-out' });
   }
   function userName(username) {
     return state.directory.find(entry => entry.username === username)?.name || username || '';
   }
   function statusLabel(status) {
-    return { uploaded: 'Uploaded', pending: 'Pending approval', approved: 'Approved', rejected: 'Rejected', superseded: 'Superseded', draft: 'Draft (unsaved)' }[status] || 'Draft (unsaved)';
+    return { uploaded: 'Uploaded', pending: 'Pending approval', approved: 'Approved', rejected: 'Rejected', superseded: 'Older version', draft: 'Draft (unsaved)' }[status] || 'Draft (unsaved)';
   }
   function activeStatus() {
     if (!state.active) return null;
@@ -499,7 +531,7 @@
     const live = open?.status === 'superseded' ? liveRevisionOf(open) : null;
     if (live && live.id !== open.id) {
       await openVersion(live.id, { silent: true, stay: true });
-      toast(`Opened revision ${live.revision}, the current version of ${live.name}.`);
+      toast(`Opened the current version of ${live.name}.`);
     } else if (state.active?.id && !state.active.isDraft && (!open || open.status !== state.active.status || (open.approvals || []).length !== (state.active.approvals || []).length)) {
       if (open) await openVersion(open.id, { silent: true, stay: true });
       else loadActive(null);
@@ -574,6 +606,7 @@
       $('#editButton').classList.add('is-disabled');
       $('#editButton').setAttribute('aria-disabled', 'true');
       $('#saveButton').classList.add('is-disabled');
+      $('#saveButton').classList.remove('has-unsaved');
       $('#saveButton').setAttribute('aria-disabled', 'true');
       if (dom.resetPricesButton) {
         dom.resetPricesButton.classList.add('is-disabled');
@@ -619,8 +652,6 @@
       dom.listTagsRow.hidden = false;
       dom.listPriceLevel.textContent = active.priceLevel || 'Not set';
       dom.listCountry.textContent = active.country || 'Not set';
-      dom.listRevisionTag.hidden = !(active.revision > 1);
-      dom.listRevision.textContent = String(active.revision || 1);
     }
     if (!active.isDraft && active.id) rememberOpenVersion(active.id);
 
@@ -667,7 +698,7 @@
       } else if (status === 'rejected') {
         text = `Rejected by ${active.rejectedBy || 'an approver'}${active.rejectionRemarks ? `: ${active.rejectionRemarks}` : ''}`;
       } else if (status === 'superseded') {
-        text = 'Superseded by a newer approved revision';
+        text = 'A newer version of this price list has been approved';
       }
       note.hidden = !text;
       note.dataset.tone = status;
@@ -683,14 +714,34 @@
     const lockReason = status === 'draft' ? (state.autoApprove ? 'Save your changes to make them exportable' : 'Save your changes and get approval to export them')
       : status === 'pending' ? 'Export unlocks after approval'
       : status === 'rejected' ? 'Rejected lists cannot be exported'
-      : status === 'superseded' ? 'Superseded by a newer approved list' : '';
-    ['#excelButton', '#pdfButton'].forEach(selector => {
+      : status === 'superseded' ? 'A newer version is available' : '';
+    // Export: one button with an Excel / PDF menu. Locked, it shows a padlock and stays clickable so
+    // a click can explain why (the padlock wiggles).
+    const reason = lockReason || 'Only approved price lists can be exported';
+    ['#exportMenuBtn', '#excelButton', '#pdfButton'].forEach(selector => {
       const button = $(selector);
       if (!button) return;
-      button.hidden = !can('export');
-      button.disabled = !exportable;
-      button.title = exportable ? '' : lockReason || 'Only approved price lists can be exported.';
+      button.disabled = false;
+      button.classList.toggle('is-locked', !exportable);
+      button.setAttribute('aria-disabled', String(!exportable));
+      button.dataset.lockReason = exportable ? '' : reason;
     });
+    $('#exportMenuBtn')?.setAttribute('aria-label', exportable ? 'Export this price list' : `Export (locked: ${reason})`);
+    const exportWrap = $('.export-menu-wrap');
+    if (exportWrap) {
+      exportWrap.classList.toggle('is-locked', !exportable);
+      exportWrap.dataset.tooltip = reason;
+    }
+    if (!exportable) closeExportMenu();
+    // Save: "Save changes" with a dot while there are unsaved changes, a quiet "Saved" otherwise.
+    const saveButton = $('#saveButton');
+    if (saveButton) {
+      const unsaved = status === 'draft';
+      saveButton.classList.toggle('has-unsaved', unsaved);
+      saveButton.classList.toggle('is-clean', !unsaved);
+      if (!saveButton.dataset.saveState) saveButton.querySelector('.save-label').textContent = unsaved ? 'Save changes' : 'Saved';
+      saveButton.setAttribute('aria-label', unsaved ? 'Save changes (Ctrl+S), unsaved changes' : 'Saved, no unsaved changes');
+    }
     if (dom.exportLockNote) {
       dom.exportLockNote.hidden = exportable || !can('export');
       dom.exportLockNote.textContent = lockReason;
@@ -1975,7 +2026,7 @@
       levelSelect.disabled = !country;
       const files = lists.filter(version => sameText(version.country, country) && sameText(version.priceLevel, level));
       listSelect.innerHTML = (isDraft && country ? option('__draft__', `Unsaved: ${active.name}`) : '')
-        + files.map(version => option(version.id, `${version.name}${version.revision > 1 ? ` (rev ${version.revision})` : ''}${box.dataset.cascade === 'empty' ? ` · ${statusLabel(version.status)}` : ''}`)).join('')
+        + files.map(version => option(version.id, `${version.name}${box.dataset.cascade === 'empty' ? ` · ${statusLabel(version.status)}` : ''}`)).join('')
         || option('', '—');
       listSelect.value = isDraft ? '__draft__' : String(active?.id || '');
       listSelect.disabled = !country;
@@ -2040,9 +2091,9 @@
       // A newer revision (another upload or approved price changes) replaces this one.
       const newer = live ? null : (state.versions || []).find(other => other.id !== version.id && ['approved', 'uploaded'].includes(other.status)
         && sameText(other.name, version.name) && sameText(other.country, version.country) && sameText(other.priceLevel, version.priceLevel));
-      const statusDetail = live ? 'Original prices · exportable' : newer ? (newer.source === 'upload' ? `Replaced by a newer upload (rev ${newer.revision})` : `Price changes approved (rev ${newer.revision})`) : 'Replaced by a newer revision';
+      const statusDetail = live ? 'Original prices · exportable' : newer ? (newer.source === 'upload' ? 'Replaced by a newer upload' : 'Newer prices approved') : 'Replaced by a newer version';
       return `<tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
-        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${version.revision > 1 ? `Revision ${version.revision} · ` : ''}${Number(version.productCount || 0).toLocaleString()} products</div></td>
+        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${Number(version.productCount || 0).toLocaleString()} products</div></td>
         <td>${escapeHtml(version.country || '—')}</td>
         <td>${escapeHtml(version.priceLevel || '—')}</td>
         <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
@@ -2076,7 +2127,7 @@
     const isDraft = Boolean(active && (active.isDraft || !active.id));
     const country = active?.country || '—';
     const level = active?.priceLevel || '—';
-    const list = active ? `${active.name}${active.revision > 1 ? ` · Rev ${active.revision}` : ''}${isDraft ? ' · unsaved' : ''}` : '—';
+    const list = active ? `${active.name}${isDraft ? ' · unsaved' : ''}` : '—';
     $('#lsCountry').textContent = country;
     $('#lsLevel').textContent = level;
     $('#lsList').textContent = list;
@@ -2108,7 +2159,7 @@
       current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: true
     })).join('') || '<p class="lsm-empty">—</p>';
     $('#lsmLists').innerHTML = files.map(version => item('list', version.id, version.name, {
-      meta: `${version.revision > 1 ? `Rev ${version.revision} · ` : ''}${statusLabel(version.status)}`, current: String(version.id) === String(active?.id)
+      meta: statusLabel(version.status), current: String(version.id) === String(active?.id)
     })).join('') || '<p class="lsm-empty">—</p>';
   }
   function positionSwitcherMenu() {
@@ -2278,10 +2329,15 @@
     if (!dom.listsTableBody) return;
     // Approvals = price changes only (uploads live on the Files page). Changes approved on save by an
     // auto-approver are listed too, under Approved, marked "Approved on save".
-    const versions = (state.versions || []).filter(version => version.source !== 'upload');
+    const allVersions = (state.versions || []).filter(version => version.source !== 'upload');
+    // Each price list shows once, as its current version. Older versions stay out of the way and
+    // appear only when "Older versions" is chosen in the status filter.
+    const olderVersions = allVersions.filter(version => version.status === 'superseded');
+    const showingOlder = state.listStatus === 'superseded';
+    const versions = showingOlder ? allVersions : allVersions.filter(version => version.status !== 'superseded');
     const awaitingMine = versions.filter(version => version.canApprove);
     const approved = versions.filter(version => version.status === 'approved');
-    dom.listAllCount.textContent = String(versions.length);
+    dom.listAllCount.textContent = String(allVersions.length - olderVersions.length); // current lists only
     dom.listMineCount.textContent = String(awaitingMine.length);
     dom.listApprovedCount.textContent = String(approved.length);
     if (dom.pendingApprovalCount) {
@@ -2309,7 +2365,23 @@
       (!state.listStatus || version.status === state.listStatus) &&
       (!query || [version.name, version.savedBy, version.priceLevel, version.country, ...(version.categories || [])].some(value => String(value || '').toLowerCase().includes(query))));
 
-    dom.listCount.textContent = `${visible.length} price list${visible.length === 1 ? '' : 's'}`;
+    dom.listCount.textContent = `${visible.length} ${showingOlder ? 'older version' : 'price list'}${visible.length === 1 ? '' : 's'}`;
+    // A quiet link to the history when there is any.
+    let olderToggle = $('#showOlderVersionsBtn');
+    if (!olderToggle) {
+      olderToggle = document.createElement('button');
+      olderToggle.type = 'button';
+      olderToggle.id = 'showOlderVersionsBtn';
+      olderToggle.className = 'text-button older-versions-toggle';
+      olderToggle.addEventListener('click', () => {
+        state.listTab = 'all'; // older versions are listed under All
+        dom.listStatusFilter.value = state.listStatus === 'superseded' ? '' : 'superseded';
+        dom.listStatusFilter.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      dom.listCount.after(olderToggle);
+    }
+    olderToggle.hidden = !olderVersions.length || !can('update');
+    olderToggle.textContent = showingOlder ? 'Back to current versions' : `Show older versions (${olderVersions.length})`;
     dom.listsEmpty.hidden = visible.length > 0;
     if (!visible.length) {
       dom.listsEmptyTitle.textContent = state.listTab === 'mine' ? 'Nothing waiting for your approval' : versions.length ? 'No matching price lists' : 'No price lists in approval';
@@ -2337,7 +2409,7 @@
         <tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
           <td class="history-name-cell">
             <strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong>
-            <div class="list-sub">${version.revision > 1 ? `Revision ${version.revision} · ` : ''}${Number(version.productCount || 0).toLocaleString()} products${version.changeCount ? ` · ${Number(version.changeCount).toLocaleString()} cell edits` : ''}</div>
+            <div class="list-sub">${Number(version.productCount || 0).toLocaleString()} products${version.changeCount ? ` · ${Number(version.changeCount).toLocaleString()} cell edits` : ''}</div>
           </td>
           <td>${escapeHtml(version.priceLevel || '—')}</td>
           <td>${escapeHtml(version.country || '—')}</td>
@@ -2888,8 +2960,10 @@
     return Math.max(0, Math.round(rawNum * (1 + rate / 100) * 10000) / 10000);
   }
   function exportFileName(version, extension) {
+    // Named by the date its prices are from (approval, or upload), e.g. "… - 2026-10-08.pdf".
     const parts = [version.name || 'LRN Price List'];
-    if (version.revision > 1) parts.push(`rev ${version.revision}`);
+    const asOf = version.approvedAt || version.savedAt;
+    if (asOf) parts.push(new Intl.DateTimeFormat('en-CA').format(new Date(asOf)));
     return `${parts.join(' - ').replace(/[\\/:*?"<>|%]/g, '_')}.${extension}`;
   }
   /**
@@ -3307,13 +3381,12 @@
       // Header and footer on every page.
       const exported = `Exported ${displayDate(new Date().toISOString())} by ${state.user?.name || ''}`;
       const approved = version.status === 'approved';
+      const asOf = version.approvedAt || version.savedAt;
       const facts = [
         ['Country', version.country || '—'],
         ['Price level', version.priceLevel || '—'],
-        ['Revision', String(version.revision || 1)],
-        approved
-          ? ['Approved', `${version.approvedBy || '—'}${version.approvedAt ? ` · ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(version.approvedAt))}` : ''}`]
-          : ['Prices', 'Original upload'],
+        ['Prices as of', asOf ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(asOf)) : '—'],
+        approved ? ['Approved by', version.approvedBy || '—'] : ['Prices', 'Original upload'],
       ];
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
@@ -3347,7 +3420,7 @@
           doc.text(label.toUpperCase(), x, 25, { charSpace: 0.4 });
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(8.5);
-          doc.setTextColor(...(label === 'Approved' ? ROSE : INK));
+          doc.setTextColor(...(label === 'Approved by' ? ROSE : INK));
           doc.text(value, x, 37);
           right = x - 22;
         }
@@ -3400,7 +3473,9 @@
     shrink.finished.then(leave, leave);
     setTimeout(leave, 900); // in case frames stall
   });
-  $('#uploadButton').addEventListener('click', openUploadModal); $('#emptyUploadButton').addEventListener('click', openUploadModal);
+  // "Upload a new price list" sits in the price list switcher, beside opening another list.
+  $('#uploadButton').addEventListener('click', event => { event.stopPropagation(); toggleSwitcher(false); openUploadModal(); });
+  $('#emptyUploadButton').addEventListener('click', openUploadModal);
   dom.emptyState.addEventListener('dragover', event => {
     event.preventDefault();
     dom.emptyState.classList.add('dragover');
@@ -3708,11 +3783,14 @@
     const button = $('#saveButton');
     if (!button) return;
     clearTimeout(saveFeedbackTimer);
+    const label = button.querySelector('.save-label');
     if (!next) {
       delete button.dataset.saveState;
       button.removeAttribute('aria-busy');
+      if (label) label.textContent = button.classList.contains('has-unsaved') ? 'Save changes' : 'Saved';
       return;
     }
+    if (label) label.textContent = next === 'saving' ? 'Saving…' : next === 'done' ? 'Saved' : label.textContent;
     button.dataset.saveState = next;
     button.setAttribute('aria-busy', String(next === 'saving'));
     if (next === 'done') saveFeedbackTimer = setTimeout(() => setSaveButtonState(''), 1600);
@@ -3733,8 +3811,61 @@
     $('#saveMetaEdit').hidden = false;
     dom.savePriceLevel.focus();
   });
-  $('#excelButton').addEventListener('click', () => requestExport('excel'));
-  $('#pdfButton').addEventListener('click', () => requestExport('pdf'));
+  /** A locked export explains itself: the padlock wiggles and the reason shows. */
+  function lockedExport(button) {
+    if (!button.classList.contains('is-locked')) return false;
+    if (!reducedMotion()) {
+      ($('#exportMenuBtn .lock-icon') || button.querySelector('.lock-badge'))?.animate(
+        [{ transform: 'rotate(0)' }, { transform: 'rotate(-18deg)' }, { transform: 'rotate(14deg)' }, { transform: 'rotate(-8deg)' }, { transform: 'rotate(0)' }],
+        { duration: 480, easing: 'ease-out' }
+      );
+    }
+    toast(`${button.dataset.lockReason || 'Only approved price lists can be exported'}.`);
+    return true;
+  }
+  $('#excelButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) requestExport('excel'); });
+  $('#pdfButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) requestExport('pdf'); });
+
+  // --- Export menu: one "Export" button opens Excel / PDF ---
+  function closeExportMenu(refocus = false) {
+    const menu = $('#exportMenu');
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    $('#exportMenuBtn')?.setAttribute('aria-expanded', 'false');
+    if (refocus) $('#exportMenuBtn')?.focus();
+  }
+  function openExportMenu() {
+    const menu = $('#exportMenu');
+    if (!menu) return;
+    menu.hidden = false;
+    $('#exportMenuBtn').setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(() => menu.querySelector('.export-menu-item')?.focus());
+  }
+  $('#exportMenuBtn')?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (lockedExport(event.currentTarget)) return;
+    if ($('#exportMenu').hidden) openExportMenu(); else closeExportMenu();
+  });
+  document.addEventListener('click', event => {
+    if (!event.composedPath().some(node => node.classList?.contains('export-menu-wrap'))) closeExportMenu();
+  });
+  $('#exportMenu')?.addEventListener('keydown', event => {
+    const items = $$('#exportMenu .export-menu-item');
+    const index = items.indexOf(document.activeElement);
+    if (event.key === 'Escape') { event.preventDefault(); closeExportMenu(true); }
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+    }
+  });
+  // Ctrl+S (⌘S on Mac) saves, like everywhere else; a cell being edited is kept first.
+  document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
+    event.preventDefault(); // never the browser's "Save page as…"
+    if (document.querySelector('dialog[open]') || $('#workspacePanel').hidden || !state.active) return;
+    if (state.isEditing && state.activeCell.td) commitCellEdit(state.activeCell.td);
+    $('#saveButton')?.click();
+  });
 
   // --- Workspace filters ---
   dom.codeFilterInput?.addEventListener('input', () => { state.codeFilter = dom.codeFilterInput.value; renderTable(); });
@@ -3748,7 +3879,7 @@
     const summary = versionSummaryById(versionId) || (String(state.active?.id) === String(versionId) ? state.active : null);
     if (!summary) return toast('Price list not found. Refresh and try again.');
     state.pendingDecision = { kind, id: versionId };
-    const label = `${summary.name}${summary.revision > 1 ? ` (rev ${summary.revision})` : ''}`;
+    const label = summary.name;
     if (kind === 'approve') {
       dom.approveDialogTitle.textContent = `Approve ${label}?`;
       dom.approveDialogText.textContent = `Saved by ${summary.savedBy} on ${displayDate(summary.savedAt)} · ${summary.priceLevel || '—'} · ${summary.country || '—'}. Once approved, it becomes available for export.`;
@@ -3957,6 +4088,7 @@
     toggleCategoryMenu(false);
     closeRowMenu();
     toggleNotifications(false);
+    closeExportMenu();
 
     document.documentElement.removeAttribute('data-initial-panel');
 

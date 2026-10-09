@@ -115,7 +115,6 @@ function version_label(array $version): string
     $parts = [$version['name'] ?? 'Price list'];
     $meta = array_filter([$version['priceLevel'] ?? '', $version['country'] ?? '']);
     if ($meta) $parts[] = '(' . implode(' · ', $meta) . ')';
-    if (($version['revision'] ?? 1) > 1) $parts[] = 'rev ' . $version['revision'];
     return implode(' ', $parts);
 }
 
