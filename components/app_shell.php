@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=100">
+    <link rel="stylesheet" href="../styles/app.css?v=102">
     <script>
     (function() {
         try {
@@ -393,9 +393,6 @@ $panel = APP_PAGES[$page]['panel'];
                         <p class="muted history-subtitle">Original uploaded price lists. Review price changes in Approvals.</p>
                     </div>
                 </div>
-                <div class="audit-tab-bar file-controls" aria-label="File actions">
-                    <button type="button" id="filesUploadBtn" class="button primary perm-upload" hidden>Upload files</button>
-                </div>
                 <div class="history-card">
                     <div class="history-tools">
                         <div class="history-filter-group">
@@ -406,7 +403,10 @@ $panel = APP_PAGES[$page]['panel'];
                             <div class="history-select-control"><select id="filesCountryFilter" aria-label="Filter by country"><option value="">All countries</option></select><svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
                             <div class="history-select-control"><select id="filesLevelFilter" aria-label="Filter by price level"><option value="">All price levels</option></select><svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
                         </div>
-                        <div class="history-tools-meta"><span id="filesCount" class="history-count">0 files</span></div>
+                        <div class="history-tools-meta">
+                            <span id="filesCount" class="history-count">0 files</span>
+                            <button type="button" id="filesUploadBtn" class="button primary perm-upload files-upload-btn" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload files</span></button>
+                        </div>
                     </div>
                     <div class="history-table-frame">
                         <table id="filesTable" class="lists-table">
@@ -925,7 +925,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=6"></script>
-<script src="../scripts/app.js?v=93"></script>
+<script src="../scripts/app.js?v=98"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=8"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

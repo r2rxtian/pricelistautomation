@@ -848,7 +848,7 @@
         <div class="image-setting-copy">
           <span>${escapeHtml(group.category)}</span>
           <strong>${escapeHtml(group.groupName)}</strong>
-          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? escapeHtml(libraryPhotoName(custom.libraryId) || 'Custom photo') : 'No photo set yet'}</small>
+          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? `Photo: ${escapeHtml(libraryPhotoName(custom.libraryId) || 'custom')}` : 'No photo set yet'}</small>
         </div>
         <div class="image-setting-actions">
           <button class="button ${custom ? 'secondary' : 'primary'} choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">${custom ? 'Change photo' : 'Choose from library'}</button>
@@ -906,12 +906,7 @@
       </tr>
       <tr class="excel-header col-letter-row"><th class="col-row-num"></th><th></th>${Array.from({ length: 10 }, (_, i) => `<th data-col-letter="${i}"${i === 1 ? ' colspan="2"' : ''}>${getColumnLetter(i)}</th>`).join('')}</tr>`;
     const standardRow = (row, actualIndex, visibleIndex, isFirstInGroup, groupLength, category, groupName, groupItems) => {
-      const formatPallet = val => {
-        const s = String(val ?? '').trim();
-        if (!s) return '';
-        if (/pallet|box/i.test(s)) return escapeHtml(s);
-        return isNumeric(s) ? `${s} Boxes/Pallet` : escapeHtml(s);
-      };
+      const formatPallet = palletMarkup;
       const photoCell = isFirstInGroup
         ? `<td class="group-photo-cell" rowspan="${groupLength}"><div class="group-photo-wrap">${groupVisual(category, groupName, groupItems)}</div></td>`
         : '';
@@ -971,6 +966,16 @@
     });
 
     const firstIsPresentation = visible.length > 0 && String(visible[0].row[0] || '').toLowerCase() === 'presentation stands';
+    // Both layouts use 13 columns. Fixed proportions that add up to 100% keep the table exactly
+    // as wide as its frame, so no column is ever pushed past the right edge. Row number, photo,
+    // code and description get the room their content needs; the other nine columns (expiry,
+    // weight, pcs/box, box size, both prices, the three pallets) share the rest equally.
+    if (!dom.table.querySelector('colgroup')) {
+      const fixed = [2.6, 9, 8.5, 17];
+      const even = (100 - fixed.reduce((sum, width) => sum + width, 0)) / 9;
+      const widths = [...fixed, ...Array(9).fill(Math.floor(even * 1000) / 1000)];
+      dom.table.insertAdjacentHTML('afterbegin', `<colgroup>${widths.map(width => `<col style="width:${width}%">`).join('')}</colgroup>`);
+    }
     $('thead', dom.table).innerHTML = firstIsPresentation ? presentationHeader() : standardHeader();
     let currentLayoutIsPresentation = firstIsPresentation;
     let previousCategory = null;
@@ -1044,13 +1049,20 @@
     if (isPresentation && colIdx === 15) {
       return [row[15], row[16]].filter(v => String(v ?? '').trim()).map(v => escapeHtml(v).replace(/\r?\n/g, '<br>')).join('<br>');
     }
-    const s = String(raw ?? '').trim();
-    if ((colIdx === 10 || colIdx === 11 || colIdx === 12) && s) {
-      if (!/pallet|box/i.test(s) && isNumeric(s)) {
-        return `${escapeHtml(s)} Boxes/Pallet`;
-      }
-    }
+    if (colIdx === 10 || colIdx === 11 || colIdx === 12) return palletMarkup(raw);
     return escapeHtml(raw).replace(/\r?\n/g, '<br>');
+  }
+
+  /**
+   * A pallet cell: "120" or "120 Boxes/Pallet" shows as the number with a small unit underneath
+   * (it fits its column); any other text is shown as typed. Used by the table and by cell edits.
+   */
+  function palletMarkup(value) {
+    const s = String(value ?? '').trim();
+    if (!s) return '';
+    const match = s.match(/^([\d.,]+)\s*(?:boxes?\s*\/\s*pallets?)?$/i);
+    if (match) return `<span class="pallet-qty">${escapeHtml(match[1])}</span><span class="pallet-unit">boxes / pallet</span>`;
+    return escapeHtml(s).replace(/\r?\n/g, '<br>');
   }
 
   function selectCell(td, startEditMode = false, initialChar = null, selectAll = false) {
@@ -1521,7 +1533,7 @@
       const sign = pct > 0 ? '+' : '';
       return `
         <div class="audit-diff-pill">
-          <span class="history-adj-pill has-adj ${pct < 0 ? 'neg' : ''}">
+          <span class="history-adj-pill ${pct > 0 ? 'has-adj pos' : pct < 0 ? 'has-adj neg' : 'neutral'}">
             <span>${sign}${pct}%</span>
           </span>
           ${meta.category ? `<span class="diff-chip neutral">${escapeHtml(meta.category)}</span>` : ''}
@@ -2064,7 +2076,7 @@
     const isDraft = Boolean(active && (active.isDraft || !active.id));
     const country = active?.country || '—';
     const level = active?.priceLevel || '—';
-    const list = active ? `${active.name}${active.revision > 1 ? ` (rev ${active.revision})` : ''}${isDraft ? ' · unsaved' : ''}` : '—';
+    const list = active ? `${active.name}${active.revision > 1 ? ` · Rev ${active.revision}` : ''}${isDraft ? ' · unsaved' : ''}` : '—';
     $('#lsCountry').textContent = country;
     $('#lsLevel').textContent = level;
     $('#lsList').textContent = list;
@@ -2095,8 +2107,8 @@
       highlight: sameText(level, switcher.level),
       current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: true
     })).join('') || '<p class="lsm-empty">—</p>';
-    $('#lsmLists').innerHTML = files.map(version => item('list', version.id, `${version.name}${version.revision > 1 ? ` (rev ${version.revision})` : ''}`, {
-      meta: statusLabel(version.status), current: String(version.id) === String(active?.id)
+    $('#lsmLists').innerHTML = files.map(version => item('list', version.id, version.name, {
+      meta: `${version.revision > 1 ? `Rev ${version.revision} · ` : ''}${statusLabel(version.status)}`, current: String(version.id) === String(active?.id)
     })).join('') || '<p class="lsm-empty">—</p>';
   }
   function positionSwitcherMenu() {
@@ -2255,7 +2267,8 @@
     if (!adjusted.length) return '<span class="history-adj-pill neutral" title="Prices as uploaded, no percentage adjustment">Original prices</span>';
     const rates = [...new Set(adjusted.map(item => Number(item.adjustment || 0)))];
     const text = rates.length === 1 ? `${rates[0] > 0 ? '+' : ''}${rates[0]}% · ${adjusted.length} categor${adjusted.length === 1 ? 'y' : 'ies'}` : `Varies · ${adjusted.length} categories`;
-    return `<span class="history-adj-pill has-adj ${rates.every(rate => rate < 0) ? 'neg' : ''}">${escapeHtml(text)}</span>`;
+    const tone = rates.every(rate => rate > 0) ? 'pos' : rates.every(rate => rate < 0) ? 'neg' : '';
+    return `<span class="history-adj-pill has-adj ${tone}">${escapeHtml(text)}</span>`;
   }
   /** Saved by a top approver (e.g. Ms. Gen) and approved on the spot, so it never went through the approval workflow. */
   function isAutoApproved(version) {
@@ -2263,10 +2276,9 @@
   }
   function renderLists() {
     if (!dom.listsTableBody) return;
-    // The Approvals page only shows price lists that go through approval. Auto-approved lists are
-    // opened from Prices › Country and recorded in the Audit Logs.
-    // Approvals = price changes only. Uploads live on the Files page; Ms. Gen's changes are approved on save.
-    const versions = (state.versions || []).filter(version => version.source !== 'upload' && !isAutoApproved(version));
+    // Approvals = price changes only (uploads live on the Files page). Changes approved on save by an
+    // auto-approver are listed too, under Approved, marked "Approved on save".
+    const versions = (state.versions || []).filter(version => version.source !== 'upload');
     const awaitingMine = versions.filter(version => version.canApprove);
     const approved = versions.filter(version => version.status === 'approved');
     dom.listAllCount.textContent = String(versions.length);
@@ -2304,16 +2316,16 @@
       dom.listsEmptyText.textContent = state.listTab === 'mine'
         ? 'New approval requests will appear here and in your notifications.'
         : versions.length ? 'Try different filters.'
-        : state.autoApprove ? 'Your saves are approved immediately, so they don’t appear here. Open them from Prices › Country; every change is in the Audit Logs.'
-        : can('update') ? 'Lists saved by Chelsea or Margaret appear here while they wait for approval.'
-        : 'Approved price lists appear here once an approver signs off. Ms. Gen’s lists are under Prices › Country.';
+        : state.autoApprove ? 'Price changes you save are approved right away and will be listed here.'
+        : can('update') ? 'Saved price changes appear here while they wait for approval.'
+        : 'Approved price changes appear here once an approver signs off.';
     }
     dom.listsTableBody.innerHTML = visible.map(version => {
       const { approved: approvedBy, waiting } = approvalProgress(version);
       const isOpen = String(state.active?.id) === String(version.id);
       let statusDetail = '';
       if (version.status === 'pending') statusDetail = waiting.length ? `Waiting: ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : '';
-      else if (version.status === 'approved') statusDetail = `By ${version.approvedBy || approvedBy.join(' & ')}`;
+      else if (version.status === 'approved') statusDetail = isAutoApproved(version) ? `Approved on save by ${version.approvedBy || version.savedBy || ''}` : `By ${version.approvedBy || approvedBy.join(' & ')}`;
       else if (version.status === 'rejected') statusDetail = `By ${version.rejectedBy || ''}${version.rejectionRemarks ? `: ${version.rejectionRemarks}` : ''}`;
       const vid = escapeHtml(version.id);
       // One contextual action per row; everything else lives in the kebab menu.
@@ -3517,6 +3529,12 @@
       return toast('Please select at least one category to apply the adjustment.');
     }
 
+    // Nothing to do (e.g. 0% on prices already at 0%): no draft, no audit entry.
+    if (selectedCats.every(cat => getCategoryAdjustment(cat) === value)) {
+      setPriceEditor(false);
+      const already = selectedCats.length === allCategories.length ? 'All categories are' : selectedCats.length === 1 ? `${selectedCats[0]} is` : 'These categories are';
+      return toast(`${already} already at ${value > 0 ? '+' : ''}${value}%.`);
+    }
     const pricesBefore = capturePrices();
     selectedCats.forEach(cat => {
       state.categoryAdjustments[cat] = value;
@@ -4433,9 +4451,12 @@
 
   document.addEventListener('click', event => {
     if (state.activeCell.td) {
-      const inTable = event.target.closest('#priceTable');
-      const inFormula = event.target.closest('#excelFormulaBar');
-      const inDialog = event.target.closest('dialog');
+      // Use the click's original path: clicking a cell's text starts editing, which replaces that
+      // text, so event.target is no longer inside the table by the time the click gets here.
+      const path = event.composedPath();
+      const inTable = path.includes(dom.table);
+      const inFormula = path.some(node => node.id === 'excelFormulaBar');
+      const inDialog = path.some(node => node.tagName === 'DIALOG');
       if (!inTable && !inFormula && !inDialog) {
         deselectCell();
       }
@@ -4703,7 +4724,10 @@
       dom.notificationBadge.hidden = unread === 0;
       dom.notificationBadge.textContent = unread > 99 ? '99+' : String(unread);
     }
-    if (dom.notificationsCountBadge) dom.notificationsCountBadge.textContent = unread ? `${unread} unread` : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+    if (dom.notificationsCountBadge) {
+      dom.notificationsCountBadge.textContent = unread ? `${unread} unread` : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+      dom.notificationsCountBadge.classList.toggle('is-quiet', !unread); // only unread counts look like an alert
+    }
     if (!dom.notificationsList) return;
     if (!items.length) {
       dom.notificationsList.innerHTML = '';

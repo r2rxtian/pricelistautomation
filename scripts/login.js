@@ -2,6 +2,19 @@
 // on the right half that follows the mouse.
 (() => {
   'use strict';
+  // Entrance: once the fonts are ready (so the headline doesn't change font mid-motion; at most
+  // 0.9 s), swap the page's waiting state for the entrance animation (styles/login.css).
+  const root = document.documentElement;
+  if (root.classList.contains('login-wait')) {
+    const enter = () => {
+      if (!root.classList.contains('login-wait')) return;
+      root.classList.remove('login-wait');
+      root.classList.add('login-enter');
+    };
+    Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(resolve => setTimeout(resolve, 900))])
+      .then(() => requestAnimationFrame(enter));
+  }
+
   const form = document.getElementById('loginForm');
   const button = document.getElementById('loginSubmitBtn');
   const message = document.getElementById('authMessage');

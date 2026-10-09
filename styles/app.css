@@ -18,7 +18,7 @@
   --text-heading: #140d12;
   --text-body: #43363d;
   --text-muted: #6a5a62;
-  --text-subtle: #8c7b82;
+  --text-subtle: #76666d;      /* 4.9:1 on white, readable for small labels */
   --pink: #b52042;
   --pink-strong: #961330;
   --pink-glow: rgba(181, 32, 66, 0.16);
@@ -5088,7 +5088,7 @@ dialog[open]::backdrop {
   --text-heading: #f4f4f6;     /* Crisp white heading */
   --text-body: #ffffff;        /* Pure white for table values */
   --text-muted: #8c8d94;       /* Muted gray */
-  --text-subtle: #6c6d74;      /* Subtle gray */
+  --text-subtle: #80818a;      /* Subtle gray, 4.7:1 on the dark surface */
   --pink: #eb97ae;             /* EXACT SOFT PASTEL BLUSH PINK FOR BUTTONS */
   --pink-strong: #f0a3b7;      /* Lighter blush pink hover */
   --pink-text: #d49fa8;        /* Soft rose pink for header text & codes */
@@ -8171,7 +8171,7 @@ select.sd-open {
 
 /* A page filter with a value chosen gets a soft pink tint, like the category picker. */
 :is(#listPriceLevelFilter, #listCountryFilter, #listStatusFilter, #filesCountryFilter, #filesLevelFilter,
-    #auditFileSelect, #auditTypeSelect, #auditUserSelect, #imageCategoryFilter):has(> option:checked:not([value=""])) {
+    #auditFileSelect, #auditTypeSelect, #auditUserSelect):has(> option:checked:not([value=""])) {
   border-color: #e3a9b8 !important;
   background-color: #fdf1f4 !important;
   color: var(--pink) !important;
@@ -8196,7 +8196,7 @@ select.sd-open {
 [data-theme="dark"] select.sd-open { border-color: #eb97ae !important; box-shadow: 0 0 0 3px rgba(235, 151, 174, 0.2) !important; }
 
 [data-theme="dark"] :is(#listPriceLevelFilter, #listCountryFilter, #listStatusFilter, #filesCountryFilter, #filesLevelFilter,
-    #auditFileSelect, #auditTypeSelect, #auditUserSelect, #imageCategoryFilter):has(> option:checked:not([value=""])) {
+    #auditFileSelect, #auditTypeSelect, #auditUserSelect):has(> option:checked:not([value=""])) {
   border-color: #7a3f50 !important;
   background-color: #2a161e !important;
   color: #f0a3b7 !important;
@@ -8682,3 +8682,50 @@ dialog.anchored-confirm::backdrop { background: transparent; backdrop-filter: no
 
 /* Opened by signing in or out: hidden until scripts/theme.js grows it from the button's spot. */
 html.reveal-pending [data-reveal-root] { clip-path: circle(0px at var(--reveal-x) var(--reveal-y)); }
+
+/* ==========================================================================
+   UI nitpicks (round 1)
+   ========================================================================== */
+/* Pallet cells: the number with a small unit underneath, so "120 Boxes/Pallet" never runs into
+   the next column; the three pallet columns are narrower so the whole table fits. */
+#priceTable tbody td.col-pallet { white-space: normal; line-height: 1.15; }
+#priceTable td.col-pallet .pallet-qty { display: block; font-weight: 600; color: var(--text-heading); font-variant-numeric: tabular-nums; }
+#priceTable td.col-pallet .pallet-unit { display: block; margin-top: 2px; font-size: 0.6rem; color: var(--text-subtle); letter-spacing: 0.02em; }
+#priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(11) { width: 204px; }
+@media (max-width: 1440px) {
+  #priceTable thead tr.excel-header-primary:not(.presentation-header) th:nth-child(11) { width: 192px; }
+}
+
+/* File header: the revision reads "Rev 4", not a bare number. */
+#workspacePanel.has-file #listRevisionTag strong::before { content: "Rev "; font-weight: 500; color: var(--text-muted); }
+
+/* Adjustment pills: increases green, decreases red, mixed rose, 0% neutral. */
+.history-adj-pill.has-adj.pos { background: #e3f6ea; color: #15803d; }
+.history-adj-pill.has-adj.neg { background: #fde8e8; color: #b91c1c; }
+[data-theme="dark"] .history-adj-pill.has-adj.pos { background: #12261a !important; color: #86efac !important; }
+[data-theme="dark"] .history-adj-pill.has-adj.neg { background: #2a1414 !important; color: #fca5a5 !important; }
+
+/* Notifications count: muted unless something is unread. */
+.notifications-pill.is-quiet { background: var(--surface-elevated, #f4f1f2); color: var(--text-muted); border-color: var(--line-soft); }
+[data-theme="dark"] .notifications-pill.is-quiet { background: #1b1c21; color: #8c8d94; border-color: #2a2c33; }
+
+/* Files: "Upload files" sits in the card's toolbar, beside the count. */
+.history-tools-meta .files-upload-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; min-height: 34px; padding: 0 14px; font-size: 0.78rem; }
+.history-tools-meta .files-upload-btn[hidden] { display: none; }
+
+/* ==========================================================================
+   Readability: the table's small labels and secondary text one step larger and darker.
+   ========================================================================== */
+#priceTable thead th,
+#priceTable tbody tr.excel-header th { color: var(--text-muted) !important; font-size: 0.66rem !important; }
+#priceTable thead tr.excel-header-secondary th { font-size: 0.62rem !important; letter-spacing: 0.02em; }
+#priceTable tr.col-letter-row th { color: var(--text-subtle) !important; font-size: 0.64rem !important; }
+#priceTable td.col-pallet .pallet-unit { font-size: 0.64rem; color: var(--text-muted); }
+#priceTable tbody td.col-row-num { color: var(--text-muted); font-size: 0.72rem; }
+.saved-meta { color: var(--text-muted); font-size: 0.72rem; }
+.formula-hint-badge { color: var(--text-muted); }
+#workspacePanel.has-file .metric-item span { font-size: 0.66rem; }
+[data-theme="dark"] #priceTable thead th,
+[data-theme="dark"] #priceTable tbody tr.excel-header th { color: #a6a8b2 !important; }
+[data-theme="dark"] #priceTable tr.col-letter-row th { color: #80818a !important; }
+[data-theme="dark"] .formula-hint-badge { color: #a6a8b2; }

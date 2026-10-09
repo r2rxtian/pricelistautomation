@@ -8,7 +8,6 @@
   min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(380px, 55%) 1fr;
-  animation: login-shell-reveal .48s cubic-bezier(.22, 1, .36, 1) both;
 }
 
 .login-panel {
@@ -115,9 +114,37 @@
   font-size: 1.45rem;
 }
 
-/* Login Page Motion */
-.login-panel .login-logo {
-  animation: login-fade-up .44s cubic-bezier(.22, 1, .36, 1) both 60ms;
+/* Login page entrance. pages/login.php holds the page (html.login-wait) until its fonts are ready,
+   then scripts/login.js switches to html.login-enter so the whole sequence is seen: the logo
+   springs in, the left side rises line by line, and the pink panel unfolds from the right. With
+   reduced motion neither class is set and the page simply appears. */
+html.login-wait .login-shell { opacity: 0; }
+
+html.login-enter .login-logo .pla-mark { animation: login-mark-in .95s cubic-bezier(.34, 1.56, .64, 1) backwards 60ms; }
+html.login-enter .login-logo .pla-words { animation: login-rise .7s cubic-bezier(.22, 1, .36, 1) backwards 180ms; }
+html.login-enter .login-panel .kicker { animation: login-rise .7s cubic-bezier(.22, 1, .36, 1) backwards 260ms; }
+html.login-enter .login-panel h1 { animation: login-rise .8s cubic-bezier(.22, 1, .36, 1) backwards 320ms; }
+html.login-enter .login-panel > .muted { animation: login-rise .7s cubic-bezier(.22, 1, .36, 1) backwards 400ms; }
+html.login-enter .login-panel .login-form { animation: login-rise .75s cubic-bezier(.22, 1, .36, 1) backwards 470ms; }
+html.login-enter .login-art { animation: login-art-unfold 1.05s cubic-bezier(.22, 1, .36, 1) backwards 120ms; }
+html.login-enter .art-grid { animation: art-grid-reveal 1.2s ease backwards 450ms; }
+html.login-enter .login-art .capability:nth-child(2) { animation: login-rise .65s cubic-bezier(.22, 1, .36, 1) backwards 560ms; }
+html.login-enter .login-art .capability:nth-child(3) { animation: login-rise .65s cubic-bezier(.22, 1, .36, 1) backwards 640ms; }
+html.login-enter .login-art .capability:nth-child(4) { animation: login-rise .65s cubic-bezier(.22, 1, .36, 1) backwards 720ms; }
+html.login-enter .login-art .capability:nth-child(5) { animation: login-rise .65s cubic-bezier(.22, 1, .36, 1) backwards 800ms; }
+html.login-enter .login-theme-toggle { animation: login-rise .6s cubic-bezier(.22, 1, .36, 1) backwards 700ms; }
+
+@keyframes login-mark-in {
+  from { opacity: 0; transform: scale(.5) rotate(-14deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes login-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes login-art-unfold {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0 0 0 0); }
 }
 
 .login-panel .login-logo .pla-mark {
@@ -128,48 +155,12 @@
   transform: rotate(-4deg) scale(1.05);
 }
 
-.login-panel .kicker {
-  animation: login-fade-up .44s cubic-bezier(.22, 1, .36, 1) both 120ms;
-}
-
-.login-panel h1 {
-  animation: login-fade-up .46s cubic-bezier(.22, 1, .36, 1) both 180ms;
-}
-
-.login-panel>.muted {
-  animation: login-fade-up .46s cubic-bezier(.22, 1, .36, 1) both 240ms;
-}
-
-.login-panel .login-form {
-  animation: login-fade-up .48s cubic-bezier(.22, 1, .36, 1) both 300ms;
-}
-
-.login-art {
-  animation: login-art-enter .54s cubic-bezier(.22, 1, .36, 1) both;
-}
-
-.art-grid {
-  animation: art-grid-reveal .8s ease both 150ms;
-}
-
 .capability {
   transition: transform .28s cubic-bezier(.22, 1, .36, 1), border-color .2s ease;
 }
 
 .capability:hover {
   transform: translateX(4px);
-}
-
-.login-art .capability:nth-child(2) {
-  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 320ms;
-}
-
-.login-art .capability:nth-child(3) {
-  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 400ms;
-}
-
-.login-art .capability:nth-child(4) {
-  animation: capability-enter .4s cubic-bezier(.22, 1, .36, 1) both 480ms;
 }
 
 .login-theme-toggle {
