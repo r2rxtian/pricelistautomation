@@ -393,7 +393,7 @@ $panel = APP_PAGES[$page]['panel'];
                     <div class="heading-left">
                         <p class="kicker history-kicker">UPLOADED PRICE LISTS</p>
                         <h1 class="history-title">Files</h1>
-                        <p class="muted history-subtitle">Original uploaded price lists. Review price changes in Approvals.</p>
+                        <p class="muted history-subtitle">Your uploaded price lists, each with its current prices.</p>
                     </div>
                 </div>
                 <div class="history-card">
@@ -929,7 +929,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=104"></script>
+<script src="../scripts/app.js?v=107"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=9"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

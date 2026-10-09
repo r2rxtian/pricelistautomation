@@ -137,18 +137,20 @@ function version_delete_block(array $version): ?string
 {
     if (($version['source'] ?? '') !== 'upload') {
         return in_array($version['status'] ?? '', ['approved', 'superseded'], true)
-            ? 'Approved price lists are kept as the record of published prices and cannot be deleted.'
+            ? 'Approved price lists are kept as the record of published prices'
             : null;
     }
     return in_array((string) ($version['id'] ?? ''), versions_built_on(), true)
-        ? 'Price changes were made from this file, so it is kept.'
+        ? 'Price changes were made from this file, so it is kept'
         : null;
 }
 
 function version_for_client(array $user, array $version): array
 {
     $version['canApprove'] = can_user_approve($user, $version);
-    $version['canDelete'] = user_can($user, 'update') && version_delete_block($version) === null;
+    $deleteBlock = version_delete_block($version);
+    $version['canDelete'] = user_can($user, 'update') && $deleteBlock === null;
+    $version['deleteBlock'] = user_can($user, 'update') ? $deleteBlock : null; // shown as the reason Delete is unavailable
     $version['approverNames'] = array_map('user_display_name', $version['requiredApprovers'] ?? []);
     return $version;
 }

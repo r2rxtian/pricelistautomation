@@ -2073,7 +2073,15 @@
   function renderFiles() {
     const body = $('#filesTableBody');
     if (!body) return;
-    const files = (state.versions || []).filter(version => version.source === 'upload');
+    // One row per file: its latest upload, acting on the price list's current prices. Saved and
+    // approved price changes update the file (they don't make it "older").
+    const listKey = v => [v.name, v.country, v.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|');
+    const latest = new Map();
+    (state.versions || []).filter(version => version.source === 'upload').forEach(version => {
+      const key = listKey(version);
+      if (!latest.has(key) || (version.revision || 0) > (latest.get(key).revision || 0)) latest.set(key, version);
+    });
+    const files = [...latest.values()];
     filesView.country = fillSelect($('#filesCountryFilter'), uniqueValues(files.map(v => v.country)), 'All countries', filesView.country);
     filesView.level = fillSelect($('#filesLevelFilter'), uniqueValues(files.map(v => v.priceLevel)), 'All price levels', filesView.level);
     const query = filesView.search.trim().toLowerCase();
@@ -2085,20 +2093,20 @@
     $('#filesEmpty').hidden = visible.length > 0;
     $('#filesEmptyText').textContent = files.length ? 'No files match these filters.' : (can('upload') ? 'Use “Upload files” to add price lists. Uploads need no approval.' : 'Uploaded price lists will appear here.');
     body.innerHTML = visible.map(version => {
-      const vid = escapeHtml(version.id);
-      const isOpen = String(state.active?.id) === String(version.id);
-      const live = version.status === 'uploaded';
-      // A newer revision (another upload or approved price changes) replaces this one.
-      const newer = live ? null : (state.versions || []).find(other => other.id !== version.id && ['approved', 'uploaded'].includes(other.status)
-        && sameText(other.name, version.name) && sameText(other.country, version.country) && sameText(other.priceLevel, version.priceLevel));
-      const statusDetail = live ? 'Original prices · exportable' : newer ? (newer.source === 'upload' ? 'Replaced by a newer upload' : 'Newer prices approved') : 'Replaced by a newer version';
+      const current = liveRevisionOf(version) || version;
+      const updated = current.id !== version.id;
+      const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
+      const cid = escapeHtml(current.id);
+      const isOpen = [current.id, version.id].some(id => String(state.active?.id) === String(id));
+      const pill = updated ? '<span class="list-status-pill status-approved">Updated</span>' : '<span class="list-status-pill status-uploaded">Uploaded</span>';
+      const detail = (updated ? `Prices changed ${displayDate(current.approvedAt || current.savedAt)}` : 'Original prices') + (waiting ? ' · changes awaiting approval' : '');
       return `<tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
-        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${Number(version.productCount || 0).toLocaleString()} products</div></td>
+        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${Number(current.productCount || version.productCount || 0).toLocaleString()} products</div></td>
         <td>${escapeHtml(version.country || '—')}</td>
         <td>${escapeHtml(version.priceLevel || '—')}</td>
         <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
-        <td><span class="list-status-pill status-${live ? 'uploaded' : 'superseded'}">${live ? 'Uploaded' : 'Replaced'}</span><div class="list-sub">${escapeHtml(statusDetail)}</div></td>
-        <td class="col-actions"><div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${vid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div></td>
+        <td>${pill}<div class="list-sub">${escapeHtml(detail)}</div></td>
+        <td class="col-actions"><div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div></td>
       </tr>`;
     }).join('');
   }
@@ -3991,19 +3999,24 @@
     if (!rowMenu || !version) return;
     const isOpen = String(state.active?.id) === String(version.id);
     const exportable = ['approved', 'uploaded'].includes(version.status) && can('export');
-    const item = (action, label, { danger = false, disabled = false, hint = '' } = {}) =>
-      `<button type="button" role="menuitem" class="row-menu-item ${danger ? 'danger' : ''}" data-action="${action}" ${disabled ? 'disabled' : ''}>
+    // Why export is unavailable for this list, in a couple of words.
+    const lockedHint = version.status === 'superseded' ? 'Newer version exists' : version.status === 'rejected' ? 'Rejected' : 'After approval';
+    const item = (action, label, { danger = false, disabled = false, hint = '', title = '' } = {}) =>
+      `<button type="button" role="menuitem" class="row-menu-item ${danger ? 'danger' : ''}" data-action="${action}" ${disabled ? 'disabled' : ''}${title ? ` title="${escapeHtml(title)}"` : ''}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${menuIcons[action]}</svg>
         <span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</button>`;
     const groups = [
       [item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' })],
       version.canApprove ? [item('approve', 'Approve'), item('reject', 'Reject', { danger: true })] : [],
       can('export') ? [
-        item('export-excel', 'Export Excel', { disabled: !exportable, hint: exportable ? '.xlsx' : 'After approval' }),
-        item('export-pdf', 'Export PDF', { disabled: !exportable, hint: exportable ? '.pdf' : 'After approval' })
+        item('export-excel', 'Export Excel', { disabled: !exportable, hint: exportable ? '.xlsx' : lockedHint }),
+        item('export-pdf', 'Export PDF', { disabled: !exportable, hint: exportable ? '.pdf' : lockedHint })
       ] : [],
       // Approved lists are the record of published prices; only pending, rejected and unused uploads go.
-      version.canDelete ? [item('delete', version.status === 'pending' ? 'Withdraw request' : 'Delete', { danger: true })] : []
+      // Shown greyed out (with the reason) when the list must be kept, so it's clear why.
+      version.canDelete ? [item('delete', version.status === 'pending' ? 'Withdraw request' : 'Delete', { danger: true })]
+        : version.deleteBlock ? [item('delete', 'Delete', { danger: true, disabled: true, hint: version.source === 'upload' ? 'Has price changes' : 'Kept as a record', title: `${version.deleteBlock}.` })]
+        : []
     ].filter(group => group.length);
     rowMenu.innerHTML = groups.map(group => group.join('')).join('<div class="row-menu-sep" role="separator"></div>');
     rowMenu.dataset.id = version.id;
