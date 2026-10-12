@@ -2240,26 +2240,59 @@
       (!filesView.level || version.priceLevel === filesView.level) &&
       (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))));
     $('#filesCount').textContent = `${visible.length} file${visible.length === 1 ? '' : 's'}`;
-    $('#filesEmpty').hidden = visible.length > 0;
+    const filtering = Boolean(query || filesView.country || filesView.level);
+    const showUpload = can('upload') && !filtering;
+    $('#filesEmpty').hidden = visible.length > 0 || showUpload;
     $('#filesEmptyText').textContent = files.length ? 'No files match these filters.' : (can('upload') ? 'Use “Upload files” to add price lists. Uploads need no approval.' : 'Uploaded price lists will appear here.');
-    body.innerHTML = visible.map(version => {
-      const current = liveRevisionOf(version) || version;
-      const updated = current.id !== version.id;
-      const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
-      const cid = escapeHtml(current.id);
-      const isOpen = [current.id, version.id].some(id => String(state.active?.id) === String(id));
-      const pill = updated ? '<span class="list-status-pill status-approved">Updated</span>' : '<span class="list-status-pill status-uploaded">Uploaded</span>';
-      const detail = (updated ? `Prices changed ${displayDate(current.approvedAt || current.savedAt)}` : 'Original prices') + (waiting ? ' · changes awaiting approval' : '');
-      return `<tr class="history-data-row ${isOpen ? 'is-open-row' : ''}">
-        <td class="history-name-cell"><strong class="list-name">${escapeHtml(version.name)}${isOpen ? ' <span class="open-now-tag">Open in editor</span>' : ''}</strong><div class="list-sub">${Number(current.productCount || version.productCount || 0).toLocaleString()} products</div></td>
-        <td>${escapeHtml(version.country || '—')}</td>
-        <td>${escapeHtml(version.priceLevel || '—')}</td>
-        <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
-        <td>${pill}<div class="list-sub">${escapeHtml(detail)}</div>${(() => { const count = listHistory(version).length; return count > 1 ? `<button type="button" class="version-history-link" data-id="${cid}">Version history · ${count}</button>` : ''; })()}</td>
-        <td class="col-actions"><div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div></td>
-      </tr>`;
-    }).join('');
+    // Each file is a paper sheet: a tiny spreadsheet preview, the name, the country as a stamp, the
+    // price level as a numbered medal, the status as an inked stamp and who uploaded it. The list
+    // open in the editor wears a pink bookmark.
+    const hue = text => [...String(text || '')].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
+    const initialsOf = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    const levelMark = level => (String(level || '').match(/\d+/) || [String(level || '?').trim().charAt(0).toUpperCase()])[0];
+    const uploadSheet = showUpload ? `<button type="button" class="file-sheet sheet-upload" data-key="upload" role="listitem">
+        <span class="sheet-upload-plus" aria-hidden="true">+</span><strong>Upload files</strong><small>Excel price lists · uploads need no approval</small>
+      </button>` : '';
+    flipMove(body, () => {
+      body.innerHTML = uploadSheet + visible.map(version => {
+        const current = liveRevisionOf(version) || version;
+        const updated = current.id !== version.id;
+        const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
+        const cid = escapeHtml(current.id);
+        const name = escapeHtml(version.name);
+        const isOpen = [current.id, version.id].some(id => String(state.active?.id) === String(id));
+        const versions = listHistory(version).length;
+        const detail = updated ? `Prices changed ${displayDate(current.approvedAt || current.savedAt)}` : 'Original prices';
+        const products = Number(current.productCount || version.productCount || 0);
+        return `<article class="file-sheet ${updated ? 'is-updated' : 'is-uploaded'} ${isOpen ? 'is-open' : ''}" role="listitem" data-key="${escapeHtml(listKey(version))}" aria-label="${name}">
+          <div class="sheet-paper">
+            <div class="sheet-preview" aria-hidden="true"><span class="sheet-preview-head"></span><span class="sheet-preview-price"></span></div>
+            ${isOpen ? '<span class="sheet-ribbon" title="Open in the editor"></span>' : ''}
+            <span class="sheet-stamp ${updated ? 'is-updated' : 'is-uploaded'}">${updated ? 'Updated' : 'Uploaded'}</span>
+            <div class="sheet-body">
+              <strong class="sheet-name" title="${name}">${name}</strong>
+              <small class="sheet-meta">${products.toLocaleString()} product${products === 1 ? '' : 's'} · ${escapeHtml(detail)}</small>
+              ${waiting ? '<small class="sheet-waiting">Changes awaiting approval</small>' : ''}
+              <div class="sheet-tags">
+                <span class="sheet-country" style="--tile-hue: ${hue(version.country)}">${escapeHtml(version.country || 'No country')}</span>
+                <span class="sheet-level" title="${escapeHtml(version.priceLevel || '')}"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>
+                ${versions > 1 ? `<button type="button" class="version-history-link sheet-history" data-id="${cid}" title="See every saved version"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>${versions} versions</button>` : ''}
+              </div>
+              <div class="sheet-by">
+                <span class="user-avatar sheet-avatar" aria-hidden="true">${escapeHtml(initialsOf(version.savedBy))}</span>
+                <span><span class="sheet-by-name">${escapeHtml(version.savedBy || 'Unknown')}</span><time>${displayDate(version.savedAt)}</time></span>
+              </div>
+            </div>
+            <div class="sheet-actions">
+              <div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div>
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+    });
   }
+  // The blank sheet opens the upload dialog (same as the "Upload files" button).
+  $('#filesTable')?.addEventListener('click', event => { if (event.target.closest('.sheet-upload')) openUploadModal(); });
   $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; renderFiles(); });
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });

@@ -10366,3 +10366,163 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
 
 [data-theme="dark"] #priceTable tr.excel-header:not(.col-letter-row) th.col-hover:not(.is-guide-active) { background: #22171c !important; color: #eb97ae !important; }
 [data-theme="dark"] #priceTable td.col-row-num.is-guide-hover:not(.is-guide-active) { color: #eb97ae !important; }
+
+/* ==========================================================================
+   Files: every uploaded price list is a sheet of paper on a dotted board. A folded corner, a tiny
+   spreadsheet preview, the country as a tinted stamp, the price level as a numbered medal (like
+   the Config ladder), the status as an inked stamp and the uploader. The list open in the editor
+   wears a pink bookmark. The first sheet uploads.
+   ========================================================================== */
+#filesPanel .history-table-frame { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: none; }
+.sheet-board {
+  flex: 1 0 auto;
+  padding: 30px 26px 34px;
+  background-color: var(--surface-elevated, #fcf8f9);
+  background-image: radial-gradient(color-mix(in srgb, var(--pink) 16%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+.sheet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 34px 26px; align-items: start; }
+.file-sheet {
+  --fold: 26px;
+  position: relative;
+  min-width: 0;
+  filter: drop-shadow(0 1px 1px rgba(40, 20, 30, .08)) drop-shadow(0 12px 16px rgba(40, 20, 30, .14));
+  transition: transform .45s cubic-bezier(0.22, 1, 0.36, 1), filter .35s ease;
+}
+.file-sheet:hover,
+.file-sheet:focus-within { z-index: 2; transform: translateY(-6px) rotate(-.6deg); filter: drop-shadow(0 2px 2px rgba(40, 20, 30, .08)) drop-shadow(0 22px 24px rgba(40, 20, 30, .2)); }
+/* The paper, with its top-right corner folded over. */
+.sheet-paper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  background: #fffdfb;
+  clip-path: polygon(0 0, calc(100% - var(--fold)) 0, 100% var(--fold), 100% 100%, 0 100%);
+  border-radius: 4px;
+}
+.sheet-paper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--fold);
+  height: var(--fold);
+  background: linear-gradient(to bottom left, transparent 50%, #eadfe3 50%, #f6eff2 100%);
+  box-shadow: -2px 2px 4px rgba(40, 20, 30, .12);
+  border-bottom-left-radius: 4px;
+}
+/* A tiny spreadsheet: header band, grid lines and the price column in pink. */
+.sheet-preview {
+  position: relative;
+  height: 74px;
+  margin: 14px calc(var(--fold) + 4px) 0 14px;
+  border: 1px solid #efe4e8;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(to right, transparent 0 calc(20% - 1px), #efe4e8 calc(20% - 1px) 20%),
+    repeating-linear-gradient(to bottom, #fff 0 11px, #f1e8eb 11px 12px);
+  overflow: hidden;
+}
+.sheet-preview-head { position: absolute; inset: 0 0 auto; height: 12px; background: color-mix(in srgb, var(--pink) 22%, #fff); }
+.sheet-preview-price { position: absolute; top: 12px; bottom: 0; left: 60%; width: 20%; background: color-mix(in srgb, var(--pink) 9%, transparent); }
+.sheet-ribbon {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 22px;
+  width: 20px;
+  height: 36px;
+  background: linear-gradient(to bottom, #b52042, #e46a8a);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .2);
+}
+/* The inked status stamp, overlapping the preview's corner. */
+.sheet-stamp {
+  position: absolute;
+  z-index: 1;
+  top: 66px;
+  right: 18px;
+  padding: 2px 9px;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  background: rgba(255, 253, 251, .86);
+  font: 900 0.62rem/1.45 var(--sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  opacity: .85;
+  transform: rotate(-8deg);
+}
+.sheet-stamp.is-uploaded { color: #2563eb; }
+.sheet-stamp.is-updated { color: #15803d; }
+.sheet-body { display: grid; gap: 4px; padding: 18px 16px 0; min-width: 0; }
+.sheet-name { overflow: hidden; color: #2f2228; font: 600 1.02rem/1.25 var(--display); text-overflow: ellipsis; white-space: nowrap; }
+.sheet-meta { color: #8a7a80; font-size: 0.7rem; }
+.sheet-waiting { display: inline-flex; align-items: center; gap: 6px; color: #b45309; font-size: 0.7rem; font-weight: 700; }
+.sheet-waiting::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 3px #fef3c7; }
+.sheet-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.sheet-country {
+  padding: 3px 9px;
+  border: 1.5px dashed hsl(var(--tile-hue) 50% 55% / .8);
+  border-radius: 6px;
+  background: hsl(var(--tile-hue) 70% 97%);
+  color: hsl(var(--tile-hue) 55% 34%);
+  font: 800 0.62rem/1.4 var(--sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  transform: rotate(-3deg);
+}
+.sheet-level { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #5b4a50; font-size: 0.72rem; font-weight: 600; }
+.sheet-level b { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #b52042, #e46a8a); box-shadow: 0 3px 6px -3px rgba(181, 32, 66, .7); color: #fff; font: 800 0.7rem/1 var(--display); }
+.sheet-by { display: flex; align-items: center; gap: 9px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed #eadfe3; }
+.sheet-avatar { width: 30px; height: 30px; font-size: 0.66rem; }
+.sheet-by > span:last-child { display: grid; min-width: 0; }
+.sheet-by-name { overflow: hidden; color: #3a2a30; font-size: 0.74rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-by time { color: #8a7a80; font-size: 0.66rem; }
+.sheet-actions { margin-top: auto; padding: 14px 12px 12px 16px; }
+.sheet-actions .list-actions { display: flex; align-items: center; gap: 6px; }
+.sheet-actions .row-primary { flex: 1; min-width: 0; }
+.sheet-history { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; white-space: nowrap; border: 0; border-radius: 999px; background: var(--pink-subtle); color: var(--pink); font: 700 0.68rem var(--sans); cursor: pointer; transition: background .2s ease; }
+.sheet-history:hover { background: color-mix(in srgb, var(--pink) 18%, transparent); }
+.file-sheet.is-open .sheet-paper { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--pink) 40%, transparent); }
+/* The blank sheet: upload new price lists. */
+.sheet-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 300px;
+  padding: 24px;
+  border: 2px dashed color-mix(in srgb, var(--pink) 38%, var(--line-panel));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-card) 70%, transparent);
+  color: var(--text-muted);
+  font: inherit;
+  filter: none;
+  cursor: pointer;
+}
+.sheet-upload:hover,
+.sheet-upload:focus-visible { filter: none; transform: translateY(-4px); border-color: var(--pink); background: var(--pink-subtle); outline: none; }
+.sheet-upload strong { color: var(--text-heading); font-size: 0.95rem; }
+.sheet-upload small { max-width: 170px; font-size: 0.72rem; line-height: 1.4; }
+.sheet-upload-plus { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 6px; border: 2px dashed color-mix(in srgb, var(--pink) 55%, transparent); border-radius: 50%; color: var(--pink); font: 400 1.8rem/1 var(--sans); transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .3s ease; }
+.sheet-upload:hover .sheet-upload-plus { background: var(--surface-card); transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .file-sheet, .sheet-upload-plus { transition: none; } }
+
+[data-theme="dark"] .sheet-board { background-color: #111216; background-image: radial-gradient(rgba(235, 151, 174, .12) 1px, transparent 1.3px); }
+[data-theme="dark"] .file-sheet { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)) drop-shadow(0 12px 16px rgba(0, 0, 0, .6)); }
+[data-theme="dark"] .sheet-paper { background: #1b1c21; }
+[data-theme="dark"] .sheet-paper::after { background: linear-gradient(to bottom left, transparent 50%, #2c2e35 50%, #24262c 100%); box-shadow: -2px 2px 4px rgba(0, 0, 0, .5); }
+[data-theme="dark"] .sheet-preview { border-color: #2c2f37; background: repeating-linear-gradient(to right, transparent 0 calc(20% - 1px), #2c2f37 calc(20% - 1px) 20%), repeating-linear-gradient(to bottom, #1f2026 0 11px, #2a2c33 11px 12px); }
+[data-theme="dark"] .sheet-preview-head { background: #3a1f29; }
+[data-theme="dark"] .sheet-stamp { background: rgba(27, 28, 33, .86); }
+[data-theme="dark"] .sheet-stamp.is-uploaded { color: #93c5fd; }
+[data-theme="dark"] .sheet-stamp.is-updated { color: #86efac; }
+[data-theme="dark"] .sheet-name, [data-theme="dark"] .sheet-by-name { color: #f4f4f6; }
+[data-theme="dark"] .sheet-level { color: #c9c9d1; }
+[data-theme="dark"] .sheet-country { background: hsl(var(--tile-hue) 30% 15%); color: hsl(var(--tile-hue) 70% 74%); border-color: hsl(var(--tile-hue) 50% 55% / .6); }
+[data-theme="dark"] .sheet-by { border-top-color: #2c2f37; }
+[data-theme="dark"] .sheet-history { background: #2a161e; color: #f0a3b7; }
+[data-theme="dark"] .sheet-upload { border-color: #4e2a36; background: rgba(22, 23, 28, .6); }
+[data-theme="dark"] .sheet-upload:hover { background: #1f171b; }

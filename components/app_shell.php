@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=147">
+    <link rel="stylesheet" href="../styles/app.css?v=151">
     <script>
     (function() {
         try {
@@ -384,19 +384,10 @@ $panel = APP_PAGES[$page]['panel'];
                         </div>
                     </div>
                     <div class="history-table-frame">
-                        <table id="filesTable" class="lists-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 28%;">File</th>
-                                    <th style="width: 13%;">Country</th>
-                                    <th style="width: 12%;">Price level</th>
-                                    <th style="width: 17%;">Uploaded</th>
-                                    <th style="width: 17%;">Status</th>
-                                    <th style="width: 13%;" class="col-actions"><span class="sr-only">Actions</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="filesTableBody"></tbody>
-                        </table>
+                        <!-- Every uploaded price list is a paper sheet on a board; the first sheet uploads new ones. -->
+                        <div id="filesTable" class="sheet-board">
+                            <div id="filesTableBody" class="sheet-grid" role="list" aria-label="Uploaded price lists"></div>
+                        </div>
                         <div id="filesEmpty" class="history-empty-card" hidden>
                             <h2>No uploaded files yet</h2>
                             <p id="filesEmptyText">Uploaded price lists will appear here.</p>
@@ -962,7 +953,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=142"></script>
+<script src="../scripts/app.js?v=145"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
