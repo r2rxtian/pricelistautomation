@@ -17,8 +17,11 @@ json_response([
     'approvalMode' => APPROVAL_MODE,
     'approvers' => user_can($user, 'save') ? array_map('user_display_name', approvers_for($user['username'])) : [],
     'autoApprove' => user_can($user, 'save') && is_auto_approver($user['username']),
-    'countries' => COUNTRIES,
-    'priceLevels' => PRICE_LEVELS,
+    // Offered in the dropdowns (Config › Countries & price levels).
+    'countries' => active_option_names('countries'),
+    'priceLevels' => active_option_names('priceLevels'),
+    'priceLevelInfo' => array_map(fn($item) => ['name' => $item['name'], 'description' => $item['description']], list_options('priceLevels')),
+    'listOptions' => user_can($user, 'manageImages') ? list_options_payload() : null,
     'importTemplate' => user_can($user, 'upload') ? price_list_template() : null,
     'directory' => directory_payload(),
     'versions' => $versions,

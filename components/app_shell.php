@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=125">
+    <link rel="stylesheet" href="../styles/app.css?v=142">
     <script>
     (function() {
         try {
@@ -566,12 +566,18 @@ $panel = APP_PAGES[$page]['panel'];
                 <div class="page-heading settings-heading">
                     <div class="heading-left">
                         <p class="kicker">Config</p>
-                        <h1>Product photos</h1>
-                        <p class="muted">Organize category folders and choose photos for each product type.</p>
+                        <h1 id="configTitle">Product photos</h1>
+                        <p class="muted" id="configSubtitle">Organize category folders and choose photos for each product type.</p>
+                    </div>
+                    <div class="config-sections" role="tablist" aria-label="Config sections">
+                        <span class="config-sections-glider" aria-hidden="true"></span>
+                        <button type="button" class="config-section-btn is-active" data-config-section="photos" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Product photos</span></button>
+                        <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Countries &amp; price levels</span></button>
+                        <button type="button" class="config-section-btn perm-manageUsers" data-config-section="users" role="tab" aria-selected="false" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></button>
                     </div>
                 </div>
 
-                <div class="audit-tab-bar" role="tablist" aria-label="Photo settings">
+                <div class="audit-tab-bar" id="photoTabBar" role="tablist" aria-label="Photo settings">
                     <button type="button" class="config-tab-btn audit-tab-btn active" data-config-tab="library" role="tab" aria-selected="true"><span>Photo library</span><span id="libraryCountBadge" class="audit-tab-count">0</span></button>
                     <button type="button" class="config-tab-btn audit-tab-btn" data-config-tab="types" role="tab" aria-selected="false"><span>Product type photos</span><span id="typesCountBadge" class="audit-tab-count">0</span></button>
                 </div>
@@ -614,6 +620,53 @@ $panel = APP_PAGES[$page]['panel'];
                     </div>
                     <div id="imageSettingsList" class="image-settings-list" aria-live="polite"></div>
                     <div id="imageSettingsEmpty" class="settings-empty" hidden><h2>No product types available</h2><p>Open a price list first. Its categories and product groups will appear here.</p></div>
+                </div>
+                <div class="lists-card" id="listsCard" hidden>
+                    <section class="option-list" data-option-type="countries" aria-labelledby="countriesTitle">
+                        <header class="option-list-head">
+                            <div><h2 id="countriesTitle">Countries</h2><p class="option-list-sub" data-option-summary></p></div>
+                            <label class="option-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" data-option-search placeholder="Search countries…" aria-label="Search countries" autocomplete="off"></label>
+                        </header>
+                        <div class="option-rows" data-option-rows></div>
+                        <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a country…" aria-label="New country" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
+                    </section>
+                    <section class="option-list" data-option-type="priceLevels" aria-labelledby="levelsTitle">
+                        <header class="option-list-head">
+                            <div><h2 id="levelsTitle">Price levels</h2><p class="option-list-sub" data-option-summary></p></div>
+                        </header>
+                        <p class="option-note">Shown in this order in every price level dropdown. Add a short description so everyone knows what each level is for.</p>
+                        <div class="option-rows" data-option-rows></div>
+                        <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a price level…" aria-label="New price level" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
+                    </section>
+                </div>
+                <div class="users-card" id="usersCard" hidden>
+                    <header class="users-head">
+                        <div><h2 id="userListTitle">People with access</h2><p id="userListCount" class="option-list-sub"></p></div>
+                        <p class="users-legend"><span class="legend-dot is-admin"></span>Admin <span class="legend-dot is-export"></span>Export only</p>
+                    </header>
+                    <!-- Everyone is an ID badge; the first, blank badge flips open into "Add a user". -->
+                    <div class="badge-grid" id="userBadgeGrid" aria-labelledby="userListTitle">
+                        <section class="user-badge badge-add" id="userAddBadge" data-key="add" aria-labelledby="userAddTitle">
+                            <button type="button" class="badge-add-front" id="userAddOpen">
+                                <span class="badge-clip" aria-hidden="true"></span>
+                                <span class="badge-plus" aria-hidden="true">+</span>
+                                <strong>Add a user</strong>
+                                <small>Look someone up by their biometrics number</small>
+                            </button>
+                            <div class="badge-add-back" hidden>
+                                <div class="user-add-head">
+                                    <div><h2 id="userAddTitle">Add a user</h2><p>Name and department come from the company master list. They sign in with their biometrics number.</p></div>
+                                    <button type="button" class="option-icon badge-add-close" id="userAddClose" aria-label="Close add a user" title="Close">×</button>
+                                </div>
+                                <form id="userLookupForm" class="user-lookup">
+                                    <label class="user-lookup-field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userLookupInput" type="text" inputmode="numeric" placeholder="Biometrics number, e.g. 1652" autocomplete="off" aria-label="Biometrics number"></label>
+                                    <button type="submit" class="button secondary">Look up</button>
+                                </form>
+                                <div id="userLookupResult" class="user-lookup-result" aria-live="polite" hidden></div>
+                            </div>
+                        </section>
+                        <div id="userRows" class="badge-rows"></div>
+                    </div>
                 </div>
                 <input id="groupImageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
                 <input id="libraryFileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
@@ -761,7 +814,6 @@ $panel = APP_PAGES[$page]['panel'];
         <div class="save-meta-readonly" id="saveMetaReadonly">
             <span class="list-tag"><small>Price level</small><strong id="saveMetaPriceLevel">—</strong></span>
             <span class="list-tag"><small>Country</small><strong id="saveMetaCountry">—</strong></span>
-            <button type="button" class="text-button" id="editSaveMetaBtn">Edit</button>
         </div>
         <div class="upload-meta-grid" id="saveMetaEdit" hidden>
             <label class="form-field">Price level<select id="savePriceLevel" required></select></label>
@@ -910,7 +962,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=123"></script>
+<script src="../scripts/app.js?v=136"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

@@ -16,7 +16,7 @@ require_once __DIR__ . '/../rules/workflow.php';
 
 function json_default_store(): array
 {
-    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => [], 'photoFolders' => [], 'searchKeywords' => []];
+    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => [], 'photoFolders' => [], 'searchKeywords' => [], 'listOptions' => []];
 }
 
 function json_read_store(): array
@@ -387,5 +387,32 @@ function repo_save_search_keywords(array $entry): ?array
         if (!$entry['keywords']) return null;
         $store['searchKeywords'][] = $entry;
         return $entry;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Country and price level lists (Config › Countries & price levels)
+// ---------------------------------------------------------------------------
+
+/**
+ * The saved list for 'countries' or 'priceLevels' as [{name, description, active}] in display
+ * order, or null when it was never edited (rules/options.php then uses the defaults).
+ */
+function repo_get_list_options(string $type): ?array
+{
+    if (database_enabled()) return database_get_list_options($type);
+    $saved = json_read_store()['listOptions'][$type] ?? null;
+    return is_array($saved) ? array_values($saved) : null;
+}
+
+function repo_save_list_options(string $type, array $items): void
+{
+    if (database_enabled()) {
+        database_save_list_options($type, $items);
+        return;
+    }
+    json_mutate(function (array &$store) use ($type, $items) {
+        if (!is_array($store['listOptions'] ?? null) || array_is_list($store['listOptions'])) $store['listOptions'] = [];
+        $store['listOptions'][$type] = array_values($items);
     });
 }

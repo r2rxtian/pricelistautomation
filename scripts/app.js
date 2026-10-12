@@ -18,7 +18,7 @@
   // The Config tab (photo library, product type photos, search keywords) also survives a refresh.
   const CONFIG_TAB_KEY = 'pla_config_tab';
   function rememberedConfigTab() {
-    try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
+    try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types', 'lists', 'users'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   let suppressRowEnter = false; // set while a price roll re-renders the table (see rollPrices)
@@ -185,7 +185,8 @@
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
     'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move',
-    'search-keywords': 'search/keywords_save',
+    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save',
+    'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
   };
@@ -316,7 +317,7 @@
   function applyPermissions() {
     $$('.edit-only').forEach(element => element.hidden = !can('update'));
     $$('.admin-only').forEach(element => element.hidden = !can('manageImages'));
-    ['update', 'approve', 'viewAudit', 'manageImages', 'upload'].forEach(permission => {
+    ['update', 'approve', 'viewAudit', 'manageImages', 'upload', 'manageUsers'].forEach(permission => {
       $$(`.perm-${permission}`).forEach(element => element.hidden = !can(permission));
     });
     updateEditorActions();
@@ -438,6 +439,8 @@
   }
   /** "1", "level 2", "PL3" or "Price Level 4" → "Price Level 4" when it is a configured level, else ''. */
   function canonicalPriceLevel(value) {
+    const named = (state.priceLevels || []).find(level => level.toLowerCase() === String(value || '').trim().toLowerCase());
+    if (named) return named;
     const match = String(value || '').match(/^\s*(?:price\s*level|level|pl|lvl)?\s*#?\s*(\d{1,3})\s*$/i);
     const level = match ? `Price Level ${Number(match[1])}` : '';
     return (state.priceLevels || []).includes(level) ? level : '';
@@ -447,7 +450,7 @@
     const list = state.priceLevels || [];
     const extra = current && !list.includes(current) ? [current] : [];
     return `<option value="">${escapeHtml(placeholder)}</option>`
-      + [...extra, ...list].map(level => `<option value="${escapeHtml(level)}"${level === current ? ' selected' : ''}>${escapeHtml(level)}${extra.includes(level) ? ' (not in list)' : ''}</option>`).join('');
+      + [...extra, ...list].map(level => `<option value="${escapeHtml(level)}"${level === current ? ' selected' : ''}>${escapeHtml(level)}${extra.includes(level) ? ' (switched off)' : ''}</option>`).join('');
   }
   /** Picks up "Price Level 2", "Level 2" or "PL2" from a file name. */
   function guessPriceLevel(fileName) {
@@ -502,6 +505,7 @@
       versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
       photoFolders: data.photoFolders || [],
       searchKeywords: data.searchKeywords || [],
+      listOptions: data.listOptions || null, priceLevelInfo: data.priceLevelInfo || [],
       importTemplate: data.importTemplate || null,
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
@@ -967,28 +971,25 @@
         ? '<h2>No matching product types</h2><p>Try a different search or category.</p>'
         : '<h2>No product types available</h2><p>Upload a workbook first. Its categories and product groups will appear here.</p>';
     }
+    // How many product types (in every category) have a photo, as a small ring beside the count.
+    const withPhoto = groups.filter(group => imageOverride(group.category, group.groupName)?.imagePath).length;
+    if (groups.length) {
+      const share = withPhoto / groups.length;
+      dom.imageSettingsCount.innerHTML = `<span class="plate-progress" title="${withPhoto} of ${groups.length} product types have a photo"><svg viewBox="0 0 36 36" width="22" height="22" aria-hidden="true"><circle cx="18" cy="18" r="15" class="plate-progress-track"/><circle cx="18" cy="18" r="15" class="plate-progress-fill" style="stroke-dasharray: ${(share * 94.25).toFixed(2)} 94.25"/></svg><span><strong>${withPhoto} of ${groups.length}</strong> have a photo</span></span>`;
+    }
+    // Each product type is a card with its photo served on a round plate; no photo = an empty dashed plate.
     dom.imageSettingsList.innerHTML = visible.map(group => {
       const custom = imageOverride(group.category, group.groupName);
-      const previewMarkup = custom?.imagePath
-        ? `<img class="image-setting-preview" src="${escapeHtml(mediaUrl(custom.imagePath))}" alt="${escapeHtml(group.groupName)} preview">`
-        : `<div class="image-setting-preview empty-preview" title="No photo set">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-           </div>`;
-      return `<article class="image-setting-row">
-        ${previewMarkup}
-        <div class="image-setting-copy">
-          <span>${escapeHtml(group.category)}</span>
-          <strong>${escapeHtml(group.groupName)}</strong>
-          <small>${group.productCount} product${group.productCount === 1 ? '' : 's'} · ${custom ? `Photo: ${escapeHtml(libraryPhotoName(custom.libraryId) || 'custom')}` : 'No photo set yet'}</small>
-        </div>
-        <div class="image-setting-actions">
-          <button class="button ${custom ? 'secondary' : 'primary'} choose-group-image" data-category="${escapeHtml(group.category)}" data-group="${escapeHtml(group.groupName)}">${custom ? 'Change photo' : 'Choose from library'}</button>
-          ${custom ? `<button class="button danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${escapeHtml(group.groupName)}">Remove photo</button>` : ''}
-        </div>
+      const name = escapeHtml(group.groupName);
+      const chooseData = `data-category="${escapeHtml(group.category)}" data-group="${name}"`;
+      return `<article class="plate-card ${custom?.imagePath ? 'has-photo' : 'is-empty'}">
+        <button type="button" class="plate choose-group-image" ${chooseData} aria-label="${custom ? 'Change' : 'Choose'} photo for ${name}" title="${custom ? 'Change photo' : 'Choose a photo from the library'}">
+          ${custom?.imagePath ? `<img src="${escapeHtml(mediaUrl(custom.imagePath))}" alt="" loading="lazy">` : '<span class="plate-empty" aria-hidden="true"><span>+</span>Choose photo</span>'}
+        </button>
+        <span class="plate-category">${escapeHtml(group.category)}</span>
+        <strong class="plate-name" title="${name}">${name}</strong>
+        <small class="plate-meta">${group.productCount} product${group.productCount === 1 ? '' : 's'}${custom ? ` · ${escapeHtml(libraryPhotoName(custom.libraryId) || 'custom photo')}` : ''}</small>
+        ${custom ? `<div class="plate-actions"><button type="button" class="button secondary choose-group-image" ${chooseData}>Change</button><button type="button" class="option-icon danger delete-group-image" data-key="${escapeHtml(custom.key)}" data-name="${name}" aria-label="Remove photo for ${name}" title="Remove photo">×</button></div>` : ''}
       </article>`;
     }).join('');
     if ($('#typesCountBadge')) $('#typesCountBadge').textContent = String(groups.length);
@@ -2542,7 +2543,7 @@
     const list = state.countries || [];
     const extra = current && !list.includes(current) ? [current] : [];
     return `<option value="">${escapeHtml(placeholder)}</option>`
-      + [...extra, ...list].map(country => `<option value="${escapeHtml(country)}"${country === current ? ' selected' : ''}>${escapeHtml(country)}${extra.includes(country) ? ' (not in list)' : ''}</option>`).join('');
+      + [...extra, ...list].map(country => `<option value="${escapeHtml(country)}"${country === current ? ' selected' : ''}>${escapeHtml(country)}${extra.includes(country) ? ' (switched off)' : ''}</option>`).join('');
   }
 
   /** Adds Excel files to the upload list (accepts a FileList, an array or a single file). */
@@ -3817,9 +3818,10 @@
     if (!state.active.isDraft && ['approved', 'uploaded'].includes(state.active.status)) return toast('No changes to save. Adjust prices or edit cells first, then save to send the changes for approval.');
     dom.versionNameInput.value = state.active.name || '';
     dom.savePriceLevel.innerHTML = priceLevelOptionsHtml(state.active.priceLevel);
-    dom.savePriceLevel.value = canonicalPriceLevel(state.active.priceLevel) || '';
+    // The list keeps its own country and level, even one switched off in Config since.
+    dom.savePriceLevel.value = canonicalPriceLevel(state.active.priceLevel) || String(state.active.priceLevel || '').trim();
     dom.saveCountry.innerHTML = countryOptionsHtml(state.active.country, 'Select country…');
-    dom.saveCountry.value = canonicalCountry(state.active.country) || '';
+    dom.saveCountry.value = canonicalCountry(state.active.country) || String(state.active.country || '').trim();
     // Price level and country are chosen at upload; show them read-only unless one is missing (older lists).
     const metaMissing = !dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim();
     $('#saveMetaPriceLevel').textContent = state.active.priceLevel || 'Not set';
@@ -3902,11 +3904,6 @@
   }
   dom.saveConfirmCheck?.addEventListener('change', () => { dom.confirmSave.disabled = !dom.saveConfirmCheck.checked; });
   $('#closeFileBtn')?.addEventListener('click', closeActiveFile);
-  $('#editSaveMetaBtn')?.addEventListener('click', () => {
-    $('#saveMetaReadonly').hidden = true;
-    $('#saveMetaEdit').hidden = false;
-    dom.savePriceLevel.focus();
-  });
   /** A locked export explains itself: the padlock wiggles and the reason shows. */
   function lockedExport(button) {
     if (!button.classList.contains('is-locked')) return false;
@@ -4337,6 +4334,11 @@
     document.querySelector('.content')?.classList.toggle('history-active', ['historyPanel', 'listsPanel', 'filesPanel'].includes(finalPanelId));
 
     if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || 'library');
+    // Fetch the Users list in the background so that section opens already filled in.
+    if (finalPanelId === 'settingsPanel' && state.configTab !== 'users' && can('manageUsers') && !state.usersPreloaded) {
+      state.usersPreloaded = true;
+      loadUsers();
+    }
     if (finalPanelId === 'historyPanel') renderHistory();
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
@@ -5305,10 +5307,15 @@
   function renderLibraryFolders() {
     const folders = $('#libraryFolders');
     if (!folders) return;
+    // Each folder shows a little fan of its first photos (the plain folder icon when it is empty).
+    const fan = photos => photos.length
+      ? `<span class="folder-fan" aria-hidden="true">${photos.slice(0, 3).reverse().map(photo => `<img src="${photoAttr(mediaUrl(photo.imagePath))}" alt="" loading="lazy">`).join('')}</span>`
+      : libraryFolderIcon;
     folders.innerHTML = [null, ...libraryFolderNames(), ''].map(folder => {
-      const count = filteredLibrary('', folder).length;
+      const photos = filteredLibrary('', folder);
+      const count = photos.length;
       const active = folder === null ? state.libraryFolder === null : state.libraryFolder !== null && folderKey(folder) === folderKey(state.libraryFolder);
-      return `<button type="button" class="library-folder${active ? ' is-active' : ''}" data-library-folder="${photoAttr(folderValue(folder))}"${active ? ' aria-current="true"' : ''}>${libraryFolderIcon}<span>${escapeHtml(folderLabel(folder))}</span><small>${count}</small></button>`;
+      return `<button type="button" class="library-folder${active ? ' is-active' : ''}" data-library-folder="${photoAttr(folderValue(folder))}"${active ? ' aria-current="true"' : ''}>${fan(photos)}<span>${escapeHtml(folderLabel(folder))}</span><small>${count}</small></button>`;
     }).join('');
     const destination = $('#libraryUploadFolder');
     const currentDestination = destination.value ? folderFromValue(destination.value) : '';
@@ -5421,26 +5428,430 @@
       : `Photos for ${state.libraryFolder}. Upload here or move existing photos into this folder.`;
     $('#libraryCountBadge').textContent = String(all.length);
     $('#libraryCount').textContent = `${visible.length} photo${visible.length === 1 ? '' : 's'}`;
-    $('#libraryEmpty').hidden = visible.length > 0;
-    if (!visible.length) $('#libraryEmpty').innerHTML = state.librarySearch.trim()
-      ? '<h2>No matching photos</h2><p>Try another name or browse a different folder.</p>'
-      : '<h2>No photos in this folder yet</h2><p>Choose an upload destination above, then select Upload photos.</p>';
-    grid.hidden = !visible.length;
-    grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
+    // Searching with no results shows a message; otherwise the wall always starts with a blank
+    // "Upload photos" print (uploads go to the open folder).
+    const searching = Boolean(state.librarySearch.trim());
+    $('#libraryEmpty').hidden = visible.length > 0 || !searching;
+    if (!visible.length && searching) $('#libraryEmpty').innerHTML = '<h2>No matching photos</h2><p>Try another name or browse a different folder.</p>';
+    grid.hidden = !visible.length && searching;
+    const uploadPrint = searching ? '' : `<button type="button" class="library-upload-print"><span class="library-upload-plus" aria-hidden="true">+</span><strong>Upload photos</strong><small>${state.libraryFolder === null ? 'JPG, PNG or WebP · up to 6 MB' : `Into ${escapeHtml(folderLabel(state.libraryFolder))}`}</small></button>`;
+    grid.innerHTML = uploadPrint + visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
   }
+  /** Moves the Config section highlight (Product photos / Countries & price levels) under the active one. */
+  function placeConfigGlider(glide = true) {
+    const active = $('.config-section-btn.is-active');
+    const glider = $('.config-sections-glider');
+    if (!active || !glider || !active.offsetParent) return;
+    const frame = { width: `${active.offsetWidth}px`, transform: `translateX(${active.offsetLeft}px)` };
+    const from = { width: glider.style.width, transform: glider.style.transform };
+    Object.assign(glider.style, frame);
+    if (glide && from.width && from.transform !== frame.transform && !reducedMotion()) glider.animate([from, frame], { duration: 480, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+  }
+  window.addEventListener('resize', () => placeConfigGlider(false));
+  let lastPhotoTab = state.configTab === 'types' ? 'types' : 'library';
   function switchConfigTab(tab) {
-    if (!['library', 'types'].includes(tab)) tab = 'library';
+    if (!['library', 'types', 'lists', 'users'].includes(tab) || (tab === 'users' && !can('manageUsers'))) tab = 'library';
+    const previous = state.configTab;
+    if (tab === 'library' || tab === 'types') lastPhotoTab = tab;
     try { sessionStorage.setItem(CONFIG_TAB_KEY, tab); } catch { }
     state.configTab = tab;
+    const section = tab === 'lists' || tab === 'users' ? tab : 'photos';
+    $$('.config-section-btn').forEach(button => {
+      const active = button.dataset.configSection === section;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    requestAnimationFrame(() => placeConfigGlider(true));
     $$('.config-tab-btn').forEach(button => {
       const active = button.dataset.configTab === tab;
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', String(active));
     });
+    $('#photoTabBar').hidden = section !== 'photos';
     $('#libraryCard').hidden = tab !== 'library';
     $('#typesCard').hidden = tab !== 'types';
-    if (tab === 'library') renderLibrary(); else renderImageSettings();
+    $('#listsCard').hidden = tab !== 'lists';
+    $('#usersCard').hidden = tab !== 'users';
+    $('#configTitle').textContent = { lists: 'Countries & price levels', users: 'Users' }[section] || 'Product photos';
+    $('#configSubtitle').textContent = {
+      lists: 'The choices offered when uploading and saving price lists.',
+      users: 'Who can sign in, and what they can do.',
+    }[section] || 'Organize category folders and choose photos for each product type.';
+    // Changing section: its content glides in from the side of the section chosen.
+    const sectionOf = value => value === 'lists' || value === 'users' ? value : 'photos';
+    const order = ['photos', 'lists', 'users'];
+    if (previous && sectionOf(previous) !== section && !reducedMotion()) {
+      const fromRight = order.indexOf(section) > order.indexOf(sectionOf(previous));
+      const parts = [section === 'photos' ? $('#photoTabBar') : null, $({ library: '#libraryCard', types: '#typesCard', lists: '#listsCard', users: '#usersCard' }[tab])].filter(Boolean);
+      requestAnimationFrame(() => parts.forEach((el, index) => el.animate(
+        [{ opacity: 0, transform: `translate3d(${fromRight ? 24 : -24}px, 0, 0)` }, { opacity: 1, offset: 0.35 }, { opacity: 1, transform: 'none' }],
+        { duration: 560, delay: index * 50, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' })));
+    }
+    if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else if (tab === 'users') loadUsers(); else renderListOptions();
   }
+  $$('.config-section-btn').forEach(button => button.addEventListener('click', () => {
+    if (!button.classList.contains('is-active')) switchConfigTab(button.dataset.configSection === 'photos' ? lastPhotoTab : button.dataset.configSection);
+  }));
+
+  // --- Config › Countries & price levels: the choices in the upload and save dropdowns. Switching
+  // one off hides it for new price lists; names used by saved lists can't be removed or renamed. ---
+  const optionSearch = { countries: '' };
+  let optionEditing = null; // "type|index" of the row whose name/description is being edited
+  /** Inside of every on/off switch: the knob (the button itself is the track). */
+  const SWITCH_PARTS = '<i class="switch-knob" aria-hidden="true"></i>';
+  /** Slides a switch over before its list re-renders (the re-render would otherwise make it jump). */
+  function flipSwitch(button) {
+    button.setAttribute('aria-checked', String(button.getAttribute('aria-checked') !== 'true'));
+    return new Promise(resolve => setTimeout(resolve, reducedMotion() ? 0 : 320));
+  }
+  /**
+   * Re-renders a container, then glides every [data-key] item that moved to its new place (FLIP)
+   * and pops in the new ones, so reordering, filtering or switching something off never jumps.
+   */
+  function flipMove(container, render) {
+    const before = new Map();
+    container.querySelectorAll('[data-key]').forEach(el => before.set(el.dataset.key, el.getBoundingClientRect()));
+    render();
+    if (!before.size || reducedMotion()) return;
+    container.querySelectorAll('[data-key]').forEach(el => {
+      const old = before.get(el.dataset.key);
+      if (!old) { el.animate([{ opacity: 0, transform: 'scale(0.9)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: FOLDER_EASE }); return; }
+      const now = el.getBoundingClientRect();
+      const dx = old.left - now.left, dy = old.top - now.top;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 480, easing: FOLDER_EASE });
+    });
+  }
+  // Countries are floating tiles, each tinted with its own color (from the name).
+  const countryHue = name => [...name].reduce((hue, char) => (hue * 31 + char.charCodeAt(0)) % 360, 7);
+  const optionSwitch = item => `<button type="button" class="option-toggle" role="switch" aria-checked="${item.active}" data-option-action="toggle" aria-label="${item.active ? 'Switch off' : 'Switch on'} ${escapeHtml(item.name)}" title="${item.active ? 'Offered for new price lists. Click to switch off.' : 'Switched off. Click to offer it again.'}">${SWITCH_PARTS}</button>`;
+  const optionUsage = item => `<span class="option-usage ${item.usedBy > 0 ? 'is-used' : ''}">${item.usedBy > 0 ? `${item.usedBy} list${item.usedBy === 1 ? '' : 's'}` : 'Not used'}</span>`;
+  function optionText(item, levels, editing) {
+    const used = item.usedBy > 0;
+    return editing
+      ? `<input class="option-name-input" value="${escapeHtml(item.name)}" maxlength="80" aria-label="Name" ${used ? 'disabled title="Used by saved price lists, so the name stays"' : ''}>${levels ? `<input class="option-desc-input" value="${escapeHtml(item.description || '')}" maxlength="200" placeholder="What is this level for? (optional)" aria-label="Description">` : ''}`
+      : `<strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>${levels ? `<small>${item.description ? escapeHtml(item.description) : '<em>No description</em>'}</small>` : ''}`;
+  }
+  function optionTools(item, index, count, levels, editing) {
+    if (editing) return '<button type="button" class="button primary" data-option-action="save">Save</button><button type="button" class="button secondary" data-option-action="cancel">Cancel</button>';
+    const used = item.usedBy > 0;
+    return `${levels ? `<button type="button" class="option-icon" data-option-action="up" aria-label="Move ${escapeHtml(item.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="option-icon" data-option-action="down" aria-label="Move ${escapeHtml(item.name)} down" ${index === count - 1 ? 'disabled' : ''}>↓</button>` : ''}<button type="button" class="option-icon" data-option-action="edit" aria-label="Edit ${escapeHtml(item.name)}" title="Edit">✎</button><button type="button" class="option-icon danger" data-option-action="remove" aria-label="Remove ${escapeHtml(item.name)}" ${used ? `disabled title="Used by ${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}: switch it off instead"` : 'title="Remove"'}>×</button>`;
+  }
+  function countryTile(item, index, count, editing) {
+    return `<div class="option-row option-tile ${item.active ? '' : 'is-off'} ${editing ? 'is-editing' : ''}" data-index="${index}" data-key="${escapeHtml(item.name)}" style="--tile-hue: ${countryHue(item.name)}">
+      <div class="tile-top"><div class="option-main">${optionText(item, false, editing)}</div>${optionSwitch(item)}</div>
+      <div class="tile-foot">${optionUsage(item)}<div class="option-actions">${optionTools(item, index, count, false, editing)}</div></div>
+      ${item.active ? '' : '<span class="tile-stamp" aria-hidden="true">Off</span>'}
+    </div>`;
+  }
+  // Price levels are a ladder: numbered rungs in a straight column, in the order the dropdowns show them.
+  function levelStep(item, index, count, editing) {
+    return `<div class="option-row level-step ${item.active ? '' : 'is-off'} ${editing ? 'is-editing' : ''}" data-index="${index}" data-key="${escapeHtml(item.name)}">
+      <span class="level-medal" aria-hidden="true">${index + 1}</span>
+      <div class="level-card">
+        <div class="option-main">${optionText(item, true, editing)}</div>
+        ${editing ? '' : optionUsage(item)}
+        <div class="option-actions">${optionTools(item, index, count, true, editing)}</div>
+        ${optionSwitch(item)}
+      </div>
+    </div>`;
+  }
+  function renderListOptions() {
+    const options = state.listOptions;
+    if (!options) return;
+    $$('#listsCard .option-list').forEach(section => {
+      const type = section.dataset.optionType;
+      const items = options[type] || [];
+      const off = items.filter(item => !item.active).length;
+      section.querySelector('[data-option-summary]').textContent = `${items.length} ${type === 'countries' ? 'countr' + (items.length === 1 ? 'y' : 'ies') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
+      const query = (optionSearch[type] || '').trim().toLowerCase();
+      const rows = section.querySelector('[data-option-rows]');
+      const visible = items.map((item, index) => ({ item, index })).filter(({ item }) => !query || item.name.toLowerCase().includes(query));
+      const draw = type === 'priceLevels' ? levelStep : countryTile;
+      flipMove(rows, () => {
+        rows.innerHTML = visible.map(({ item, index }) => draw(item, index, items.length, optionEditing === `${type}|${index}`)).join('')
+          || `<p class="option-empty">${query ? 'No matches.' : 'Nothing here yet.'}</p>`;
+      });
+      if (optionEditing?.startsWith(`${type}|`)) requestAnimationFrame(() => { const input = rows.querySelector('.is-editing input:not([disabled])'); input?.focus(); input?.select(); });
+    });
+  }
+  async function saveListOptions(type, items, message) {
+    const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active }) => ({ name, description, active })) }) });
+    state.listOptions = { ...state.listOptions, [type]: data.items };
+    if (type === 'countries') state.countries = data.active; else state.priceLevels = data.active;
+    if (type === 'priceLevels') state.priceLevelInfo = data.items.map(({ name, description }) => ({ name, description }));
+    optionEditing = null;
+    renderListOptions();
+    toast(message || data.message);
+  }
+  async function changeListOptions(section, change, message) {
+    const type = section.dataset.optionType;
+    const items = (state.listOptions[type] || []).map(item => ({ ...item }));
+    if (change(items) === false) return;
+    try { await saveListOptions(type, items, message); } catch (error) { toast(error.message); renderListOptions(); }
+  }
+  $('#listsCard')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-option-action]');
+    if (!button || button.disabled) return;
+    const section = button.closest('.option-list');
+    const type = section.dataset.optionType;
+    const index = Number(button.closest('.option-row').dataset.index);
+    const item = state.listOptions[type][index];
+    const action = button.dataset.optionAction;
+    if (action === 'edit') { optionEditing = `${type}|${index}`; return renderListOptions(); }
+    if (action === 'cancel') { optionEditing = null; return renderListOptions(); }
+    if (action === 'toggle') return flipSwitch(button).then(() => changeListOptions(section, items => { items[index].active = !items[index].active; }, `${item.name} ${item.active ? 'switched off for new price lists' : 'offered again'}.`));
+    if (action === 'remove') return changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`);
+    if (action === 'up' || action === 'down') return changeListOptions(section, items => { const to = index + (action === 'up' ? -1 : 1); [items[index], items[to]] = [items[to], items[index]]; }, `${item.name} moved ${action}.`);
+    if (action === 'save') {
+      const row = button.closest('.option-row');
+      const name = row.querySelector('.option-name-input').value.trim();
+      const description = row.querySelector('.option-desc-input')?.value.trim() ?? item.description;
+      if (!name) return toast('Enter a name.');
+      return changeListOptions(section, items => { items[index] = { ...items[index], name, description }; }, `${name} saved.`);
+    }
+  });
+  $('#listsCard')?.addEventListener('keydown', event => {
+    if (!event.target.closest('.option-row.is-editing')) return;
+    if (event.key === 'Enter') { event.preventDefault(); event.target.closest('.option-row').querySelector('[data-option-action="save"]').click(); }
+    if (event.key === 'Escape') { event.preventDefault(); optionEditing = null; renderListOptions(); }
+  });
+  $$('#listsCard [data-option-add]').forEach(form => form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = form.querySelector('input');
+    const name = input.value.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const section = form.closest('.option-list');
+    if ((state.listOptions[section.dataset.optionType] || []).some(item => item.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already in the list.`);
+    await changeListOptions(section, items => {
+      if (section.dataset.optionType === 'countries') {
+        // Countries stay alphabetical; price levels keep the order you set.
+        items.push({ name, description: '', active: true, usedBy: 0 });
+        items.sort((a, b) => a.name.localeCompare(b.name));
+      } else items.push({ name, description: '', active: true, usedBy: 0 });
+    }, `${name} added.`);
+    input.value = '';
+  }));
+  // --- Config › Users (same flow as QRTS): look a person up by biometrics number in the master
+  // list, choose a role, add. Change roles or turn access off in the list. You can't change your
+  // own access, IT staff are automatic, and the last admin can't be removed. ---
+  const ROLE_LABELS = { Admin: 'Admin', User: 'Export only' };
+  let userAccounts = [];
+  let lookedUp = null;
+  let lookupTicket = 0;
+  let usersSignature = ''; // the last list drawn, to skip redraws when nothing changed
+  const initials = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  async function loadUsers() {
+    try {
+      const data = await api('users-list');
+      setUsers(data.users || []);
+    } catch (error) { toast(error.message); }
+  }
+  /** Rebuilds the table only when the list really changed, so reopening Users doesn't redraw it mid-slide. */
+  function setUsers(list) {
+    const signature = JSON.stringify(list);
+    if (signature === usersSignature) return;
+    usersSignature = signature;
+    userAccounts = list;
+    renderUsers();
+  }
+  // Everyone is an ID badge on a lanyard: role band (pink for Admin, slate for Export only), initials,
+  // department, biometrics number, a two-way role control and the access switch.
+  function userBadge(account) {
+    const self = account.username === state.user?.username;
+    const admin = account.role === 'Admin';
+    const name = escapeHtml(account.name);
+    const details = escapeHtml([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file');
+    return `<article class="user-badge ${admin ? 'is-admin' : 'is-export'} ${account.active ? '' : 'is-off'} ${self ? 'is-self' : ''}" data-id="${account.id}" data-key="user-${account.id}" aria-label="${name}">
+      <span class="badge-clip" aria-hidden="true"></span>
+      <div class="badge-band" aria-hidden="true"><span>LRN</span><span class="badge-band-role">${ROLE_LABELS[account.role] || escapeHtml(account.role)}</span></div>
+      ${self ? '<span class="badge-ribbon">You</span>' : ''}
+      <span class="user-avatar badge-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
+      <strong class="badge-name" title="${name}">${name}</strong>
+      <small class="badge-dept" title="${details}">${details}</small>
+      ${account.biometricsId ? `<span class="badge-bio">Bio ${escapeHtml(account.biometricsId)}</span>` : ''}
+      ${self
+        ? '<p class="badge-locked">Your own access can’t be changed here.</p>'
+        : `<div class="badge-role" data-role="${escapeHtml(account.role)}" role="radiogroup" aria-label="Role for ${name}">${Object.entries(ROLE_LABELS).map(([value, label]) => `<button type="button" role="radio" aria-checked="${value === account.role}" data-set-role="${value}" ${account.active ? '' : 'disabled'}>${label}</button>`).join('')}</div>`}
+      <footer class="badge-foot">
+        <span class="user-last">${account.lastLogin ? `Seen ${escapeHtml(formatRelativeTime(account.lastLogin))}` : 'Never signed in'}</span>
+        ${self ? '' : `<button type="button" class="option-toggle user-access-toggle" role="switch" aria-checked="${account.active}" aria-label="${account.active ? 'Remove' : 'Restore'} access for ${name}" title="${account.active ? 'Can sign in. Click to remove access.' : 'No access. Click to restore.'}">${SWITCH_PARTS}</button>`}
+      </footer>
+      ${account.active ? '' : '<span class="badge-stamp" aria-hidden="true">Access removed</span>'}
+    </article>`;
+  }
+  function renderUsers() {
+    const rows = $('#userRows');
+    if (!rows) return;
+    const active = userAccounts.filter(account => account.active).length;
+    $('#userListCount').textContent = `${active} with access${userAccounts.length > active ? ` · ${userAccounts.length - active} removed` : ''}`;
+    flipMove($('#userBadgeGrid'), () => { rows.innerHTML = userAccounts.map(userBadge).join(''); });
+  }
+  async function updateUser(id, changes) {
+    try {
+      const data = await api('users-update', { method: 'POST', body: JSON.stringify({ id, ...changes }) });
+      setUsers(data.users || userAccounts);
+      toast(data.message);
+    } catch (error) { toast(error.message); renderUsers(); }
+  }
+  $('#userRows')?.addEventListener('click', async event => {
+    // Role: the pill slides to the new side right away, then the change is saved.
+    const roleButton = event.target.closest('[data-set-role]');
+    if (roleButton) {
+      const control = roleButton.parentElement;
+      const badge = roleButton.closest('.user-badge');
+      const role = roleButton.dataset.setRole;
+      if (roleButton.disabled || control.dataset.role === role) return;
+      control.dataset.role = role;
+      control.querySelectorAll('[data-set-role]').forEach(button => button.setAttribute('aria-checked', String(button === roleButton)));
+      badge.classList.toggle('is-admin', role === 'Admin');
+      badge.classList.toggle('is-export', role !== 'Admin');
+      badge.querySelector('.badge-band-role').textContent = ROLE_LABELS[role];
+      return updateUser(Number(badge.dataset.id), { role });
+    }
+    const toggle = event.target.closest('.user-access-toggle');
+    if (!toggle) return;
+    const account = userAccounts.find(item => item.id === Number(toggle.closest('.user-badge').dataset.id));
+    if (!account) return;
+    if (account.active && !(await confirmModal({ kicker: 'Remove access', title: `Remove ${account.name}'s access?`, text: 'They will no longer be able to sign in. Their saved work and history stay. You can turn access back on any time.', confirmLabel: 'Remove access' }))) return;
+    await flipSwitch(toggle);
+    updateUser(account.id, { active: !account.active });
+  });
+  /** Waits for an animation, but never longer than `ms` (frames can pause in background tabs). */
+  const settle = (anim, ms) => Promise.race([anim.finished.catch(() => {}), new Promise(resolve => setTimeout(resolve, ms))]).then(() => { if (anim.playState === 'running') anim.finish(); });
+  /** Flips the blank "Add a user" badge over into the lookup form (and back); the other badges glide aside. */
+  async function setAddBadge(open) {
+    const badge = $('#userAddBadge');
+    if (!badge || badge.classList.contains('is-open') === open || badge.dataset.flipping) return;
+    const swap = () => {
+      badge.classList.toggle('is-open', open);
+      badge.querySelector('.badge-add-front').hidden = open;
+      badge.querySelector('.badge-add-back').hidden = !open;
+      if (!open) {
+        const result = $('#userLookupResult');
+        result.getAnimations().forEach(anim => anim.cancel());
+        result.hidden = true;
+        result.innerHTML = '';
+        $('#userLookupInput').value = '';
+        lookedUp = null;
+        lookupTicket++;
+      }
+    };
+    if (reducedMotion()) swap();
+    else {
+      badge.dataset.flipping = '1';
+      await settle(badge.animate([{ transform: 'perspective(900px) rotateY(0deg)' }, { transform: 'perspective(900px) rotateY(90deg)' }], { duration: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }), 300);
+      flipMove($('#userBadgeGrid'), swap);
+      badge.getAnimations().forEach(anim => anim.cancel());
+      await settle(badge.animate([{ transform: 'perspective(900px) rotateY(-90deg)' }, { transform: 'perspective(900px) rotateY(0deg)' }], { duration: 340, easing: FOLDER_EASE }), 500);
+      delete badge.dataset.flipping;
+    }
+    (open ? $('#userLookupInput') : $('#userAddOpen'))?.focus({ preventScroll: true });
+  }
+  $('#userAddOpen')?.addEventListener('click', () => setAddBadge(true));
+  $('#userAddClose')?.addEventListener('click', () => setAddBadge(false));
+  $('#userAddBadge')?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); setAddBadge(false); } });
+  /**
+   * Swaps the lookup card's content with one motion: the card eases to its new height (growing out
+   * of the form when it first appears) while the new lines rise in one after another.
+   */
+  function morphLookup(update) {
+    const box = $('#userLookupResult');
+    const wasHidden = box.hidden;
+    const fromHeight = wasHidden ? 0 : box.getBoundingClientRect().height;
+    box.getAnimations().forEach(anim => anim.cancel());
+    box.classList.remove('is-busy');
+    update(box);
+    box.hidden = false;
+    if (reducedMotion()) return;
+    const toHeight = box.getBoundingClientRect().height;
+    const start = wasHidden
+      ? { height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '-14px', opacity: 0, transform: 'scale(0.98)' }
+      : { height: `${fromHeight}px` };
+    const resize = box.animate([start, { height: `${toHeight}px`, paddingTop: '14px', paddingBottom: '14px', marginTop: '0px', opacity: 1, transform: 'none' }], { duration: 480, easing: FOLDER_EASE });
+    box.classList.add('is-morphing');
+    resize.finished.catch(() => {}).finally(() => box.classList.remove('is-morphing'));
+    const lines = [...box.children].map((el, index) => el.animate(
+      [{ opacity: 0, transform: 'translate3d(0, 10px, 0)' }, { opacity: 1, transform: 'translate3d(0, 0, 0)' }],
+      { duration: 440, delay: 70 + index * 45, easing: FOLDER_EASE, fill: 'backwards' }
+    ));
+    setTimeout(() => [resize, ...lines].forEach(anim => anim.playState === 'running' && anim.finish()), 900); // lands even if frames pause
+  }
+  /** Folds the lookup card back into the form (after someone is added). */
+  function closeLookup() {
+    const box = $('#userLookupResult');
+    if (box.hidden) return;
+    box.getAnimations().forEach(anim => anim.cancel());
+    if (reducedMotion()) { box.hidden = true; return; }
+    box.classList.add('is-morphing');
+    const fold = box.animate(
+      [{ height: `${box.getBoundingClientRect().height}px`, opacity: 1 }, { height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '-14px', opacity: 0, transform: 'scale(0.98)' }],
+      { duration: 380, easing: FOLDER_EASE, fill: 'forwards' }
+    );
+    fold.finished.then(() => { box.hidden = true; box.innerHTML = ''; box.getAnimations().forEach(anim => anim.cancel()); }).catch(() => {})
+      .finally(() => box.classList.remove('is-morphing'));
+    setTimeout(() => { if (fold.playState === 'running') fold.finish(); }, 600); // lands even if frames pause
+  }
+  function renderLookup(person, error = '') {
+    morphLookup(box => fillLookup(box, person, error));
+  }
+  function fillLookup(box, person, error) {
+    if (error) { box.innerHTML = `<p class="user-lookup-error">${escapeHtml(error)}</p>`; return; }
+    const existing = person.account;
+    const blocked = person.managedByIt ? 'IT department staff get admin access automatically when they sign in, so they aren’t added here.'
+      : existing?.active ? `${person.name} already has access as ${ROLE_LABELS[existing.role] || existing.role}. Change their role on their badge.` : '';
+    const warnings = [!person.employed ? 'Not an active employee in the master list.' : '', !person.hasLogin ? 'No company login yet: they can sign in once IT creates it.' : ''].filter(Boolean);
+    box.innerHTML = `<div class="user-found">
+        <span class="user-avatar large" aria-hidden="true">${escapeHtml(initials(person.name))}</span>
+        <div class="user-found-info"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml([person.position, person.department].filter(Boolean).join(' · ') || 'No position on file')}</small><small>Employee ${escapeHtml(person.employeeId)} · Bio ${escapeHtml(person.biometricsId)}</small></div>
+      </div>
+      ${warnings.map(text => `<p class="user-lookup-warning">${escapeHtml(text)}</p>`).join('')}
+      ${blocked ? `<p class="user-lookup-note">${escapeHtml(blocked)}</p>` : `<div class="user-add-actions">
+        <div class="user-role-choice" role="radiogroup" aria-label="Role">
+          <label><input type="radio" name="newUserRole" value="User" checked><span><strong>Export only</strong><small>View and export approved price lists</small></span></label>
+          <label><input type="radio" name="newUserRole" value="Admin"><span><strong>Admin</strong><small>Upload, edit, approve, export and Config</small></span></label>
+        </div>
+        <button type="button" id="userAddButton" class="button primary">${existing ? 'Restore access' : 'Add user'}</button>
+      </div>`}`;
+  }
+  $('#userLookupForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const id = $('#userLookupInput').value.trim();
+    if (!id) return;
+    lookedUp = null;
+    const ticket = ++lookupTicket; // a slower earlier reply can't overwrite this one
+    const button = event.currentTarget.querySelector('button[type="submit"]');
+    button.classList.add('is-loading');
+    $('#userLookupResult').classList.add('is-busy'); // the previous card dims while the next one loads
+    try {
+      const response = await fetch(`../api/users/lookup.php?biometrics_id=${encodeURIComponent(id)}`, { headers: { 'X-CSRF-Token': state.csrf || '' } });
+      const data = await response.json().catch(() => ({ ok: false, message: 'Invalid server response.' }));
+      if (ticket !== lookupTicket) return;
+      if (!data.ok) return renderLookup(null, data.message || 'Lookup failed.');
+      lookedUp = data.person;
+      renderLookup(lookedUp);
+    } catch { if (ticket === lookupTicket) renderLookup(null, 'Could not reach the server.'); }
+    finally { if (ticket === lookupTicket) button.classList.remove('is-loading'); }
+  });
+  $('#userLookupResult')?.addEventListener('click', async event => {
+    const button = event.target.closest('#userAddButton');
+    if (!button || !lookedUp) return;
+    button.disabled = true;
+    try {
+      const role = $('#userLookupResult input[name="newUserRole"]:checked')?.value || 'User';
+      const data = await api('users-create', { method: 'POST', body: JSON.stringify({ biometricsId: lookedUp.biometricsId, role }) });
+      setUsers(data.users || userAccounts);
+      closeLookup();
+      setTimeout(() => setAddBadge(false), 260); // fold the badge back once the card has folded
+      $('#userLookupInput').value = '';
+      lookedUp = null;
+      toast(data.message);
+    } catch (error) { toast(error.message); button.disabled = false; }
+  });
+
+  $$('#listsCard [data-option-search]').forEach(input => input.addEventListener('input', () => {
+    optionSearch[input.closest('.option-list').dataset.optionType] = input.value;
+    renderListOptions();
+  }));
 
   // --- Search keywords, inline in the price table: each product-group row shows its shortcuts as
   // chips (everyone sees them as hints); admins add one with "+ keyword" and remove one with ×.
@@ -5595,6 +6006,12 @@
     return added;
   }
   const libraryInput = $('#libraryFileInput');
+  // The blank print uploads into the folder that is open (or the chosen destination on All photos).
+  $('#libraryGrid')?.addEventListener('click', event => {
+    if (!event.target.closest('.library-upload-print')) return;
+    if (state.libraryFolder !== null) { $('#libraryUploadFolder').value = folderValue(state.libraryFolder); updateLibraryUploadLabel(); }
+    $('#libraryUploadButton').click();
+  });
   $('#libraryUploadButton')?.addEventListener('click', () => {
     if (libraryUploading) return;
     libraryUploadContext = { target: 'library', category: folderFromValue($('#libraryUploadFolder').value) };

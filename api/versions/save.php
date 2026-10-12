@@ -35,10 +35,15 @@ $country = canonical_country($countryInput);
 if ($country === null) {
     json_response(['ok' => false, 'message' => "\"{$countryInput}\" is not in the country list. Choose a country from the dropdown."], 422);
 }
-// Price levels are numbered (Price Level 1, 2, …).
 $priceLevel = canonical_price_level($priceLevelInput);
 if ($priceLevel === null) {
-    json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not a valid price level. Choose Price Level 1 to " . count(PRICE_LEVELS) . '.'], 422);
+    json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not in the price level list. Choose a price level from the dropdown."], 422);
+}
+// New uploads only use countries and price levels that are still offered (Config); existing
+// price lists keep working with ones that were switched off later.
+if ($isUpload) {
+    if (!find_option('countries', $country)['active']) json_response(['ok' => false, 'message' => "{$country} is no longer offered for new price lists. Choose another country."], 422);
+    if (!find_option('priceLevels', $priceLevel)['active']) json_response(['ok' => false, 'message' => "{$priceLevel} is no longer offered for new price lists. Choose another price level."], 422);
 }
 
 if ($isUpload) {
@@ -58,6 +63,9 @@ if ($isUpload) {
     $editId = clean_text($data['id'] ?? '', 32);
     if ($editId === '') json_response(['ok' => false, 'message' => 'Open an existing price list before saving changes. New lists require a validated official workbook upload.'], 422);
     $editBase = find_open_version($user, $editId);
+    // Country and price level are set at upload: saving price changes keeps the list's own.
+    if (trim((string) ($editBase['country'] ?? '')) !== '') $country = $editBase['country'];
+    if (trim((string) ($editBase['priceLevel'] ?? '')) !== '') $priceLevel = $editBase['priceLevel'];
     if (!empty($editBase['templateVersion'])) {
         if (($data['headers'] ?? null) !== price_list_template()['normalizedHeaders'] || ($data['priceColumns'] ?? null) !== [8, 9]) {
             json_response(['ok' => false, 'message' => 'The price list columns cannot be changed. Use the approved template layout.'], 422);

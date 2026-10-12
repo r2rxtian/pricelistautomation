@@ -12,7 +12,7 @@ const ROLE_ADMIN = 'Admin';
 const ROLE_USER = 'User';
 
 const ROLE_PERMISSIONS = [
-    ROLE_ADMIN => ['upload', 'update', 'save', 'approve', 'export', 'viewAudit', 'manageImages'],
+    ROLE_ADMIN => ['upload', 'update', 'save', 'approve', 'export', 'viewAudit', 'manageImages', 'manageUsers'],
     ROLE_USER => ['export'],
 ];
 

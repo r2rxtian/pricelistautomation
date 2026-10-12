@@ -131,6 +131,15 @@ function ensure_database_schema(PDO $connection): void
             updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
+        "IF OBJECT_ID(N'dbo.PLA_ACD_ListOptions', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ACD_ListOptions (
+            option_type varchar(20) NOT NULL,
+            option_name nvarchar(120) NOT NULL,
+            description nvarchar(300) NULL,
+            is_active bit NOT NULL CONSTRAINT DF_PLA_ACD_ListOptionActive DEFAULT 1,
+            sort_order int NOT NULL,
+            CONSTRAINT PK_PLA_ACD_ListOptions PRIMARY KEY (option_type, option_name)
+         )",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_ACD_Notifications_Recipient')
          CREATE INDEX IX_PLA_ACD_Notifications_Recipient ON dbo.PLA_ACD_Notifications (recipient, created_at DESC)",
     ];
@@ -493,4 +502,38 @@ function database_save_search_keywords(array $entry): ?array
     $connection->prepare('INSERT INTO dbo.PLA_ACD_SearchKeywords (keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([$entry['id'], $entry['scope'], $entry['category'], $entry['group'], $entry['code'], implode(',', $entry['keywords']), database_datetime($entry['updatedAt']), $entry['updatedBy']]);
     return $entry;
+}
+
+// ---------------------------------------------------------------------------
+// Country and price level lists
+// ---------------------------------------------------------------------------
+
+function database_get_list_options(string $type): ?array
+{
+    $statement = database_connection()->prepare('SELECT option_name, description, is_active FROM dbo.PLA_ACD_ListOptions WHERE option_type = ? ORDER BY sort_order');
+    $statement->execute([$type]);
+    $rows = $statement->fetchAll();
+    if (!$rows) return null;
+    return array_map(static fn(array $row): array => [
+        'name' => (string) $row['option_name'],
+        'description' => (string) ($row['description'] ?? ''),
+        'active' => (bool) $row['is_active'],
+    ], $rows);
+}
+
+function database_save_list_options(string $type, array $items): void
+{
+    $connection = database_connection();
+    $connection->beginTransaction();
+    try {
+        $connection->prepare('DELETE FROM dbo.PLA_ACD_ListOptions WHERE option_type = ?')->execute([$type]);
+        $insert = $connection->prepare('INSERT INTO dbo.PLA_ACD_ListOptions (option_type, option_name, description, is_active, sort_order) VALUES (?, ?, ?, ?, ?)');
+        foreach (array_values($items) as $order => $item) {
+            $insert->execute([$type, $item['name'], $item['description'] ?? '', $item['active'] ? 1 : 0, $order]);
+        }
+        $connection->commit();
+    } catch (Throwable $error) {
+        $connection->rollBack();
+        throw $error;
+    }
 }

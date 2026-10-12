@@ -5,6 +5,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/constants.php';
+require_once __DIR__ . '/options.php';
 
 function clean_text(mixed $value, int $max = 180): string
 {
@@ -20,21 +21,20 @@ function clean_number(mixed $value, float $min, float $max): ?float
     return (float) $number;
 }
 
-/** Maps "1", "level 1", "PL1" or "Price Level 1" to "Price Level 1"; null when it isn't a configured level. */
+/**
+ * A price level from the configured list (rules/options.php): its exact name in any case, or the
+ * shorthand "1", "level 1", "PL1" for "Price Level 1". Null when it isn't listed.
+ */
 function canonical_price_level(string $input): ?string
 {
+    $found = find_option('priceLevels', $input);
+    if ($found) return $found['name'];
     if (!preg_match('/^\s*(?:price\s*level|level|pl|lvl)?\s*#?\s*(\d{1,3})\s*$/i', $input, $match)) return null;
-    $level = 'Price Level ' . (int) $match[1];
-    return in_array($level, PRICE_LEVELS, true) ? $level : null;
+    return find_option('priceLevels', 'Price Level ' . (int) $match[1])['name'] ?? null;
 }
 
 /** Maps a country (any case/spacing) to its entry in the configured list, or null when it isn't listed. */
 function canonical_country(string $input): ?string
 {
-    $key = mb_strtolower(preg_replace('/\s+/u', ' ', trim($input)));
-    if ($key === '') return null;
-    foreach (COUNTRIES as $country) {
-        if (mb_strtolower($country) === $key) return $country;
-    }
-    return COUNTRIES ? null : trim($input);
+    return find_option('countries', $input)['name'] ?? null;
 }

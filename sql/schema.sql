@@ -150,6 +150,21 @@ BEGIN
 END;
 GO
 
+-- Country and price level lists (Config › Countries & price levels). Empty = the defaults in
+-- rules/constants.php. Inactive entries stay valid for existing price lists only.
+IF OBJECT_ID(N'dbo.PLA_ACD_ListOptions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PLA_ACD_ListOptions (
+        option_type varchar(20) NOT NULL,       -- 'countries' or 'priceLevels'
+        option_name nvarchar(120) NOT NULL,
+        description nvarchar(300) NULL,
+        is_active bit NOT NULL CONSTRAINT DF_PLA_ACD_ListOptionActive DEFAULT 1,
+        sort_order int NOT NULL,
+        CONSTRAINT PK_PLA_ACD_ListOptions PRIMARY KEY (option_type, option_name)
+    );
+END;
+GO
+
 -- Search keywords (Config): admin shortcuts for a product group or one product code.
 IF OBJECT_ID(N'dbo.PLA_ACD_SearchKeywords', N'U') IS NULL
 BEGIN
