@@ -910,7 +910,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=122"></script>
+<script src="../scripts/app.js?v=123"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
