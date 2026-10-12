@@ -10361,8 +10361,8 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
    Prices page: the row number and column header light up for the row and column under the mouse.
    ========================================================================== */
 #priceTable td.col-row-num.is-guide-hover:not(.is-guide-active) { color: var(--pink) !important; font-weight: 700; }
-#priceTable thead tr:not(.col-letter-row) th.col-hover:not(.is-guide-active) { background: color-mix(in srgb, var(--pink) 6%, var(--surface-th)) !important; color: var(--pink) !important; }
+#priceTable tr.excel-header:not(.col-letter-row) th.col-hover:not(.is-guide-active) { background: color-mix(in srgb, var(--pink) 6%, var(--surface-th)) !important; color: var(--pink) !important; }
 
 
-[data-theme="dark"] #priceTable thead tr:not(.col-letter-row) th.col-hover:not(.is-guide-active) { background: #22171c !important; color: #eb97ae !important; }
+[data-theme="dark"] #priceTable tr.excel-header:not(.col-letter-row) th.col-hover:not(.is-guide-active) { background: #22171c !important; color: #eb97ae !important; }
 [data-theme="dark"] #priceTable td.col-row-num.is-guide-hover:not(.is-guide-active) { color: #eb97ae !important; }

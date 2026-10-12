@@ -1163,6 +1163,10 @@
         state.activeCell.td = null;
       }
     }
+    // The rows were just replaced: forget the old hover so the next mouse move draws it fresh.
+    hoveredColumn = -1;
+    hoveredHeader = null;
+    hoveredRow = null;
     updateFormulaBar();
   }
 
@@ -1246,28 +1250,52 @@
     const rowNumber = tr?.querySelector('.col-row-num')?.textContent.trim() || String(rowIdx + 1);
     return { letter: getColumnLetter(position >= 0 ? position : colIdx), position, rowNumber };
   }
-  /** Column hover: tints every cell in the hovered sheet column (and its letter), like the row hover. */
-  let hoveredColumn = -1;
-  function setColumnHover(position) {
-    if (position === hoveredColumn) return;
-    $$('#priceTable .col-hover').forEach(el => el.classList.remove('col-hover'));
-    hoveredColumn = position;
-    if (position < 0) return;
-    $$('#priceTable tr.excel-data-row').forEach(tr => tr.querySelectorAll('.excel-cell')[position]?.classList.add('col-hover'));
-    $$(`#priceTable th[data-col-letter="${position}"]`).forEach(th => th.classList.add('col-hover'));
-    columnHeaders(position).forEach(th => th.classList.add('col-hover'));
+  /**
+   * The block a row belongs to: the data rows under one header (the table header, or a repeated
+   * header such as Presentation Stands' own layout) and that header's rows. Column highlights stay
+   * inside the block, so they always sit under the header they belong to.
+   */
+  function headerBlock(tr) {
+    const isHeader = row => row.classList.contains('excel-header');
+    const rows = [];
+    let header = [];
+    let row = tr;
+    while (row && !isHeader(row)) { if (row.classList.contains('excel-data-row')) rows.unshift(row); row = row.previousElementSibling; }
+    while (row && isHeader(row)) { header.unshift(row); row = row.previousElementSibling; }
+    if (!header.length) header = [...(dom.table.tHead?.rows || [])];
+    for (row = tr.nextElementSibling; row && !isHeader(row); row = row.nextElementSibling) {
+      if (row.classList.contains('excel-data-row')) rows.push(row);
+    }
+    return { rows, header };
   }
-  /** The named header cells (e.g. "PRICE/PC USD") above a sheet column, found by where its letter sits. */
-  function columnHeaders(position) {
-    const letter = dom.table?.querySelector(`thead th[data-col-letter="${position}"]`);
+  /** A column's letter and named header cells (e.g. "PRICE/PC USD") within one header, found by where its letter sits. */
+  function headerCells(headerRows, position) {
+    const letter = headerRows.map(row => row.querySelector(`th[data-col-letter="${position}"]`)).find(Boolean);
     if (!letter) return [];
     const box = letter.getBoundingClientRect();
     const middle = (box.left + box.right) / 2;
-    return [...dom.table.querySelectorAll('thead tr:not(.col-letter-row) th')].filter(th => {
+    const named = headerRows.filter(row => !row.classList.contains('col-letter-row')).flatMap(row => [...row.children]).filter(th => {
       if (th.colSpan > 1) return false;
       const rect = th.getBoundingClientRect();
       return rect.left <= middle && middle <= rect.right;
     });
+    return [letter, ...named];
+  }
+  /** Column hover: tints the hovered column within its block, and lights that block's header for it. */
+  let hoveredColumn = -1;
+  let hoveredHeader = null;
+  function setColumnHover(position, tr = null) {
+    const block = position >= 0 && tr ? headerBlock(tr) : null;
+    const header = block?.header[0] || null;
+    // Same column as before and still drawn (a re-render or edit can wipe the tint): nothing to do.
+    const stillDrawn = !block || block.rows.some(row => row.querySelectorAll('.excel-cell')[position]?.classList.contains('col-hover'));
+    if (position === hoveredColumn && header === hoveredHeader && stillDrawn) return;
+    $$('#priceTable .col-hover').forEach(el => el.classList.remove('col-hover'));
+    hoveredColumn = position;
+    hoveredHeader = header;
+    if (!block) return;
+    block.rows.forEach(row => row.querySelectorAll('.excel-cell')[position]?.classList.add('col-hover'));
+    headerCells(block.header, position).forEach(th => th.classList.add('col-hover'));
   }
   /** Row hover: the hovered row's number lights up, like the column's header does. */
   let hoveredRow = null;
@@ -1281,15 +1309,23 @@
     setRowHover(event.target.closest('tr.excel-data-row'));
     const td = event.target.closest('.excel-cell');
     if (!td) return setColumnHover(-1);
-    setColumnHover([...td.closest('tr').querySelectorAll('.excel-cell')].indexOf(td));
+    setColumnHover([...td.closest('tr').querySelectorAll('.excel-cell')].indexOf(td), td.closest('tr'));
   });
-  dom.table?.addEventListener('mouseleave', () => { setColumnHover(-1); setRowHover(null); });
+  const clearTableHover = () => { setColumnHover(-1); setRowHover(null); };
+  dom.table?.addEventListener('mouseleave', clearTableHover);
+  // Safety nets: the browser can miss the table's mouseleave (a popup opening over it, the window
+  // losing focus, fast moves), so any pointer outside the table also clears the tint.
+  document.addEventListener('pointerover', event => {
+    if (hoveredColumn !== -1 || hoveredRow) { if (!dom.table?.contains(event.target)) clearTableHover(); }
+  }, { passive: true });
+  window.addEventListener('blur', clearTableHover);
+  document.addEventListener('mouseleave', clearTableHover);
   /** Highlights the active cell's column letter and header, and its row number, like Excel's headings. */
   function highlightCellGuides(td) {
     $$('#priceTable .is-guide-active').forEach(el => el.classList.remove('is-guide-active'));
     if (!td) return;
     const { position } = cellReference(td, 0, 0);
-    if (position >= 0) [...$$(`#priceTable th[data-col-letter="${position}"]`), ...columnHeaders(position)].forEach(th => th.classList.add('is-guide-active'));
+    if (position >= 0) headerCells(headerBlock(td.closest('tr')).header, position).forEach(th => th.classList.add('is-guide-active'));
     td.closest('tr')?.querySelector('.col-row-num')?.classList.add('is-guide-active');
   }
   function updateFormulaBar(force = false) {
