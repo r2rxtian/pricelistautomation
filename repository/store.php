@@ -16,7 +16,7 @@ require_once __DIR__ . '/../rules/workflow.php';
 
 function json_default_store(): array
 {
-    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => [], 'photoFolders' => []];
+    return ['versions' => [], 'auditLogs' => [], 'notifications' => [], 'productImages' => [], 'photoLibrary' => [], 'photoFolders' => [], 'searchKeywords' => []];
 }
 
 function json_read_store(): array
@@ -25,7 +25,7 @@ function json_read_store(): array
     $decoded = json_decode((string) file_get_contents(STORAGE_FILE), true);
     $store = is_array($decoded) ? array_replace(json_default_store(), $decoded) : json_default_store();
     unset($store['active']);
-    foreach (['versions', 'auditLogs', 'notifications', 'productImages', 'photoLibrary', 'photoFolders'] as $key) {
+    foreach (['versions', 'auditLogs', 'notifications', 'productImages', 'photoLibrary', 'photoFolders', 'searchKeywords'] as $key) {
         $store[$key] = is_array($store[$key]) ? array_values($store[$key]) : [];
     }
     $store['versions'] = array_map('normalize_version', $store['versions']);
@@ -364,5 +364,28 @@ function repo_delete_image(string $key): ?array
             }
         }
         return null;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Search keywords (Config): admin shortcuts for a product group or one product code
+// ---------------------------------------------------------------------------
+
+/** @return array<int,array{id:string,scope:string,category:string,group:string,code:string,keywords:array,updatedBy:string,updatedAt:string}> */
+function repo_list_search_keywords(): array
+{
+    if (database_enabled()) return database_list_search_keywords();
+    return array_values(array_filter(json_read_store()['searchKeywords'], 'is_array'));
+}
+
+/** Saves the keywords for one target (replacing what it had); no keywords removes the entry. */
+function repo_save_search_keywords(array $entry): ?array
+{
+    if (database_enabled()) return database_save_search_keywords($entry);
+    return json_mutate(function (array &$store) use ($entry) {
+        $store['searchKeywords'] = array_values(array_filter($store['searchKeywords'], fn($item) => ($item['id'] ?? '') !== $entry['id']));
+        if (!$entry['keywords']) return null;
+        $store['searchKeywords'][] = $entry;
+        return $entry;
     });
 }

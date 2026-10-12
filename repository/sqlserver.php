@@ -120,6 +120,17 @@ function ensure_database_schema(PDO $connection): void
             folder_name nvarchar(120) NOT NULL PRIMARY KEY,
             created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoFolderCreated DEFAULT SYSUTCDATETIME()
          )",
+        "IF OBJECT_ID(N'dbo.PLA_ACD_SearchKeywords', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ACD_SearchKeywords (
+            keyword_id varchar(64) NOT NULL PRIMARY KEY,
+            scope varchar(10) NOT NULL,
+            category_name nvarchar(120) NULL,
+            group_name nvarchar(200) NULL,
+            product_code nvarchar(80) NULL,
+            keywords nvarchar(1000) NOT NULL,
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
+            updated_by nvarchar(180) NOT NULL
+         )",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_ACD_Notifications_Recipient')
          CREATE INDEX IX_PLA_ACD_Notifications_Recipient ON dbo.PLA_ACD_Notifications (recipient, created_at DESC)",
     ];
@@ -453,4 +464,33 @@ function database_move_library_photo(string $id, string $category): ?array
         return array_replace($photo, ['category' => $category]);
     }
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// Search keywords
+// ---------------------------------------------------------------------------
+
+function database_list_search_keywords(): array
+{
+    $rows = database_connection()->query('SELECT keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by FROM dbo.PLA_ACD_SearchKeywords')->fetchAll();
+    return array_map(static fn(array $row): array => [
+        'id' => (string) $row['keyword_id'],
+        'scope' => (string) $row['scope'],
+        'category' => (string) ($row['category_name'] ?? ''),
+        'group' => (string) ($row['group_name'] ?? ''),
+        'code' => (string) ($row['product_code'] ?? ''),
+        'keywords' => array_values(array_filter(explode(',', (string) $row['keywords']), 'strlen')),
+        'updatedBy' => (string) $row['updated_by'],
+        'updatedAt' => database_iso($row['updated_at']),
+    ], $rows);
+}
+
+function database_save_search_keywords(array $entry): ?array
+{
+    $connection = database_connection();
+    $connection->prepare('DELETE FROM dbo.PLA_ACD_SearchKeywords WHERE keyword_id = ?')->execute([$entry['id']]);
+    if (!$entry['keywords']) return null;
+    $connection->prepare('INSERT INTO dbo.PLA_ACD_SearchKeywords (keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$entry['id'], $entry['scope'], $entry['category'], $entry['group'], $entry['code'], implode(',', $entry['keywords']), database_datetime($entry['updatedAt']), $entry['updatedBy']]);
+    return $entry;
 }

@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=109">
+    <link rel="stylesheet" href="../styles/app.css?v=125">
     <script>
     (function() {
         try {
@@ -133,7 +133,7 @@ $panel = APP_PAGES[$page]['panel'];
                 <div class="page-heading">
                     <div class="heading-left">
                         <p class="kicker">CURRENT FILE</p>
-                        <div class="title-line"><h1 id="listTitle">Start with a workbook</h1><span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span><button type="button" id="closeFileBtn" class="close-file-btn" title="Close this file" aria-label="Close this file" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close file</span></button></div>
+                        <div class="title-line"><h1 class="list-title"><button type="button" id="listSwitcher" class="title-switcher" aria-haspopup="dialog" aria-expanded="false" aria-controls="listSwitcherMenu" disabled><span id="listTitle">Start with a workbook</span><svg class="ls-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></h1><button type="button" class="list-context switch-trigger" title="Change country, price level or price list"><svg class="lc-globe" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><strong id="listCountry">—</strong><span class="lc-sep" aria-hidden="true">›</span><strong id="listPriceLevel">—</strong><svg class="lc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><button type="button" id="closeFileBtn" class="close-file-btn" title="Close this file" aria-label="Close this file" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close file</span></button></div>
                         <div class="meta-container">
                             <div class="file-identity-row">
                                 <svg class="file-badge-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -144,16 +144,8 @@ $panel = APP_PAGES[$page]['panel'];
                                 </svg>
                                 <span id="listMeta" class="list-subtitle">Upload an official .xlsx template to open and edit prices.</span>
                             </div>
-                            <div class="file-audit-row" id="savedMetaRow" hidden>
-                                <svg class="audit-clock-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <polyline points="12 6 12 12 16 14"/>
-                                </svg>
-                                <span id="savedMeta" class="saved-meta"></span>
-                            </div>
                             <div class="file-tags-row" id="listTagsRow" hidden>
-                                <span class="list-tag list-tag-country" title="Country"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><small>Country</small><strong id="listCountry">—</strong></span>
-                                <span class="list-tag" title="Price level"><small>Price level</small><strong id="listPriceLevel">—</strong></span>
+                                <span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span><span class="file-audit-row" id="savedMetaRow" hidden><span id="savedMeta" class="saved-meta"></span></span>
                                 <span id="approvalBanner" class="workflow-note" role="status" aria-live="polite" hidden>
                                     <span id="approvalBannerIcon" class="workflow-note-icon" aria-hidden="true"></span>
                                     <span id="approvalBannerText" class="workflow-note-text"></span>
@@ -164,12 +156,6 @@ $panel = APP_PAGES[$page]['panel'];
                                 </span>
                             </div>
                         </div>
-                    </div>
-                    <div id="metricGroup" class="metric-group" hidden>
-                        <div class="metric-item"><strong id="productCount">0</strong><span>Products</span></div>
-                        <div class="metric-item"><strong id="categoryCount">0</strong><span>Categories</span></div>
-                        <div class="metric-item"><strong id="priceColumnCount">0</strong><span>Price columns</span></div>
-                        <div class="metric-item"><strong id="currentAdjustment">0%</strong><span>Adjustment</span></div>
                     </div>
                     <div class="heading-actions">
                         <!-- Actions for the open file only: export it, save it. (Upload lives in the price list switcher.) -->
@@ -261,40 +247,27 @@ $panel = APP_PAGES[$page]['panel'];
                     <h2 id="emptyStateTitle">Import your current price list</h2>
                     <p id="emptyStateText">Drop an official .xlsx workbook here or browse your computer. Download the template from the upload window.</p>
                     <button id="emptyUploadButton" class="button primary edit-only">Upload Excel file</button>
-                    <button id="emptyBrowseListsButton" class="button secondary" type="button" hidden>Browse approved price lists</button>
-                    <div class="empty-open-saved" id="emptyOpenSaved" hidden>
+                    <button id="emptyBrowseListsButton" class="button secondary" type="button" hidden>Browse price lists</button>
+                    <p class="empty-open-saved" id="emptyOpenSaved" hidden>
                         <span class="empty-open-label">or</span>
-                        <div class="nav-cascade" data-cascade="empty" role="group" aria-label="Open saved price list">
-                            <label class="filter-field cascade-country"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Select from existing files</span><select class="nav-country" aria-label="Country"></select></label>
-                            <span class="cascade-arrow" aria-hidden="true">›</span>
-                            <label class="filter-field"><span>Price Level</span><select class="nav-level" aria-label="Price level"></select></label>
-                            <span class="cascade-arrow" aria-hidden="true">›</span>
-                            <label class="filter-field cascade-list"><span>Price List</span><select class="nav-list" aria-label="Price list"></select></label>
-                        </div>
-                    </div>
+                        <button type="button" id="emptyOpenFilesBtn" class="empty-open-files">Open a saved price list in Files <span aria-hidden="true">→</span></button>
+                    </p>
                 </section>
 
                 <section id="dataView" hidden>
                     <div class="data-panel full-table">
                     <div class="table-tools">
                         <div class="filter-group filter-group-wide">
-                            <button type="button" id="listSwitcher" class="list-switcher" aria-haspopup="dialog" aria-expanded="false" aria-controls="listSwitcherMenu" title="Switch price list">
-                                <svg class="ls-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                                <span class="ls-country" id="lsCountry">—</span><span class="ls-sep" aria-hidden="true">›</span>
-                                <span class="ls-level" id="lsLevel">—</span><span class="ls-sep" aria-hidden="true">›</span>
-                                <span class="ls-list" id="lsList">—</span>
-                                <svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-                            </button>
-                            <span class="filter-sep" aria-hidden="true"></span>
+                            <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search name, code or shortcut…"><kbd class="search-kbd">/</kbd></label>
                             <select id="categorySelect" class="sr-only" tabindex="-1" aria-hidden="true"></select>
                             <button type="button" id="categoryPicker" class="list-switcher category-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="categoryMenu" title="Filter by product category"><svg class="cp-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="cp-label" id="cpLabel">All categories</span><span class="cp-count" id="cpCount">0</span><svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-                            <label class="filter-field"><span>LRN</span><input id="codeFilterInput" type="search" placeholder="Code" autocomplete="off" list="codeFilterOptions"><datalist id="codeFilterOptions"></datalist></label>
-                            <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search descriptions, prices..."><kbd class="search-kbd">/</kbd></label>
+                            <div class="code-filter" id="codeFilter"><svg class="cf-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg><input id="codeFilterInput" type="text" placeholder="LRN code" autocomplete="off" spellcheck="false" role="combobox" aria-label="Filter by LRN code" aria-autocomplete="list" aria-expanded="false" aria-controls="codeSuggest"><button type="button" id="codeFilterClear" class="cf-clear" aria-label="Clear LRN code filter" hidden><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
                             <button type="button" id="clearFiltersBtn" class="text-button clear-filters-btn" hidden>Clear filters</button>
+                            <span id="productCountNote" class="toolbar-count" aria-live="polite"></span>
                         </div>
                         <div class="actions">
                             <span id="exportLockNote" class="export-lock-note" hidden></span>
-                            <button id="editButton" class="button primary toolbar-action perm-update is-disabled" type="button" aria-expanded="false" aria-controls="adjustmentBar" aria-disabled="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span>Edit prices</span></button>
+                            <button id="editButton" class="button primary toolbar-action perm-update is-disabled" type="button" aria-expanded="false" aria-controls="adjustmentBar" aria-disabled="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span>Edit prices</span><span class="edit-adj" id="editAdjustment" hidden></span></button>
                             <button id="resetPricesButton" class="button secondary toolbar-action perm-update is-disabled" type="button" aria-disabled="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span>Reset prices</span></button>
                         </div>
                     </div>
@@ -353,7 +326,6 @@ $panel = APP_PAGES[$page]['panel'];
                                     <option value="pending">Pending approval</option>
                                     <option value="approved">Approved</option>
                                     <option value="rejected">Rejected</option>
-                                    <option value="superseded">Older versions</option>
                                 </select>
                                 <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </div>
@@ -872,6 +844,14 @@ $panel = APP_PAGES[$page]['panel'];
     </form>
 </dialog>
 
+<dialog id="versionHistoryDialog" class="version-history-dialog" aria-labelledby="versionHistoryTitle">
+    <form method="dialog" class="dialog-card">
+        <div class="dialog-heading"><div><p class="kicker">Version history</p><h2 id="versionHistoryTitle">Price list</h2><p class="muted" id="versionHistoryMeta"></p></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <ol id="versionHistoryList" class="version-timeline"></ol>
+        <p class="version-history-note">Older versions are kept for reference and can't be exported. The latest 5 are kept per price list.</p>
+    </form>
+</dialog>
+
 <dialog id="logoutDialog">
     <form method="dialog" class="dialog-card" id="logoutForm">
         <div class="dialog-heading"><div><p class="kicker">Session</p><h2>Sign out?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
@@ -922,6 +902,7 @@ $panel = APP_PAGES[$page]['panel'];
     <p class="lsm-heading">Product category</p>
     <div id="categoryMenuList" class="cm-list" role="listbox" aria-label="Product categories"></div>
 </div>
+<div id="codeSuggest" class="list-switcher-menu code-suggest" role="listbox" aria-label="LRN codes" hidden></div>
 <div id="rowMenu" class="row-menu" role="menu" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => csrfToken()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
@@ -929,9 +910,9 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=108"></script>
+<script src="../scripts/app.js?v=122"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=9"></script>
+<script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>

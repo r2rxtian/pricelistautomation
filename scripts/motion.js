@@ -185,6 +185,7 @@
     ['#adjustmentBar', 'top right'],
     ['#listSwitcherMenu', 'top left'],
     ['#categoryMenu', 'top left'],
+    ['#codeSuggest', 'top left'],
     ['#rowMenu', 'top right'],
     ['#exportMenu', 'top right'],
     ['.dev-tools-panel', 'bottom left'],

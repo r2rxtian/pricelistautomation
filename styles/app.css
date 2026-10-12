@@ -9232,3 +9232,398 @@ html[data-theme="dark"] .file-actions .file-save-btn.is-clean:not([data-save-sta
 [data-theme="dark"] .notification-kind.kind-rejected { background: #2a1414; color: #fca5a5; }
 [data-theme="dark"] .notification-review { background: #eb97ae; color: #1a0f14; }
 [data-theme="dark"] .notifications-section-title span { background: #eb97ae; color: #1a0f14; }
+
+/* Empty Prices screen: "or Open a saved price list in Files →" instead of a country picker. */
+.empty-state .empty-open-saved { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 0; }
+.empty-state .empty-open-saved[hidden] { display: none; }
+.empty-open-files {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  color: var(--pink);
+  font: 600 0.84rem var(--sans);
+  cursor: pointer;
+}
+.empty-open-files span { display: inline-block; transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+.empty-open-files:hover { text-decoration: underline; text-underline-offset: 3px; }
+.empty-open-files:hover span { transform: translateX(3px); }
+
+/* ==========================================================================
+   Version history: one price list's versions as a timeline (newest first), opened from the row
+   menu or the "Version history · N" link on Files. Older versions no longer mix into the lists.
+   ========================================================================== */
+.version-history-dialog .dialog-card { width: min(560px, calc(100vw - 32px)); }
+.version-history-dialog .dialog-heading .muted { margin: 4px 0 0; font-size: 0.78rem; }
+.version-timeline { list-style: none; margin: 4px 0 0; padding: 0; max-height: min(60vh, 460px); overflow-y: auto; }
+.version-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 6px 12px 0;
+}
+/* The line joining the dots. */
+.version-entry::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--line-panel);
+}
+.version-entry:first-child::before { top: 20px; }
+.version-entry:last-child::before { bottom: calc(100% - 20px); }
+.version-dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin: 5px 0 0 3px;
+  border-radius: 50%;
+  background: var(--surface-card);
+  border: 2px solid var(--line-panel);
+}
+.version-entry.is-current .version-dot { background: #16a34a; border-color: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.15); }
+.version-body { display: grid; gap: 5px; min-width: 0; }
+.version-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.version-top strong { font-size: 0.84rem; color: var(--text-heading); }
+.version-what { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.version-edits { font-size: 0.72rem; color: var(--text-muted); }
+.version-body small { font-size: 0.72rem; color: var(--text-muted); }
+.version-entry:not(.is-current) .version-body { opacity: .85; }
+.version-open.button { height: 30px; min-height: 30px; padding: 0 12px; font-size: 0.75rem; }
+.version-history-note { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line-soft); color: var(--text-muted); font-size: 0.72rem; }
+
+/* Files: the link under the status. */
+.version-history-link {
+  display: inline-flex;
+  margin-top: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pink);
+  font: 600 0.72rem var(--sans);
+  cursor: pointer;
+}
+.version-history-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+[data-theme="dark"] .version-dot { background: #141519; border-color: #3a3d47; }
+[data-theme="dark"] .version-entry::before { background: #2c2f37; }
+[data-theme="dark"] .version-entry.is-current .version-dot { background: #4ade80; border-color: #4ade80; box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.15); }
+[data-theme="dark"] .version-history-link { color: #f0a3b7; }
+
+/* Version history, one row per version: date + who | what changed | status + Open. */
+dialog.version-history-dialog { width: min(680px, calc(100vw - 32px)); }
+.version-entry {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 11px 4px 11px 0;
+}
+.version-entry .version-dot { margin: 0 0 0 3px; }
+.version-entry:first-child::before { top: 50%; }
+.version-entry:last-child::before { bottom: 50%; }
+.version-entry + .version-entry { border-top: 1px solid var(--line-soft); }
+.version-main { display: grid; gap: 3px; min-width: 0; }
+.version-main strong { font-size: 0.84rem; color: var(--text-heading); }
+.version-main small { font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.version-entry .version-what { justify-content: flex-end; flex-wrap: nowrap; }
+.version-edits { white-space: nowrap; }
+.version-side { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 150px; }
+.version-entry:not(.is-current) .version-main,
+.version-entry:not(.is-current) .version-what { opacity: .85; }
+@media (max-width: 600px) {
+  .version-entry { grid-template-columns: 18px minmax(0, 1fr) auto; row-gap: 6px; }
+  .version-entry .version-what { grid-column: 2; justify-content: flex-start; }
+  .version-side { grid-column: 3; grid-row: 1; min-width: 0; }
+}
+
+/* The card fills the version history window (other dialogs cap their card width). */
+dialog.version-history-dialog > .dialog-card { width: auto !important; max-width: none !important; }
+
+/* ==========================================================================
+   LRN code filter: a pill matching the category picker (icon, field, clear ×), tinted pink while
+   filtering, with a suggestion menu in the switcher style (code + description).
+   ========================================================================== */
+.data-panel .table-tools .code-filter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 170px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--line-th);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: text;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.code-filter:hover,
+.code-filter:focus-within,
+.code-filter.is-open { border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+.code-filter .cf-icon { flex-shrink: 0; color: var(--text-muted); }
+.code-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none;
+  color: var(--text-heading);
+  font: 600 0.8rem var(--sans);
+  letter-spacing: 0.02em;
+}
+.code-filter input::placeholder { color: var(--text-muted); font-weight: 600; letter-spacing: 0; }
+.code-filter .cf-clear {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pink) 18%, transparent);
+  color: var(--pink);
+  cursor: pointer;
+}
+.code-filter .cf-clear[hidden] { display: none; }
+.code-filter .cf-clear:hover { background: var(--pink); color: #fff; }
+.code-filter.is-filtered { border-color: color-mix(in srgb, var(--pink) 40%, var(--line-th)); background: var(--pink-subtle); }
+.code-filter.is-filtered .cf-icon,
+.code-filter.is-filtered input { color: var(--pink); }
+@media (max-width: 1440px) { .data-panel .table-tools .code-filter { width: 150px; } }
+
+.code-suggest { padding-bottom: 6px; }
+.code-suggest .lsm-heading { display: flex; justify-content: space-between; padding-top: 10px; }
+.code-suggest .lsm-heading span { font-weight: 600; letter-spacing: 0; text-transform: none; }
+.code-suggest .cs-item { margin: 0 6px; width: calc(100% - 12px); gap: 12px; }
+.code-suggest .cs-code { flex-shrink: 0; min-width: 96px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-heading); }
+.code-suggest .cs-desc { color: var(--text-muted); font-size: 0.76rem; }
+.code-suggest mark { background: color-mix(in srgb, var(--pink) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.code-suggest .cs-item.is-highlight .cs-code { color: var(--pink); }
+
+[data-theme="dark"] .code-filter { background: #141519; border-color: #2a2c33; }
+[data-theme="dark"] .code-filter.is-filtered { background: #24191e; border-color: #4e2a36; }
+[data-theme="dark"] .code-filter.is-filtered .cf-icon,
+[data-theme="dark"] .code-filter.is-filtered input,
+[data-theme="dark"] .code-filter .cf-clear { color: #f0a3b7; }
+[data-theme="dark"] .code-filter .cf-clear:hover { background: #eb97ae; color: #1a0f14; }
+[data-theme="dark"] .code-suggest .cs-code { color: #f4f4f6; }
+[data-theme="dark"] .code-suggest .cs-item.is-highlight .cs-code { color: #f0a3b7; }
+
+/* ==========================================================================
+   Search shortcuts on product-group rows (Prices table): chips after the group name, "+ keyword"
+   for admins (turns into a small field), × to remove. A chip glows when the search uses it.
+   ========================================================================== */
+#priceTable .group-title-cell .group-keywords { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-left: 12px; vertical-align: middle; }
+.group-keywords .gk-label { color: var(--text-subtle); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.group-keywords .gk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--pink-subtle);
+  border: 1px solid color-mix(in srgb, var(--pink) 22%, transparent);
+  color: var(--pink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  transition: background .2s ease, box-shadow .2s ease;
+}
+.group-keywords .gk-chip.is-match { background: var(--pink); color: #fff; box-shadow: 0 0 0 3px var(--pink-subtle); }
+.group-keywords .gk-remove {
+  display: none;
+  width: 14px;
+  height: 14px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+  line-height: 14px;
+  cursor: pointer;
+}
+.group-keywords .gk-chip:hover .gk-remove { display: inline-block; }
+.group-keywords .gk-remove:hover { background: color-mix(in srgb, currentColor 18%, transparent); }
+.group-keywords .gk-add {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px dashed color-mix(in srgb, var(--pink) 40%, var(--line-panel));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 0.68rem var(--sans);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s ease, color .2s ease, border-color .2s ease;
+}
+/* "+ keyword" shows on hover of the group row (always, if the group has no shortcuts yet). */
+#priceTable tr.product-group-row:hover .gk-add,
+.group-keywords .gk-add:focus-visible { opacity: 1; }
+.group-keywords .gk-add:hover { color: var(--pink); border-color: var(--pink); }
+.group-keywords .gk-input {
+  width: 130px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--pink);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font: 600 0.72rem var(--sans);
+  box-shadow: 0 0 0 3px var(--pink-subtle);
+  outline: none;
+}
+.group-keywords:not(:has(.gk-chip)) .gk-label { opacity: 0; transition: opacity .2s ease; }
+#priceTable tr.product-group-row:hover .group-keywords .gk-label { opacity: 1; }
+[data-theme="dark"] .group-keywords .gk-chip { background: #24191e; border-color: #4e2a36; color: #f0a3b7; }
+[data-theme="dark"] .group-keywords .gk-chip.is-match { background: #eb97ae; color: #1a0f14; }
+[data-theme="dark"] .group-keywords .gk-input { background: #111216; color: #f4f4f6; }
+/* ==========================================================================
+   File header: the price list name is the switcher (Country › Level › List menu opens under it).
+   Toolbar: Search first and widest, then Category and LRN code as refiners.
+   ========================================================================== */
+.title-line h1.list-title { min-width: 0; display: flex; margin: 0 0 0 -8px; font-size: inherit; letter-spacing: normal; }
+.title-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+.title-switcher #listTitle { min-width: 0; }
+.title-switcher .ls-chevron { flex-shrink: 0; color: var(--text-muted); transition: transform .35s cubic-bezier(.22, 1, .36, 1), color .2s ease; }
+.title-switcher:not(:disabled):hover,
+.title-switcher.is-open { background: var(--pink-subtle); border-color: color-mix(in srgb, var(--pink) 30%, transparent); }
+.title-switcher:not(:disabled):hover .ls-chevron,
+.title-switcher.is-open .ls-chevron { color: var(--pink); }
+.title-switcher.is-open .ls-chevron { transform: rotate(180deg); }
+.title-switcher:focus-visible { outline: 2px solid color-mix(in srgb, var(--pink) 60%, transparent); outline-offset: 1px; }
+/* No list open: just the page title. */
+.title-switcher:disabled { cursor: default; opacity: 1; }
+.title-switcher:disabled .ls-chevron { display: none; }
+
+#workspacePanel .data-panel .table-tools .search { flex: 1 1 320px; min-width: 220px; max-width: 460px; }
+@media (max-width: 1440px) { #workspacePanel .data-panel .table-tools .search { flex-basis: 260px; max-width: 380px; } }
+[data-theme="dark"] .title-switcher:not(:disabled):hover,
+[data-theme="dark"] .title-switcher.is-open { background: #24191e; border-color: #4e2a36; }
+
+/* ==========================================================================
+   File header: "🌐 China › Price Level 5 ⌄" is one chip that always looks clickable and opens the
+   price list switcher under it (the list name in the title opens it too).
+   ========================================================================== */
+#workspacePanel.has-file .list-tag.list-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 8px !important;
+  border: 1px solid color-mix(in srgb, var(--pink) 28%, var(--line-panel)) !important;
+  border-radius: 999px !important;
+  background: var(--surface-card) !important;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(60, 20, 35, 0.06) !important;
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+#workspacePanel .list-context .lc-globe { color: var(--pink); flex-shrink: 0; }
+#workspacePanel .list-context strong { font-weight: 700; color: var(--text-heading); }
+#workspacePanel .list-context .lc-sep { color: var(--text-subtle); }
+#workspacePanel .list-context .lc-chevron { color: var(--text-muted); flex-shrink: 0; transition: transform .35s cubic-bezier(.22, 1, .36, 1), color .2s ease; }
+#workspacePanel.has-file .list-tag.list-context:hover,
+#workspacePanel.has-file .list-tag.list-context.is-open {
+  border-color: var(--pink) !important;
+  background: var(--pink-subtle) !important;
+  box-shadow: 0 0 0 3px var(--pink-subtle) !important;
+}
+#workspacePanel .list-context:hover .lc-chevron,
+#workspacePanel .list-context.is-open .lc-chevron { color: var(--pink); }
+#workspacePanel .list-context.is-open .lc-chevron { transform: rotate(180deg); }
+#workspacePanel .list-context:focus-visible { outline: 2px solid color-mix(in srgb, var(--pink) 60%, transparent); outline-offset: 2px; }
+/* The dot after the chip, before "Approved by …", sits a little further away. */
+#workspacePanel.has-file .list-tag.list-context ~ .workflow-note::before { margin-left: 12px !important; }
+[data-theme="dark"] #workspacePanel.has-file .list-tag.list-context { background: #17181d !important; border-color: #4e2a36 !important; }
+[data-theme="dark"] #workspacePanel.has-file .list-tag.list-context:hover,
+[data-theme="dark"] #workspacePanel.has-file .list-tag.list-context.is-open { background: #24191e !important; border-color: #eb97ae !important; }
+[data-theme="dark"] #workspacePanel .list-context .lc-globe { color: #eb97ae; }
+/* ==========================================================================
+   Tidy file header. Line 1 (which list): name ⌄, the Country › Level chip, Close file.
+   Line 2 (its status): status badge, then one plain sentence; a coloured note only when it needs
+   attention (pending, rejected, older version).
+   ========================================================================== */
+#workspacePanel.has-file .title-line { flex-wrap: nowrap; gap: 10px; }
+#workspacePanel .title-line .list-context {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 9px;
+  border: 1px solid color-mix(in srgb, var(--pink) 28%, var(--line-panel));
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font: 500 0.8rem var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(60, 20, 35, 0.06);
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+#workspacePanel .title-line .list-context:hover,
+#workspacePanel .title-line .list-context.is-open { border-color: var(--pink); background: var(--pink-subtle); box-shadow: 0 0 0 3px var(--pink-subtle); }
+#workspacePanel:not(.has-file) .title-line .list-context { display: none; }
+#workspacePanel.has-file .title-line .close-file-btn { flex-shrink: 0; }
+
+#workspacePanel.has-file .file-tags-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px; }
+#workspacePanel.has-file .file-tags-row .status-badge { flex-shrink: 0; margin: 0; }
+#workspacePanel.has-file .file-tags-row .file-audit-row { display: inline-flex; align-items: center; margin: 0; padding: 0; }
+#workspacePanel.has-file .file-tags-row .saved-meta { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#workspacePanel.has-file .file-tags-row .file-audit-row[hidden] { display: none; }
+#workspacePanel.has-file .file-tags-row .workflow-note::before { content: none !important; }
+[data-theme="dark"] #workspacePanel .title-line .list-context { background: #17181d; border-color: #4e2a36; color: #f4f4f6; }
+[data-theme="dark"] #workspacePanel .title-line .list-context:hover,
+[data-theme="dark"] #workspacePanel .title-line .list-context.is-open { background: #24191e; border-color: #eb97ae; }
+/* ==========================================================================
+   Header stats removed: the adjustment rides on "Edit prices", the product count sits in the toolbar.
+   ========================================================================== */
+#editButton .edit-adj {
+  margin-left: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#editButton .edit-adj[hidden] { display: none; }
+[data-theme="dark"] #editButton .edit-adj { background: rgba(26, 15, 20, 0.16); color: #1a0f14; }
+.data-panel .table-tools .toolbar-count {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.data-panel .table-tools .toolbar-count.is-filtered { color: var(--pink); }

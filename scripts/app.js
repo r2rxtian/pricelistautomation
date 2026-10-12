@@ -2,7 +2,7 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], photoFolders: [], libraryFolder: null, configTab: 'library', librarySearch: '' };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], photoFolders: [], libraryFolder: null, configTab: rememberedConfigTab(), librarySearch: '' };
   // Normalised row layout (see parseWorkbook): 0 category … 18 product group, 19 price level, 20 country.
   const COL = { category: 0, code: 1, description: 2, priceLevel: 19, country: 20 };
   const ROW_WIDTH = 21;
@@ -14,6 +14,11 @@
   }
   function rememberedCategory() {
     try { return sessionStorage.getItem(CATEGORY_KEY) || ''; } catch { return ''; }
+  }
+  // The Config tab (photo library, product type photos, search keywords) also survives a refresh.
+  const CONFIG_TAB_KEY = 'pla_config_tab';
+  function rememberedConfigTab() {
+    try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   let suppressRowEnter = false; // set while a price roll re-renders the table (see rollPrices)
@@ -180,6 +185,7 @@
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
     'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move',
+    'search-keywords': 'search/keywords_save',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
   };
@@ -469,7 +475,7 @@
     popover.hidden = !open;
     button.setAttribute('aria-expanded', String(open));
     button.setAttribute('data-tooltip', open ? 'Close editor' : 'Edit prices');
-    button.title = open ? 'Close editor' : 'Edit prices';
+    button.title = open ? 'Close editor' : (button.dataset.adjustTitle || 'Edit prices');
     if (open) {
       // The table panel clips overflow, so the popover is placed (fixed) right under the toolbar button.
       const rect = button.getBoundingClientRect();
@@ -502,6 +508,7 @@
       approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], priceLevels: data.priceLevels || [],
       versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
       photoFolders: data.photoFolders || [],
+      searchKeywords: data.searchKeywords || [],
       importTemplate: data.importTemplate || null,
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
@@ -599,7 +606,7 @@
       dom.listTitle.textContent = canUpload ? 'Start with a workbook' : 'Open an approved price list';
       dom.listMeta.textContent = canUpload ? 'Upload an official .xlsx template to open and edit prices.' : 'Choose an approved price list to view and export.';
       if (dom.emptyStateTitle) dom.emptyStateTitle.textContent = canUpload ? 'Import your current price list' : 'No price list open';
-      if (dom.emptyStateText) dom.emptyStateText.textContent = canUpload ? 'Drop an official .xlsx workbook here or browse your computer. Download the template from the upload window.' : 'Approved price lists are listed under Approvals, where you can open or export them.';
+      if (dom.emptyStateText) dom.emptyStateText.textContent = canUpload ? 'Drop an official .xlsx workbook here or browse your computer. Download the template from the upload window.' : 'Price lists are on the Files page, where you can open or export them.';
       if (dom.emptyBrowseListsButton) dom.emptyBrowseListsButton.hidden = canUpload;
       dom.listMeta.title = '';
       setSavedMeta(''); dom.activeBadge.hidden = true;
@@ -645,7 +652,7 @@
     if (dom.codeFilterOptions) dom.codeFilterOptions.innerHTML = uniqueValues(state.rows.map(row => row[COL.code])).slice(0, 2000).map(code => `<option value="${escapeHtml(code)}"></option>`).join('');
 
     dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = active.name; dom.listMeta.textContent = active.name;
-    dom.listTitle.title = active.name;
+    dom.listTitle.title = ''; // the switcher's tooltip shows the full Country › Level › List path
     dom.listMeta.title = active.name;
     $('#workspacePanel')?.classList.add('has-file');
     if (dom.listTagsRow) {
@@ -676,11 +683,16 @@
       const edits = (active.pendingChanges || []).length;
       setSavedMeta(active.id ? `Unsaved edits to the version saved by ${active.savedBy || 'a user'}${edits ? ` · ${edits} cell edit${edits === 1 ? '' : 's'}` : ''}` : 'Imported workbook · Unsaved');
     } else {
-      // An uploaded file's status note already says who uploaded it and when.
-      setSavedMeta(status === 'uploaded' ? '' : active.savedAt ? `Saved ${displayDate(active.savedAt)} by ${active.savedBy}` : 'Saved');
+      // One plain sentence after the status badge: who saved it, who approved it, when.
+      const by = active.savedBy || 'a user';
+      const approver = active.approvedBy || '';
+      const when = displayDate(active.approvedAt || active.savedAt);
+      setSavedMeta(status === 'uploaded' ? `Uploaded by ${by} · ${displayDate(active.savedAt)} · original prices`
+        : status === 'approved' ? (approver && approver !== by ? `Saved by ${by} · approved by ${approver} · ${when}` : `Saved and approved by ${by} · ${when}`)
+        : active.savedAt ? `Saved by ${by} · ${displayDate(active.savedAt)}` : 'Saved');
     }
 
-    // Compact one-line status note beside the price level / country tags (no extra row above the table).
+    // A coloured note after the sentence only when something needs attention (pending, rejected, older).
     const note = dom.approvalBanner;
     if (note) {
       let text = '';
@@ -691,10 +703,6 @@
           ? 'Waiting for your approval'
           : `Awaiting approval${waiting.length ? ` from ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}`;
         if (approved.length) text += ` · approved by ${approved.join(', ')}`;
-      } else if (status === 'uploaded') {
-        text = `Uploaded by ${active.savedBy || 'a user'}${active.savedAt ? ` · ${displayDate(active.savedAt)}` : ''} · original prices`;
-      } else if (status === 'approved') {
-        text = `Approved by ${active.approvedBy || approved.join(' & ')}${active.approvedAt ? ` · ${displayDate(active.approvedAt)}` : ''}`;
       } else if (status === 'rejected') {
         text = `Rejected by ${active.rejectedBy || 'an approver'}${active.rejectionRemarks ? `: ${active.rejectionRemarks}` : ''}`;
       } else if (status === 'superseded') {
@@ -766,14 +774,20 @@
     return Object.values(state.categoryAdjustments || {}).some(v => Number(v || 0) !== 0);
   }
   function updateMetrics() {
-    dom.productCount.textContent = state.rows.length.toLocaleString();
-    dom.categoryCount.textContent = new Set(state.rows.map(row => row[0]).filter(Boolean)).size;
-    dom.priceColumnCount.textContent = state.priceColumns.length;
-    const catAdj = getCategoryAdjustment(state.category);
-    dom.currentAdjustment.textContent = `${catAdj > 0 ? '+' : ''}${catAdj}%`;
-    const adjLabel = dom.currentAdjustment.nextElementSibling;
-    if (adjLabel) {
-      adjLabel.textContent = state.category ? `${state.category} Adj.` : 'Adjustment';
+    // The current adjustment shows on "Edit prices": one percentage when every category has the
+    // same, "mixed" when they differ (hover lists each category), nothing at original prices.
+    const tag = $('#editAdjustment');
+    if (tag) {
+      const categories = [...new Set(state.rows.map(row => String(row[COL.category] ?? '').trim()).filter(Boolean))];
+      const rates = categories.map(category => ({ category, rate: Number(getCategoryAdjustment(category) || 0) }));
+      const distinct = [...new Set(rates.map(item => item.rate))];
+      const format = rate => `${rate > 0 ? '+' : ''}${rate}%`;
+      tag.hidden = !rates.length || (distinct.length === 1 && distinct[0] === 0);
+      tag.textContent = distinct.length === 1 ? format(distinct[0]) : 'mixed';
+      tag.classList.toggle('is-down', distinct.length === 1 && distinct[0] < 0);
+      const editButton = $('#editButton');
+      editButton.dataset.adjustTitle = tag.hidden ? 'Adjust prices by category' : `Current adjustments: ${rates.map(item => `${item.category} ${format(item.rate)}`).join(', ')}`;
+      if (editButton.getAttribute('aria-expanded') !== 'true') editButton.title = editButton.dataset.adjustTitle;
     }
     if (dom.resetPricesButton) {
       const canReset = state.canEdit && Boolean(state.active) && hasPriceAdjustments();
@@ -794,14 +808,91 @@
     ].filter(Boolean).join(', ');
   }
   function filteredRows() {
-    const query = state.search.trim().toLowerCase();
     const code = state.codeFilter.trim().toLowerCase();
-    return state.rows.map((row, index) => ({ row, index })).filter(({ row }) =>
+    const base = state.rows.map((row, index) => ({ row, index })).filter(({ row }) =>
       (!state.category || String(row[COL.category] ?? '') === state.category) &&
       (!code || String(row[COL.code] ?? '').toLowerCase().includes(code)) &&
       (!state.priceLevelFilter || String(row[COL.priceLevel] ?? '') === state.priceLevelFilter) &&
-      (!state.countryFilter || String(row[COL.country] ?? '') === state.countryFilter) &&
-      (!query || row.some(value => String(value ?? '').toLowerCase().includes(query))));
+      (!state.countryFilter || String(row[COL.country] ?? '') === state.countryFilter));
+    const tokens = normalizeSearch(state.search).split(' ').filter(Boolean);
+    if (!tokens.length) return base;
+    // Smart search: every typed word must match. When some rows match clearly (keyword, word start,
+    // text, initials), loose "letters in order" matches are left out so the clear ones stand alone.
+    const scored = base.map(item => ({ item, score: rowSearchScore(item.row, tokens) })).filter(entry => entry.score > 0);
+    const clear = scored.some(entry => entry.score >= SEARCH_CLEAR_MATCH);
+    return scored.filter(entry => !clear || entry.score >= SEARCH_CLEAR_MATCH).map(entry => entry.item);
+  }
+
+  // --- Smart search -------------------------------------------------------------------------
+  // Works for every product automatically (also newly uploaded ones), from the code, name,
+  // category and product group, plus the admins' search keywords (Config › Search keywords) for
+  // the product group or code. Scores per typed word:
+  //   100 exact keyword or code · 80 start of a word / keyword · 60 text anywhere (codes, prices…)
+  //    50 first letters ("pac" → Pain Au Chocolat) · 30 letters in order within a word ("ct" → croissant)
+  const SEARCH_CLEAR_MATCH = 50;
+  function normalizeSearch(text) {
+    return String(text ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9.]+/g, ' ').trim();
+  }
+  let searchKeywordCache = { source: null, map: new Map(), version: 0 };
+  function refreshSearchKeywords() {
+    if (searchKeywordCache.source !== state.searchKeywords) {
+      const map = new Map();
+      (state.searchKeywords || []).forEach(entry => {
+        const key = entry.scope === 'product' ? `p|${normalizeSearch(entry.code)}` : `g|${normalizeSearch(entry.category)}|${normalizeSearch(entry.group)}`;
+        map.set(key, (entry.keywords || []).map(normalizeSearch).filter(Boolean));
+      });
+      searchKeywordCache = { source: state.searchKeywords, map, version: searchKeywordCache.version + 1 };
+    }
+  }
+  function searchKeywordsFor(row) {
+    const groupName = row[18] || row[COL.category];
+    return [
+      ...(searchKeywordCache.map.get(`g|${normalizeSearch(row[COL.category])}|${normalizeSearch(groupName)}`) || []),
+      ...(searchKeywordCache.map.get(`p|${normalizeSearch(row[COL.code])}`) || []),
+    ];
+  }
+  const searchIndexCache = new WeakMap();
+  function searchIndex(row) {
+    refreshSearchKeywords();
+    const signature = `${row.join('\u0001')}\u0002${searchKeywordCache.version}`;
+    const cached = searchIndexCache.get(row);
+    if (cached && cached.signature === signature) return cached.index;
+    const named = [row[COL.description], row[3], row[18], row[COL.category]].map(normalizeSearch).filter(Boolean);
+    const code = normalizeSearch(row[COL.code]);
+    const words = [...new Set([...named.join(' ').split(' '), ...code.split(' ')].filter(Boolean))];
+    const index = {
+      code,
+      codeCompact: code.replace(/ /g, ''),
+      keywords: searchKeywordsFor(row),
+      words,
+      initials: named.map(text => text.split(' ').map(word => word[0]).join('')),
+      all: row.map(normalizeSearch).join(' '),
+    };
+    searchIndexCache.set(row, { signature, index });
+    return index;
+  }
+  function inOrder(token, word) {
+    let at = 0;
+    for (const letter of word) if (letter === token[at] && ++at === token.length) return true;
+    return false;
+  }
+  function tokenScore(token, index) {
+    if (index.keywords.includes(token) || index.code === token || index.codeCompact === token) return 100;
+    if (index.keywords.some(keyword => keyword.startsWith(token)) || index.words.some(word => word.startsWith(token)) || index.codeCompact.startsWith(token)) return 80;
+    if (index.all.includes(token)) return 60;
+    if (token.length >= 2 && index.initials.some(initials => initials.startsWith(token))) return 50;
+    if (token.length >= 2 && /[a-z]/.test(token) && index.words.some(word => word[0] === token[0] && inOrder(token, word))) return 30;
+    return 0;
+  }
+  /** The row's weakest word score (0 when some typed word doesn't match at all). */
+  function rowSearchScore(row, tokens) {
+    const index = searchIndex(row);
+    let score = 100;
+    for (const token of tokens) {
+      score = Math.min(score, tokenScore(token, index));
+      if (!score) return 0;
+    }
+    return score;
   }
   function groupLookupKey(category, groupName) {
     return `${String(category || '').trim().toLowerCase()}\u241f${String(groupName || '').trim().toLowerCase()}`;
@@ -1048,7 +1139,7 @@
       }
       previousCategory = group.category;
       const groupHeader = prefix + (group.groupName
-        ? `<tr class="product-group-row"><td colspan="${columnCount}" class="group-title-cell"><strong class="group-title-text">${escapeHtml(group.groupName)}</strong></td></tr>`
+        ? `<tr class="product-group-row"><td colspan="${columnCount}" class="group-title-cell"><strong class="group-title-text">${escapeHtml(group.groupName)}</strong>${groupKeywordsMarkup(group.category, group.groupName)}</td></tr>`
         : '');
       const rowsHtml = group.rows.map(({ row, index: actualIndex, visibleIndex }, indexInGroup) => {
         const isFirst = indexInGroup === 0;
@@ -1059,6 +1150,13 @@
       return `${groupHeader}${rowsHtml}`;
     }).join('');
     dom.noResults.hidden = visible.length > 0;
+    // "6 products", or "2 of 6 products" while searching or filtering.
+    const countNote = $('#productCountNote');
+    if (countNote) {
+      const total = state.rows.length;
+      countNote.textContent = visible.length === total ? `${total.toLocaleString()} product${total === 1 ? '' : 's'}` : `${visible.length.toLocaleString()} of ${total.toLocaleString()} products`;
+      countNote.classList.toggle('is-filtered', visible.length !== total);
+    }
     if (dom.clearFiltersBtn) dom.clearFiltersBtn.hidden = !hasActiveFilters();
 
     // Restore active cell selection if any
@@ -2105,7 +2203,7 @@
         <td>${escapeHtml(version.country || '—')}</td>
         <td>${escapeHtml(version.priceLevel || '—')}</td>
         <td class="history-date-cell"><div class="audit-time-main">${displayDate(version.savedAt)}</div><div class="audit-time-relative">by ${escapeHtml(version.savedBy || '')}</div></td>
-        <td>${pill}<div class="list-sub">${escapeHtml(detail)}</div></td>
+        <td>${pill}<div class="list-sub">${escapeHtml(detail)}</div>${(() => { const count = listHistory(version).length; return count > 1 ? `<button type="button" class="version-history-link" data-id="${cid}">Version history · ${count}</button>` : ''; })()}</td>
         <td class="col-actions"><div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escapeHtml(version.name)}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div></td>
       </tr>`;
     }).join('');
@@ -2136,10 +2234,10 @@
     const country = active?.country || '—';
     const level = active?.priceLevel || '—';
     const list = active ? `${active.name}${isDraft ? ' · unsaved' : ''}` : '—';
-    $('#lsCountry').textContent = country;
-    $('#lsLevel').textContent = level;
-    $('#lsList').textContent = list;
-    switcherButton.title = `${country} › ${level} › ${list}. Click to switch price list.`;
+    // The list name in the file header is the switcher; it only opens while a list is open.
+    switcherButton.disabled = !active;
+    switcherButton.title = active ? `${country} › ${level} › ${list}. Click to switch price list.` : '';
+    switcherButton.setAttribute('aria-label', active ? `${active.name}: switch price list` : 'No price list open');
   }
   function renderSwitcherMenu() {
     if (!switcherMenu) return;
@@ -2170,8 +2268,9 @@
       meta: statusLabel(version.status), current: String(version.id) === String(active?.id)
     })).join('') || '<p class="lsm-empty">—</p>';
   }
+  let switcherAnchor = null; // what opened the switcher (the title or the country/level chip)
   function positionSwitcherMenu() {
-    const rect = switcherButton.getBoundingClientRect();
+    const rect = (switcherAnchor || switcherButton).getBoundingClientRect();
     const width = Math.min(680, window.innerWidth - 32);
     switcherMenu.style.width = `${width}px`;
     switcherMenu.style.top = `${Math.round(rect.bottom + 6)}px`;
@@ -2193,11 +2292,24 @@
       switcherMenu.hidden = true;
     }
     switcherButton.setAttribute('aria-expanded', String(open));
-    switcherButton.classList.toggle('is-open', open);
+    switcherButton.classList.toggle('is-open', open && switcherAnchor !== $('.list-context'));
+    $('.list-context')?.classList.toggle('is-open', open && switcherAnchor === $('.list-context'));
+    $('.list-context')?.setAttribute('aria-expanded', String(open && switcherAnchor === $('.list-context')));
   }
   switcherButton?.addEventListener('click', event => {
     event.stopPropagation();
+    switcherAnchor = switcherButton;
     toggleSwitcher(switcherMenu.hidden);
+  });
+  // The country and price level in the header line open the same switcher.
+  $$('.switch-trigger').forEach(trigger => {
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      if (!state.active) return;
+      const reopen = !switcherMenu.hidden && switcherAnchor !== trigger;
+      switcherAnchor = trigger;
+      toggleSwitcher(reopen || switcherMenu.hidden);
+    });
   });
   // Hovering a country or level previews the next column; clicking works too (touch, keyboard).
   const pickSwitcherItem = (button, fromHover) => {
@@ -2338,14 +2450,12 @@
     // Approvals = price changes only (uploads live on the Files page). Changes approved on save by an
     // auto-approver are listed too, under Approved, marked "Approved on save".
     const allVersions = (state.versions || []).filter(version => version.source !== 'upload');
-    // Each price list shows once, as its current version. Older versions stay out of the way and
-    // appear only when "Older versions" is chosen in the status filter.
-    const olderVersions = allVersions.filter(version => version.status === 'superseded');
-    const showingOlder = state.listStatus === 'superseded';
-    const versions = showingOlder ? allVersions : allVersions.filter(version => version.status !== 'superseded');
+    // Each price list shows once, as its current version. Older versions are in each list's
+    // Version history (row menu), not in this table.
+    const versions = allVersions.filter(version => version.status !== 'superseded');
     const awaitingMine = versions.filter(version => version.canApprove);
     const approved = versions.filter(version => version.status === 'approved');
-    dom.listAllCount.textContent = String(allVersions.length - olderVersions.length); // current lists only
+    dom.listAllCount.textContent = String(versions.length);
     dom.listMineCount.textContent = String(awaitingMine.length);
     dom.listApprovedCount.textContent = String(approved.length);
     if (dom.pendingApprovalCount) {
@@ -2373,23 +2483,7 @@
       (!state.listStatus || version.status === state.listStatus) &&
       (!query || [version.name, version.savedBy, version.priceLevel, version.country, ...(version.categories || [])].some(value => String(value || '').toLowerCase().includes(query))));
 
-    dom.listCount.textContent = `${visible.length} ${showingOlder ? 'older version' : 'price list'}${visible.length === 1 ? '' : 's'}`;
-    // A quiet link to the history when there is any.
-    let olderToggle = $('#showOlderVersionsBtn');
-    if (!olderToggle) {
-      olderToggle = document.createElement('button');
-      olderToggle.type = 'button';
-      olderToggle.id = 'showOlderVersionsBtn';
-      olderToggle.className = 'text-button older-versions-toggle';
-      olderToggle.addEventListener('click', () => {
-        state.listTab = 'all'; // older versions are listed under All
-        dom.listStatusFilter.value = state.listStatus === 'superseded' ? '' : 'superseded';
-        dom.listStatusFilter.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-      dom.listCount.after(olderToggle);
-    }
-    olderToggle.hidden = !olderVersions.length || !can('update');
-    olderToggle.textContent = showingOlder ? 'Back to current versions' : `Show older versions (${olderVersions.length})`;
+    dom.listCount.textContent = `${visible.length} price list${visible.length === 1 ? '' : 's'}`;
     dom.listsEmpty.hidden = visible.length > 0;
     if (!visible.length) {
       dom.listsEmptyTitle.textContent = state.listTab === 'mine' ? 'Nothing waiting for your approval' : versions.length ? 'No matching price lists' : 'No price lists in approval';
@@ -2815,6 +2909,7 @@
     state.search = ''; state.codeFilter = ''; state.priceLevelFilter = ''; state.countryFilter = '';
     if (dom.search) dom.search.value = '';
     if (dom.codeFilterInput) dom.codeFilterInput.value = '';
+    updateCodeFilterUI();
     if (dom.priceLevelSelect) dom.priceLevelSelect.value = '';
     if (dom.countrySelect) dom.countrySelect.value = '';
   }
@@ -3876,11 +3971,96 @@
   });
 
   // --- Workspace filters ---
-  dom.codeFilterInput?.addEventListener('input', () => { state.codeFilter = dom.codeFilterInput.value; renderTable(); });
+  // --- LRN code filter: a pill like the category picker, with its own suggestions (code +
+  // description) instead of the browser's plain list. ---
+  const codeSuggest = $('#codeSuggest');
+  let codeActive = -1;
+  function updateCodeFilterUI() {
+    const value = dom.codeFilterInput?.value.trim() || '';
+    $('#codeFilter')?.classList.toggle('is-filtered', Boolean(value));
+    const clear = $('#codeFilterClear');
+    if (clear) clear.hidden = !value;
+  }
+  function closeCodeSuggest() {
+    if (!codeSuggest || codeSuggest.hidden) return;
+    codeSuggest.hidden = true;
+    dom.codeFilterInput?.setAttribute('aria-expanded', 'false');
+    $('#codeFilter')?.classList.remove('is-open');
+  }
+  function renderCodeSuggest() {
+    if (!codeSuggest || !dom.codeFilterInput) return;
+    const query = dom.codeFilterInput.value.trim().toLowerCase();
+    const seen = new Map();
+    state.rows.forEach(row => {
+      const code = String(row[COL.code] ?? '').trim();
+      // Matches on the code only, like the table filter, so every suggestion has rows behind it.
+      if (code && !seen.has(code) && (!query || code.toLowerCase().includes(query))) {
+        seen.set(code, String(row[COL.description] ?? ''));
+      }
+    });
+    const matches = [...seen].slice(0, 8);
+    if (!matches.length || (matches.length === 1 && matches[0][0].toLowerCase() === query)) return closeCodeSuggest();
+    codeActive = Math.min(codeActive, matches.length - 1);
+    const mark = text => {
+      const at = query ? text.toLowerCase().indexOf(query) : -1;
+      return at < 0 ? escapeHtml(text) : `${escapeHtml(text.slice(0, at))}<mark>${escapeHtml(text.slice(at, at + query.length))}</mark>${escapeHtml(text.slice(at + query.length))}`;
+    };
+    codeSuggest.innerHTML = `<p class="lsm-heading">${query ? 'Matching codes' : 'LRN codes'}${seen.size > matches.length ? ` <span>${matches.length} of ${seen.size}</span>` : ''}</p>`
+      + matches.map(([code, description], index) => `<button type="button" class="lsm-item cs-item ${index === codeActive ? 'is-highlight' : ''}" role="option" aria-selected="${index === codeActive}" data-code="${escapeHtml(code)}"><span class="cs-code">${mark(code)}</span><span class="lsm-label cs-desc">${escapeHtml(description)}</span></button>`).join('');
+    const box = $('#codeFilter').getBoundingClientRect();
+    const width = Math.max(box.width, 300);
+    Object.assign(codeSuggest.style, { width: `${width}px`, top: `${Math.round(box.bottom + 6)}px`, left: `${Math.round(Math.max(16, Math.min(box.left, innerWidth - width - 16)))}px` });
+    if (codeSuggest.hidden) {
+      codeSuggest.hidden = false;
+      dom.codeFilterInput.setAttribute('aria-expanded', 'true');
+      $('#codeFilter')?.classList.add('is-open');
+    }
+  }
+  function applyCodeFilter(value) {
+    dom.codeFilterInput.value = value;
+    state.codeFilter = value;
+    updateCodeFilterUI();
+    renderTable();
+  }
+  dom.codeFilterInput?.addEventListener('input', () => {
+    codeActive = -1;
+    applyCodeFilter(dom.codeFilterInput.value);
+    renderCodeSuggest();
+  });
+  dom.codeFilterInput?.addEventListener('focus', () => { codeActive = -1; renderCodeSuggest(); });
+  dom.codeFilterInput?.addEventListener('keydown', event => {
+    const items = codeSuggest && !codeSuggest.hidden ? $$('.cs-item', codeSuggest) : [];
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) {
+      event.preventDefault();
+      codeActive = (codeActive + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      renderCodeSuggest();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (items[codeActive]) applyCodeFilter(items[codeActive].dataset.code);
+      closeCodeSuggest();
+    } else if (event.key === 'Escape') {
+      if (!codeSuggest.hidden) { event.stopPropagation(); closeCodeSuggest(); }
+      else if (dom.codeFilterInput.value) applyCodeFilter('');
+    }
+  });
+  codeSuggest?.addEventListener('mousedown', event => event.preventDefault()); // keep focus in the field
+  codeSuggest?.addEventListener('click', event => {
+    const item = event.target.closest('.cs-item');
+    if (!item) return;
+    applyCodeFilter(item.dataset.code);
+    closeCodeSuggest();
+  });
+  $('#codeFilterClear')?.addEventListener('click', () => { applyCodeFilter(''); dom.codeFilterInput.focus(); });
+  $('#codeFilter')?.addEventListener('click', event => { if (event.target === event.currentTarget || event.target.closest('.cf-icon')) dom.codeFilterInput.focus(); });
+  dom.codeFilterInput?.addEventListener('blur', () => setTimeout(closeCodeSuggest, 120));
+  window.addEventListener('resize', closeCodeSuggest);
+  document.addEventListener('scroll', event => { if (!codeSuggest?.contains(event.target)) closeCodeSuggest(); }, true);
   dom.priceLevelSelect?.addEventListener('change', () => { state.priceLevelFilter = dom.priceLevelSelect.value; renderTable(); });
   dom.countrySelect?.addEventListener('change', () => { state.countryFilter = dom.countrySelect.value; renderTable(); });
   dom.clearFiltersBtn?.addEventListener('click', () => { resetFilters(); renderTable(); });
-  dom.emptyBrowseListsButton?.addEventListener('click', () => switchPanel('listsPanel', true));
+  // With no file open, saved price lists are opened from the Files page.
+  dom.emptyBrowseListsButton?.addEventListener('click', () => switchPanel('filesPanel', true));
+  $('#emptyOpenFilesBtn')?.addEventListener('click', () => switchPanel('filesPanel', true));
 
   // --- Approval decisions ---
   function openDecisionDialog(kind, versionId) {
@@ -3950,12 +4130,55 @@
     dom.rejectDialog.close();
     await submitDecision('reject', remarks);
   });
+  // --- Version history: every saved version of one price list (same name, country and price
+  // level), newest first, opened from a row's menu or the Files row. ---
+  function listHistory(version) {
+    const key = item => [item.name, item.country, item.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|');
+    return (state.versions || []).filter(item => key(item) === key(version))
+      .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+  }
+  function openVersionHistory(version) {
+    const history = listHistory(version);
+    const current = liveRevisionOf(version) || history.find(item => ['approved', 'uploaded'].includes(item.status));
+    $('#versionHistoryTitle').textContent = version.name;
+    $('#versionHistoryMeta').textContent = `${[version.country, version.priceLevel].filter(Boolean).join(' · ')} · ${history.length} version${history.length === 1 ? '' : 's'}`;
+    $('#versionHistoryList').innerHTML = history.map(item => {
+      const isCurrent = current && item.id === current.id;
+      const what = item.source === 'upload'
+        ? '<span class="history-adj-pill neutral">Uploaded file</span>'
+        : `${adjustmentPill(item)}${item.changeCount ? `<span class="version-edits">${Number(item.changeCount).toLocaleString()} cell edit${item.changeCount === 1 ? '' : 's'}</span>` : ''}`;
+      const status = isCurrent ? '<span class="list-status-pill status-approved">Current</span>'
+        : item.status === 'superseded' ? '<span class="list-status-pill status-superseded">Older</span>'
+        : statusPill(item.status);
+      const isOpen = String(state.active?.id) === String(item.id);
+      return `<li class="version-entry ${isCurrent ? 'is-current' : ''}">
+        <span class="version-dot" aria-hidden="true"></span>
+        <div class="version-main">
+          <strong>${displayDate(item.savedAt)}</strong>
+          <small>${item.source === 'upload' ? 'Uploaded' : 'Saved'} by ${escapeHtml(item.savedBy || 'a user')}${item.approvedBy && item.status !== 'pending' && item.approvedBy !== item.savedBy ? ` · approved by ${escapeHtml(item.approvedBy)}` : ''}</small>
+        </div>
+        <div class="version-what">${what}</div>
+        <div class="version-side">${status}<button type="button" class="button secondary version-open" data-id="${escapeHtml(item.id)}">${isOpen ? 'Open now' : 'Open'}</button></div>
+      </li>`;
+    }).join('');
+    $('#versionHistoryDialog').showModal();
+  }
+  $('#versionHistoryList')?.addEventListener('click', async event => {
+    const button = event.target.closest('.version-open');
+    if (!button) return;
+    $('#versionHistoryDialog').close();
+    if (String(state.active?.id) === String(button.dataset.id)) return switchPanel('workspacePanel', true);
+    try { await openVersion(button.dataset.id); } catch (error) { toast(error.message); }
+  });
+
   async function runListAction(action, id) {
     const version = versionSummaryById(id);
     if (!version) return toast('Price list not found. Refresh and try again.');
     if (action === 'open') {
       if (String(state.active?.id) === String(id)) return switchPanel('workspacePanel', true);
       try { await openVersion(id); } catch (error) { toast(error.message); }
+    } else if (action === 'history') {
+      openVersionHistory(version);
     } else if (action === 'approve' || action === 'reject') {
       openDecisionDialog(action, id);
     } else if (action === 'export-excel' || action === 'export-pdf') {
@@ -3980,6 +4203,7 @@
   const rowMenu = $('#rowMenu');
   const menuIcons = {
     open: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 14"/>',
     approve: '<polyline points="20 6 9 17 4 12"/>',
     reject: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     'export-excel': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -4006,7 +4230,10 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${menuIcons[action]}</svg>
         <span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</button>`;
     const groups = [
-      [item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' })],
+      [
+        item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' }),
+        ...(listHistory(version).length > 1 ? [item('history', 'Version history', { hint: `${listHistory(version).length} versions` })] : []),
+      ],
       version.canApprove ? [item('approve', 'Approve'), item('reject', 'Reject', { danger: true })] : [],
       can('export') ? [
         item('export-excel', 'Export Excel', { disabled: !exportable, hint: exportable ? '.xlsx' : lockedHint }),
@@ -4040,6 +4267,8 @@
       if (!wasOpen) openRowMenu(kebab);
       return;
     }
+    const historyLink = event.target.closest('.version-history-link');
+    if (historyLink) { const version = versionSummaryById(historyLink.dataset.id); if (version) openVersionHistory(version); return; }
     const primary = event.target.closest('.row-primary');
     if (primary && !primary.disabled) await runListAction(primary.dataset.action, primary.dataset.id);
   }));
@@ -4102,6 +4331,7 @@
     closeRowMenu();
     toggleNotifications(false);
     closeExportMenu();
+    closeCodeSuggest();
 
     document.documentElement.removeAttribute('data-initial-panel');
 
@@ -4576,6 +4806,17 @@
 
   // --- Spreadsheet Event Listeners ---
   dom.table?.addEventListener('click', event => {
+    // Search shortcuts on a product-group row.
+    const keywordAdd = event.target.closest('.gk-add');
+    if (keywordAdd) { event.stopPropagation(); return startGroupKeywordInput(keywordAdd.closest('.group-keywords')); }
+    const keywordRemove = event.target.closest('.gk-remove');
+    if (keywordRemove) {
+      event.stopPropagation();
+      const box = keywordRemove.closest('.group-keywords');
+      const keep = groupKeywords(box.dataset.category, box.dataset.group).filter(keyword => keyword !== keywordRemove.dataset.keyword);
+      saveGroupKeywords(box.dataset.category, box.dataset.group, keep).then(() => toast(`Removed "${keywordRemove.dataset.keyword}" from ${box.dataset.group}.`)).catch(error => toast(error.message));
+      return;
+    }
     const chooseButton = event.target.closest('.choose-group-image');
     if (chooseButton) {
       if (!can('manageImages')) return;
@@ -5195,6 +5436,8 @@
     grid.innerHTML = visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
   }
   function switchConfigTab(tab) {
+    if (!['library', 'types'].includes(tab)) tab = 'library';
+    try { sessionStorage.setItem(CONFIG_TAB_KEY, tab); } catch { }
     state.configTab = tab;
     $$('.config-tab-btn').forEach(button => {
       const active = button.dataset.configTab === tab;
@@ -5204,6 +5447,68 @@
     $('#libraryCard').hidden = tab !== 'library';
     $('#typesCard').hidden = tab !== 'types';
     if (tab === 'library') renderLibrary(); else renderImageSettings();
+  }
+
+  // --- Search keywords, inline in the price table: each product-group row shows its shortcuts as
+  // chips (everyone sees them as hints); admins add one with "+ keyword" and remove one with ×.
+  // Saved on the server; group keywords also cover products added to the group later. ---
+  function keywordEntryId(scope, category, group, code) {
+    return scope === 'product' ? `product|${String(code).trim().toLowerCase()}` : `group|${String(category).trim().toLowerCase()}|${String(group).trim().toLowerCase()}`;
+  }
+  function groupKeywords(category, groupName) {
+    const id = keywordEntryId('group', category, groupName);
+    return (state.searchKeywords || []).find(entry => keywordEntryId(entry.scope, entry.category, entry.group, entry.code) === id)?.keywords || [];
+  }
+  /** Chips for a product-group row of the price table. */
+  function groupKeywordsMarkup(category, groupName) {
+    const keywords = groupKeywords(category, groupName);
+    const editable = can('manageImages');
+    if (!keywords.length && !editable) return '';
+    const tokens = normalizeSearch(state.search).split(' ').filter(Boolean);
+    const chips = keywords.map(keyword => {
+      const matched = tokens.some(token => normalizeSearch(keyword).startsWith(token));
+      return `<span class="gk-chip ${matched ? 'is-match' : ''}" title="Search shortcut">${escapeHtml(keyword)}${editable ? `<button type="button" class="gk-remove" data-keyword="${escapeHtml(keyword)}" aria-label="Remove shortcut ${escapeHtml(keyword)}">×</button>` : ''}</span>`;
+    }).join('');
+    return `<span class="group-keywords" data-category="${escapeHtml(category)}" data-group="${escapeHtml(groupName)}"><span class="gk-label">Shortcuts</span>${chips}${editable ? '<button type="button" class="gk-add" title="Add a search shortcut for this product group">+ keyword</button>' : ''}</span>`;
+  }
+  async function saveGroupKeywords(category, groupName, keywords) {
+    const target = { scope: 'group', category, group: groupName, code: '' };
+    const data = await api('search-keywords', { method: 'POST', body: JSON.stringify({ ...target, keywords: keywords.join(', ') }) });
+    // A new array, so the search picks the change up at once.
+    state.searchKeywords = [...(state.searchKeywords || []).filter(entry => keywordEntryId(entry.scope, entry.category, entry.group, entry.code) !== keywordEntryId('group', category, groupName)), ...(data.entry ? [data.entry] : [])];
+    renderTable();
+    return data;
+  }
+  /** "+ keyword" turns into a small field; Enter (or leaving it) saves, Esc cancels. */
+  function startGroupKeywordInput(container) {
+    if (container.querySelector('.gk-input')) return container.querySelector('.gk-input').focus();
+    const add = container.querySelector('.gk-add');
+    const input = document.createElement('input');
+    input.className = 'gk-input';
+    input.placeholder = 'e.g. ct, crs';
+    input.setAttribute('aria-label', `New search shortcut for ${container.dataset.group}`);
+    add.replaceWith(input);
+    input.focus();
+    let done = false;
+    const finish = async save => {
+      if (done) return;
+      done = true;
+      const added = input.value.split(',').map(value => value.trim()).filter(Boolean);
+      if (!save || !added.length) return renderTable();
+      input.disabled = true;
+      try {
+        const current = groupKeywords(container.dataset.category, container.dataset.group);
+        await saveGroupKeywords(container.dataset.category, container.dataset.group, [...current, ...added]);
+        toast(`Added ${added.map(keyword => `"${keyword}"`).join(', ')} to ${container.dataset.group}. Type it in Search to find these products.`);
+      } catch (error) { toast(error.message); renderTable(); }
+    };
+    input.addEventListener('keydown', event => {
+      event.stopPropagation(); // not the table's cell navigation
+      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+      if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    ['click', 'dblclick', 'mousedown'].forEach(type => input.addEventListener(type, event => event.stopPropagation()));
   }
   $$('.config-tab-btn').forEach(button => button.addEventListener('click', () => switchConfigTab(button.dataset.configTab)));
   $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; renderLibrary(); });

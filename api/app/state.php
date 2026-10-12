@@ -25,6 +25,8 @@ json_response([
     'productImages' => repo_list_images(),
     'photoLibrary' => user_can($user, 'manageImages') ? repo_list_library() : [],
     'photoFolders' => user_can($user, 'manageImages') ? repo_list_library_folders() : [],
+    'searchKeywords' => repo_list_search_keywords(), // everyone's search uses them
+
     'auditLogs' => user_can($user, 'viewAudit') ? repo_list_audit(1000) : [],
     'devTools' => DEV_TOOLS_ENABLED && user_can($user, 'update'),
 ] + notifications_payload($user));

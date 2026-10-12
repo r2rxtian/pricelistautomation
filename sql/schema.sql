@@ -150,6 +150,22 @@ BEGIN
 END;
 GO
 
+-- Search keywords (Config): admin shortcuts for a product group or one product code.
+IF OBJECT_ID(N'dbo.PLA_ACD_SearchKeywords', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PLA_ACD_SearchKeywords (
+        keyword_id varchar(64) NOT NULL PRIMARY KEY,
+        scope varchar(10) NOT NULL,              -- 'group' or 'product'
+        category_name nvarchar(120) NULL,
+        group_name nvarchar(200) NULL,
+        product_code nvarchar(80) NULL,
+        keywords nvarchar(1000) NOT NULL,        -- comma-separated, lowercase
+        updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
+        updated_by nvarchar(180) NOT NULL
+    );
+END;
+GO
+
 -- ============================================================
 -- Storage: audit log
 -- ============================================================
