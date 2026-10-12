@@ -128,7 +128,7 @@
       const scope = selectedCount === 1 ? [...selectedAdjustmentCategories][0]
         : selectedCount === totalCategories ? `All ${totalCategories} categories`
         : `${selectedCount} categories`;
-      summary.textContent = selectedCount ? `${scope} · ${products}` : 'No categories selected';
+      summary.textContent = selectedCount ? `${scope} · ${products}` : 'Choose categories to adjust';
       summary.title = summary.textContent;
     }
   }
@@ -482,16 +482,9 @@
       popover.style.position = 'fixed';
       popover.style.top = `${Math.round(rect.bottom + 8)}px`;
       popover.style.right = `${Math.max(16, Math.round(window.innerWidth - rect.right))}px`;
-      const allCategories = getPriceCategories();
-      const cat = String(state.category || '').trim();
+      // Nothing is pre-selected: choose the categories to adjust (or tick "All categories").
       selectedAdjustmentCategories.clear();
-      if (cat && allCategories.some(c => c.name === cat)) {
-        selectedAdjustmentCategories.add(cat);
-        dom.percentage.value = getCategoryAdjustment(cat);
-      } else {
-        allCategories.forEach(c => selectedAdjustmentCategories.add(c.name));
-        dom.percentage.value = state.adjustment || 0;
-      }
+      dom.percentage.value = 0;
       if (dom.categoryAdjustSearch) dom.categoryAdjustSearch.value = '';
       renderCategoryAdjustmentList();
       requestAnimationFrame(() => {
