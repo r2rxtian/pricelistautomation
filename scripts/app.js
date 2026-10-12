@@ -1255,19 +1255,41 @@
     if (position < 0) return;
     $$('#priceTable tr.excel-data-row').forEach(tr => tr.querySelectorAll('.excel-cell')[position]?.classList.add('col-hover'));
     $$(`#priceTable th[data-col-letter="${position}"]`).forEach(th => th.classList.add('col-hover'));
+    columnHeaders(position).forEach(th => th.classList.add('col-hover'));
+  }
+  /** The named header cells (e.g. "PRICE/PC USD") above a sheet column, found by where its letter sits. */
+  function columnHeaders(position) {
+    const letter = dom.table?.querySelector(`thead th[data-col-letter="${position}"]`);
+    if (!letter) return [];
+    const box = letter.getBoundingClientRect();
+    const middle = (box.left + box.right) / 2;
+    return [...dom.table.querySelectorAll('thead tr:not(.col-letter-row) th')].filter(th => {
+      if (th.colSpan > 1) return false;
+      const rect = th.getBoundingClientRect();
+      return rect.left <= middle && middle <= rect.right;
+    });
+  }
+  /** Row hover: the hovered row's number lights up, like the column's header does. */
+  let hoveredRow = null;
+  function setRowHover(tr) {
+    if (tr === hoveredRow) return;
+    hoveredRow?.querySelector('.col-row-num')?.classList.remove('is-guide-hover');
+    hoveredRow = tr;
+    tr?.querySelector('.col-row-num')?.classList.add('is-guide-hover');
   }
   dom.table?.addEventListener('mouseover', event => {
+    setRowHover(event.target.closest('tr.excel-data-row'));
     const td = event.target.closest('.excel-cell');
     if (!td) return setColumnHover(-1);
     setColumnHover([...td.closest('tr').querySelectorAll('.excel-cell')].indexOf(td));
   });
-  dom.table?.addEventListener('mouseleave', () => setColumnHover(-1));
-  /** Highlights the active cell's column letter and row number, like Excel's headings. */
+  dom.table?.addEventListener('mouseleave', () => { setColumnHover(-1); setRowHover(null); });
+  /** Highlights the active cell's column letter and header, and its row number, like Excel's headings. */
   function highlightCellGuides(td) {
     $$('#priceTable .is-guide-active').forEach(el => el.classList.remove('is-guide-active'));
     if (!td) return;
     const { position } = cellReference(td, 0, 0);
-    if (position >= 0) $$(`#priceTable th[data-col-letter="${position}"]`).forEach(th => th.classList.add('is-guide-active'));
+    if (position >= 0) [...$$(`#priceTable th[data-col-letter="${position}"]`), ...columnHeaders(position)].forEach(th => th.classList.add('is-guide-active'));
     td.closest('tr')?.querySelector('.col-row-num')?.classList.add('is-guide-active');
   }
   function updateFormulaBar(force = false) {
@@ -5536,12 +5558,30 @@
     const used = item.usedBy > 0;
     return `${levels ? `<button type="button" class="option-icon" data-option-action="up" aria-label="Move ${escapeHtml(item.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="option-icon" data-option-action="down" aria-label="Move ${escapeHtml(item.name)} down" ${index === count - 1 ? 'disabled' : ''}>↓</button>` : ''}<button type="button" class="option-icon" data-option-action="edit" aria-label="Edit ${escapeHtml(item.name)}" title="Edit">✎</button><button type="button" class="option-icon danger" data-option-action="remove" aria-label="Remove ${escapeHtml(item.name)}" ${used ? `disabled title="Used by ${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}: switch it off instead"` : 'title="Remove"'}>×</button>`;
   }
-  function countryTile(item, index, count, editing) {
-    return `<div class="option-row option-tile ${item.active ? '' : 'is-off'} ${editing ? 'is-editing' : ''}" data-index="${index}" data-key="${escapeHtml(item.name)}" style="--tile-hue: ${countryHue(item.name)}">
-      <div class="tile-top"><div class="option-main">${optionText(item, false, editing)}</div>${optionSwitch(item)}</div>
-      <div class="tile-foot">${optionUsage(item)}<div class="option-actions">${optionTools(item, index, count, false, editing)}</div></div>
-      ${item.active ? '' : '<span class="tile-stamp" aria-hidden="true">Off</span>'}
-    </div>`;
+  // Countries are an A–Z directory: each letter heads a row of country chips. Hover a chip for its ×;
+  // a country used by saved price lists shows how many instead, and stays.
+  function countryChip(item, index) {
+    const name = escapeHtml(item.name);
+    const uses = `${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}`;
+    return `<span class="option-row country-chip ${item.usedBy > 0 ? 'is-used' : ''}" data-index="${index}" data-key="${name}" style="--tile-hue: ${countryHue(item.name)}" ${item.usedBy > 0 ? `title="Used by ${uses}, so it stays"` : ''}>
+      <span class="chip-dot" aria-hidden="true"></span>
+      <span class="chip-name">${name}</span>
+      ${item.usedBy > 0
+        ? `<span class="chip-uses" aria-label="Used by ${uses}">${item.usedBy}</span>`
+        : `<button type="button" class="chip-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
+    </span>`;
+  }
+  function countryDirectory(entries) {
+    const letters = new Map();
+    entries.forEach(entry => {
+      const letter = entry.item.name.trim().charAt(0).toUpperCase() || '#';
+      if (!letters.has(letter)) letters.set(letter, []);
+      letters.get(letter).push(entry);
+    });
+    return [...letters].map(([letter, group]) => `<section class="country-letter" aria-label="${escapeHtml(letter)}">
+      <span class="letter-mark" aria-hidden="true">${escapeHtml(letter)}</span>
+      <div class="letter-chips">${group.map(({ item, index }) => countryChip(item, index)).join('')}</div>
+    </section>`).join('');
   }
   // Price levels are a ladder: numbered rungs in a straight column, in the order the dropdowns show them.
   function levelStep(item, index, count, editing) {
@@ -5561,21 +5601,24 @@
     $$('#listsCard .option-list').forEach(section => {
       const type = section.dataset.optionType;
       const items = options[type] || [];
-      const off = items.filter(item => !item.active).length;
-      section.querySelector('[data-option-summary]').textContent = `${items.length} ${type === 'countries' ? 'countr' + (items.length === 1 ? 'y' : 'ies') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
+      const countries = type === 'countries';
+      const off = countries ? 0 : items.filter(item => !item.active).length;
+      section.querySelector('[data-option-summary]').textContent = `${items.length} ${countries ? 'countr' + (items.length === 1 ? 'y' : 'ies') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
       const query = (optionSearch[type] || '').trim().toLowerCase();
       const rows = section.querySelector('[data-option-rows]');
       const visible = items.map((item, index) => ({ item, index })).filter(({ item }) => !query || item.name.toLowerCase().includes(query));
-      const draw = type === 'priceLevels' ? levelStep : countryTile;
       flipMove(rows, () => {
-        rows.innerHTML = visible.map(({ item, index }) => draw(item, index, items.length, optionEditing === `${type}|${index}`)).join('')
+        rows.innerHTML = (countries
+          ? countryDirectory(visible)
+          : visible.map(({ item, index }) => levelStep(item, index, items.length, optionEditing === `${type}|${index}`)).join(''))
           || `<p class="option-empty">${query ? 'No matches.' : 'Nothing here yet.'}</p>`;
       });
       if (optionEditing?.startsWith(`${type}|`)) requestAnimationFrame(() => { const input = rows.querySelector('.is-editing input:not([disabled])'); input?.focus(); input?.select(); });
     });
   }
   async function saveListOptions(type, items, message) {
-    const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active }) => ({ name, description, active })) }) });
+    // Countries have no on/off any more: every country in the list is offered.
+    const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active }) => ({ name, description, active: type === 'countries' ? true : active })) }) });
     state.listOptions = { ...state.listOptions, [type]: data.items };
     if (type === 'countries') state.countries = data.active; else state.priceLevels = data.active;
     if (type === 'priceLevels') state.priceLevelInfo = data.items.map(({ name, description }) => ({ name, description }));
@@ -5600,7 +5643,13 @@
     if (action === 'edit') { optionEditing = `${type}|${index}`; return renderListOptions(); }
     if (action === 'cancel') { optionEditing = null; return renderListOptions(); }
     if (action === 'toggle') return flipSwitch(button).then(() => changeListOptions(section, items => { items[index].active = !items[index].active; }, `${item.name} ${item.active ? 'switched off for new price lists' : 'offered again'}.`));
-    if (action === 'remove') return changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`);
+    if (action === 'remove') {
+      const remove = () => changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`);
+      const chip = button.closest('.country-chip');
+      if (!chip || reducedMotion()) return remove();
+      chip.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.6)' }], { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+      return setTimeout(remove, 200); // the chip shrinks away, then the list saves
+    }
     if (action === 'up' || action === 'down') return changeListOptions(section, items => { const to = index + (action === 'up' ? -1 : 1); [items[index], items[to]] = [items[to], items[index]]; }, `${item.name} moved ${action}.`);
     if (action === 'save') {
       const row = button.closest('.option-row');
