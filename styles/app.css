@@ -11271,3 +11271,31 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 .library-content-heading .library-upload-controls { padding-left: 14px; border-left: 1px solid var(--line-soft); }
 @media (max-width: 1180px) { .library-content-heading .library-upload-controls { padding-left: 0; border-left: 0; } }
 [data-theme="dark"] .library-content-heading .library-upload-controls { border-left-color: #26292e; }
+
+/* Dark mode prints are dark paper: warm charcoal a step above the board, so the photos are the
+   brightest thing on the wall instead of a row of cream cards. The tape keeps the pink accent. */
+[data-theme="dark"] #libraryGrid .library-card {
+  background: linear-gradient(180deg, #232126 0%, #1f1d21 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 0 0 1px rgba(255, 255, 255, .05), 0 14px 26px -14px rgba(0, 0, 0, .95);
+}
+[data-theme="dark"] #libraryGrid .library-card:hover,
+[data-theme="dark"] #libraryGrid .library-card:focus-within { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 0 0 1px rgba(250, 187, 203, .18), 0 28px 36px -18px rgba(0, 0, 0, 1); }
+[data-theme="dark"] #libraryGrid .library-card::before {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .18) 0 2px, transparent 2px 5px), rgba(250, 187, 203, .55);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  opacity: 1;
+}
+[data-theme="dark"] #libraryGrid .library-thumb { background: #16171b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] #libraryGrid .library-meta strong { color: #f4f4f6; }
+[data-theme="dark"] #libraryGrid .library-meta small { color: #9a9aa3; }
+[data-theme="dark"] #libraryGrid .library-photo-folder-control { border-top-color: rgba(255, 255, 255, .09); }
+[data-theme="dark"] #libraryGrid .library-photo-folder {
+  border-color: #2e3037;
+  background-color: #16171b;
+  color: #d4d4d8;
+}
+[data-theme="dark"] #libraryGrid .library-photo-folder:hover { border-color: rgba(250, 187, 203, .35); }
+[data-theme="dark"] #libraryGrid .library-photo-folder:focus { border-color: #fabbcb; box-shadow: 0 0 0 3px rgba(250, 187, 203, .16); outline: none; }
+[data-theme="dark"] .library-upload-print { border-color: rgba(250, 187, 203, .3); background: rgba(31, 29, 33, .55); }
+[data-theme="dark"] .library-upload-print:hover,
+[data-theme="dark"] .library-upload-print:focus-visible { border-color: rgba(250, 187, 203, .6); background: #1f1d21; }
