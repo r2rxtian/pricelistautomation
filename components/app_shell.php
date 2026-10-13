@@ -2,7 +2,8 @@
 declare(strict_types=1);
 /**
  * The signed-in app (top bar, the five pages and their dialogs). Rendered by the page files in
- * pages/ — prices.php, files.php, audit_logs.php, config.php (approvals.php now opens Files) — which set $page to the
+ * pages/ — files.php (Files, and the editor at files.php?list=…), audit_logs.php, config.php; prices.php and
+ * approvals.php still work as old addresses — which set $page to the
  * page to open. Switching pages in the top bar happens in the browser (scripts/app.js) and updates
  * the address to that page's file, so a refresh or bookmark opens the same page.
  */
@@ -36,7 +37,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=163">
+    <link rel="stylesheet" href="../styles/app.css?v=174">
     <script>
     (function() {
         try {
@@ -77,8 +78,7 @@ $panel = APP_PAGES[$page]['panel'];
             <a class="brand" href="#" aria-label="PLA Price List Automation home"><?= pla_logo_lockup() ?></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
-            <button class="nav-item active" data-panel="workspacePanel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg><strong>Prices</strong></button>
-            <button class="nav-item" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
+            <button class="nav-item active" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
             <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
             <button id="settingsNav" class="nav-item perm-manageImages" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
         </nav>
@@ -125,6 +125,10 @@ $panel = APP_PAGES[$page]['panel'];
             <img class="powered-by-logo" src="../assets/images/logofooter.png" alt="Powered by Information Technology" width="125" height="30">
         </div>
     </header>
+
+    <!-- Open price lists, like browser tabs: switch between them, close one with its ×. Unsaved
+         changes stay with each tab. Shown while at least one list is open. -->
+    <nav id="fileTabs" class="file-tabs" aria-label="Open price lists" hidden><div class="file-tabs-list" role="tablist"></div></nav>
 
     <div class="workspace">
         <main class="content">
@@ -904,7 +908,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=161"></script>
+<script src="../scripts/app.js?v=168"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

@@ -9936,11 +9936,13 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
    Export only), with a two-way role control and the access switch.
    The first badge is blank and flips over into "Add a user" (biometrics lookup → role → add).
    ========================================================================== */
-.users-card { display: grid; gap: 6px; }
+/* One white card like the other Config sections: the header row on top, the badge board inside. */
+.users-card { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; border: 1px solid var(--line-panel); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
 .users-card[hidden] { display: none; }
-.users-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 0 4px; }
+.users-head { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line-soft); }
+.users-head .option-list-sub { margin-top: 2px; }
 .users-head h2 { margin: 0; font: 600 1.15rem var(--display); color: var(--text-heading); }
-.users-legend { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--text-muted); font-size: 0.72rem; font-weight: 600; }
+.users-legend { display: flex; align-items: center; gap: 5px; margin: 0; padding: 5px 12px 5px 4px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface-elevated, #fcf8f9); color: var(--text-muted); font-size: 0.72rem; font-weight: 600; }
 .legend-dot { display: inline-block; width: 9px; height: 9px; margin-left: 8px; border-radius: 50%; }
 .legend-dot.is-admin { background: linear-gradient(135deg, #b52042, #e46a8a); }
 .legend-dot.is-export { background: linear-gradient(135deg, #475569, #8b9bb0); }
@@ -10330,9 +10332,11 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
 /* Users: a dotted board behind the badges, and an ID-card security print on each badge
    (fine rings around the photo, fading out down the card, tinted by role). */
 .badge-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
   padding: 34px 22px 24px;
-  border: 1px solid var(--line-panel);
-  border-radius: 16px;
   background-color: var(--surface-elevated, #fcf8f9);
   background-image: radial-gradient(color-mix(in srgb, var(--pink) 16%, transparent) 1px, transparent 1.3px);
   background-size: 16px 16px;
@@ -10347,7 +10351,10 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
 
 [data-theme="dark"] #libraryGrid.library-grid,
 [data-theme="dark"] #imageSettingsList.image-settings-list,
-[data-theme="dark"] .badge-grid { background-color: #111216; background-image: radial-gradient(rgba(235, 151, 174, .12) 1px, transparent 1.3px); border-color: #26292e; }
+[data-theme="dark"] .badge-grid { background-color: #111216; background-image: radial-gradient(rgba(235, 151, 174, .12) 1px, transparent 1.3px); }
+[data-theme="dark"] .users-card { background: #141519; border-color: #26292e; }
+[data-theme="dark"] .users-head { border-bottom-color: #26292e; }
+[data-theme="dark"] .users-legend { background: #17181d; border-color: #26292e; }
 [data-theme="dark"] #libraryGrid .library-card { background: #ece6df; box-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 14px 24px -14px rgba(0, 0, 0, .95); }
 [data-theme="dark"] .library-upload-print { border-color: #4e2a36; background: rgba(22, 23, 28, .6); }
 [data-theme="dark"] .library-upload-print:hover { background: #1f171b; }
@@ -10804,3 +10811,137 @@ dialog.version-history-dialog { width: min(800px, calc(100vw - 32px)); }
 .library-content-heading, .library-content .image-settings-toolbar { flex: 0 0 auto; }
 #libraryGrid.library-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; grid-auto-rows: max-content; }
 .library-content #libraryEmpty { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Files with no price lists yet: three blank sheets (like the file sheets), a short note, one
+   upload button and the three steps. The filters are hidden while there is nothing to filter. */
+#filesPanel.is-empty .history-tools { display: none; }
+.files-empty { display: grid; justify-items: center; gap: 12px; max-width: 780px; margin: 6vh auto 0; padding: 0 16px 24px; text-align: center; }
+.files-empty h2 { margin: 6px 0 0; color: var(--text-heading); font: 600 1.45rem var(--display); }
+.files-empty p { max-width: 520px; margin: 0; color: var(--text-muted); font-size: 0.86rem; line-height: 1.55; }
+.files-empty-upload { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; }
+.files-empty-art { position: relative; width: 150px; height: 128px; margin-bottom: 4px; animation: files-empty-float 5s ease-in-out infinite; }
+.ghost-sheet {
+  --fold: 16px;
+  position: absolute;
+  top: 8px;
+  left: 37px;
+  width: 76px;
+  height: 100px;
+  border-radius: 4px;
+  background: #fffdfb;
+  clip-path: polygon(0 0, calc(100% - var(--fold)) 0, 100% var(--fold), 100% 100%, 0 100%);
+  filter: drop-shadow(0 6px 10px rgba(40, 20, 30, .12));
+}
+.ghost-sheet::after { content: ""; position: absolute; top: 0; right: 0; width: var(--fold); height: var(--fold); background: linear-gradient(to bottom left, transparent 50%, #eadfe3 50%); }
+.ghost-sheet.is-back { background: #f6efec; transform: translateX(-30px) rotate(-12deg); }
+.ghost-sheet.is-middle { background: #faf5f2; transform: translateX(30px) rotate(10deg); }
+.ghost-sheet.is-front { display: grid; place-items: center; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--pink) 30%, transparent); }
+.ghost-lines { position: absolute; inset: 18px 12px auto; height: 30px; background: repeating-linear-gradient(to bottom, #efe4e8 0 2px, transparent 2px 9px); }
+.ghost-plus { display: grid; place-items: center; width: 32px; height: 32px; margin-top: 28px; border: 1.5px dashed color-mix(in srgb, var(--pink) 55%, transparent); border-radius: 50%; color: var(--pink); font: 400 1.25rem/1 var(--sans); }
+@keyframes files-empty-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.files-empty-steps { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: max-content; max-width: 100%; margin: 18px 0 0; padding: 0; list-style: none; }
+.files-empty-steps li { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface-card); color: var(--text-muted); font-size: 0.74rem; text-align: left; }
+.files-empty-steps b { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #b52042, #e46a8a); color: #fff; font: 800 0.7rem/1 var(--display); }
+.files-empty-steps strong { color: var(--text-heading); }
+@media (prefers-reduced-motion: reduce) { .files-empty-art { animation: none; } }
+[data-theme="dark"] .ghost-sheet { background: #1d1e23; }
+[data-theme="dark"] .ghost-sheet.is-back { background: #17181c; }
+[data-theme="dark"] .ghost-sheet.is-middle { background: #1a1b20; }
+[data-theme="dark"] .ghost-sheet::after { background: linear-gradient(to bottom left, transparent 50%, #2c2e35 50%); }
+[data-theme="dark"] .ghost-lines { background: repeating-linear-gradient(to bottom, #2c2f37 0 2px, transparent 2px 9px); }
+[data-theme="dark"] .files-empty-steps li { background: #18191e; border-color: #26292e; }
+
+/* The editor's old "CURRENT FILE" label stays hidden (the tabs show which list is open). */
+#workspacePanel .page-heading .kicker { display: none; }
+
+.sheet-unsaved { display: inline-flex; align-items: center; gap: 6px; color: #b45309; font-size: 0.68rem; font-weight: 700; }
+.sheet-unsaved::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 3px #fef3c7; }
+[data-theme="dark"] .sheet-unsaved { color: #fbbf24; }
+
+/* ==========================================================================
+   Open price lists as tabs, under the top bar (like browser tabs): flag, name, price level, an
+   amber dot for unsaved changes and ×. The list shown in the editor is the raised white tab with
+   the pink underline. The strip is slim, and the editor's heading sits a little higher to make room,
+   so the price table keeps its space.
+   ========================================================================== */
+.file-tabs {
+  position: relative;
+  z-index: 19;
+  display: flex;
+  flex: 0 0 38px;
+  align-items: flex-end;
+  height: 38px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line-panel);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+.file-tabs[hidden] { display: none; }
+.file-tabs-list { position: relative; display: flex; flex: 1 1 auto; align-items: flex-end; gap: 2px; height: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.file-tabs-list::-webkit-scrollbar { display: none; }
+.file-tab {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 32px;
+  margin-bottom: -1px;
+  padding: 0 6px 0 2px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  color: var(--text-muted);
+  transition: background .3s ease, color .3s ease, border-color .3s ease, box-shadow .3s ease, height .3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.file-tab + .file-tab::before { content: ""; position: absolute; top: 9px; bottom: 9px; left: -2px; width: 1px; background: var(--line-panel); transition: opacity .2s ease; }
+.file-tab.is-active::before, .file-tab.is-active + .file-tab::before, .file-tab:hover::before, .file-tab:hover + .file-tab::before { opacity: 0; }
+.file-tab:hover { background: color-mix(in srgb, var(--surface-card) 75%, transparent); color: var(--text-heading); }
+.file-tab.is-current { color: var(--text-heading); }
+.file-tab.is-active {
+  height: 34px;
+  border-color: var(--line-panel);
+  background: var(--surface-card);
+  box-shadow: 0 -4px 12px -10px rgba(40, 20, 30, .5);
+  color: var(--pink);
+}
+/* One underline that glides to the tab shown in the editor (placed by placeTabIndicator). */
+.file-tab-indicator { position: absolute; bottom: 0; left: 0; z-index: 2; height: 2px; width: 0; border-radius: 2px 2px 0 0; background: var(--pink); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+.file-tab-open { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; height: 100%; padding: 0 6px; border: 0; background: transparent; color: inherit; font: 600 0.8rem var(--sans); cursor: pointer; }
+.file-tab-open:focus-visible { outline: 2px solid color-mix(in srgb, var(--pink) 50%, transparent); outline-offset: -3px; border-radius: 8px; }
+.file-tab .country-flag { width: 20px; height: 14px; border-radius: 3px; }
+/* The file name comes first: country · price level gives way before the name is ever shortened. */
+.file-tab-name { flex: 0 1 auto; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-tab-meta { flex: 0 100 auto; min-width: 0; overflow: hidden; color: var(--text-subtle); font-size: 0.74rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.file-tab-meta:empty { display: none; }
+.file-tab-meta::before { content: "·"; margin-right: 6px; }
+.file-tab.is-active .file-tab-name { font-weight: 700; }
+.file-tab-dot { display: none; flex: none; width: 7px; height: 7px; margin: 0 3px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; }
+.file-tab.is-dirty .file-tab-dot { display: block; }
+.file-tab-close { display: grid; flex: none; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-subtle); cursor: pointer; opacity: .75; transition: background .2s ease, color .2s ease, opacity .2s ease; }
+.file-tab-close:hover, .file-tab-close:focus-visible { background: var(--pink-subtle); color: var(--pink); opacity: 1; outline: none; }
+/* Room for the strip: the page content starts a little higher while tabs are shown. */
+body.has-file-tabs .content { padding-top: 8px; }
+/* With tabs showing, the selected tab names the list: the big title and "Close file" (the tab's ×)
+   step aside, and the country/level pill and the status share one line next to Export and Save. */
+body.has-file-tabs #workspacePanel .title-line .list-title,
+body.has-file-tabs #closeFileBtn { display: none; }
+body.has-file-tabs #workspacePanel .heading-left { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 4px; }
+body.has-file-tabs #workspacePanel .meta-container { margin-top: 0; }
+body.has-file-tabs #workspacePanel .page-heading { padding-bottom: 10px; }
+@media (max-width: 720px) { .file-tabs { padding: 0 12px; } }
+
+[data-theme="dark"] .file-tabs { background: rgba(17, 18, 22, .85); border-color: #26292e; }
+[data-theme="dark"] .file-tab + .file-tab::before { background: #2a2d34; }
+[data-theme="dark"] .file-tab:hover { background: #1a1b20; }
+[data-theme="dark"] .file-tab.is-active { border-color: #2a2d34; background: #141519; color: #f0a3b7; }
+[data-theme="dark"] .file-tab-indicator { background: #eb97ae; }
+[data-theme="dark"] .file-tab-dot { box-shadow: 0 0 0 2px #3a2a10; }
+[data-theme="dark"] .file-tab-close:hover, [data-theme="dark"] .file-tab-close:focus-visible { background: #2a161e; color: #f0a3b7; }
+/* The users board scrolls with the same slim pink scrollbar as the rest of Config. */
+.badge-grid { scrollbar-width: thin; scrollbar-color: #e4c3cc transparent; }
+.badge-grid:hover { scrollbar-color: #d29aab transparent; }
+.badge-grid::-webkit-scrollbar { width: 8px; }
+.badge-grid::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #e4c3cc padding-box; }
+[data-theme="dark"] .badge-grid { scrollbar-color: #4e2a36 transparent; }
+[data-theme="dark"] .badge-grid::-webkit-scrollbar-thumb { background-color: #4e2a36; }

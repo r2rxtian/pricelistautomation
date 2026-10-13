@@ -159,5 +159,5 @@ echo json_encode([
     'success' => true,
     'message' => 'Welcome back, ' . $current['name'] . '!',
     'type' => 'success',
-    'data' => ['redirect' => 'prices.php'],
+    'data' => ['redirect' => 'files.php'],
 ]);

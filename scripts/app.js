@@ -312,7 +312,25 @@
     }
   }
 
-  const draftKey = () => (state.user ? `draft_${state.user.username}` : 'draft_current');
+  /** A price list's identity (name + country + price level): stays the same across its versions. */
+  const tabKeyOf = list => (list ? [list.name, list.country, list.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|') : '');
+  /** Each open price list (tab) keeps its own unsaved draft, so switching tabs never loses changes. */
+  const draftKey = (list = state.active) => (state.user ? `draft_${state.user.username}_${tabKeyOf(list) || 'current'}` : 'draft_current');
+  const legacyDraftKey = () => (state.user ? `draft_${state.user.username}` : 'draft_current'); // the one draft of earlier builds
+  async function clearAllDrafts() {
+    try {
+      const db = await openDraftDb();
+      if (!db) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction('drafts', 'readwrite');
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.objectStore('drafts').clear();
+      });
+    } catch {
+      return false;
+    }
+  }
 
   function applyPermissions() {
     $$('.edit-only').forEach(element => element.hidden = !can('update'));
@@ -334,16 +352,168 @@
     if (!state.active) closeExportMenu();
     const closeButton = $('#closeFileBtn');
     if (closeButton) closeButton.hidden = !state.active;
+    renderTabs();
     renderNavigator();
   }
-  /** Closes the open price list and returns the editor to its empty state. */
-  async function closeActiveFile() {
-    if (!state.active) return;
-    if (state.active.isDraft && !(await confirmDiscardDraft('Closing this file'))) return;
-    const name = state.active.name;
-    if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
-    setPriceEditor(false);
-    if (can('update')) await removeDraft(draftKey());
+  // --- Open price lists as tabs (a strip under the top bar), like browser tabs. Each tab is one price
+  // list (name + country + price level) and remembers the version it shows; unsaved changes stay in
+  // that list's own draft. The tabs are remembered per user, so they survive a refresh. ---
+  let openTabs = [];
+  const tabsStorageKey = () => `pla_tabs_${state.user?.username || 'user'}`;
+  function loadTabs() {
+    try { openTabs = JSON.parse(localStorage.getItem(tabsStorageKey()) || '[]').filter(tab => tab && tab.key); } catch { openTabs = []; }
+  }
+  function saveTabs() {
+    try { localStorage.setItem(tabsStorageKey(), JSON.stringify(openTabs.map(({ key, id, name, country, priceLevel, dirty }) => ({ key, id, name, country, priceLevel, dirty })))); } catch { }
+  }
+  /** Adds the list as a tab (or refreshes its tab: a save makes a new version). */
+  function upsertTab(list, { quiet = false } = {}) {
+    const key = tabKeyOf(list);
+    if (!key) return;
+    let tab = openTabs.find(item => item.key === key);
+    if (!tab) { tab = { key }; openTabs.push(tab); }
+    Object.assign(tab, { id: list.id || tab.id || '', name: list.name, country: list.country, priceLevel: list.priceLevel, dirty: Boolean(list.isDraft) });
+    saveTabs();
+    if (!quiet) renderTabs();
+  }
+  /** The version a tab should open: its own, or the list's current revision if that one was replaced. */
+  function tabTargetId(tab) {
+    const own = versionSummaryById(tab.id);
+    if (own && own.status !== 'superseded') return own.id;
+    const sameList = (state.versions || []).filter(version => tabKeyOf(version) === tab.key);
+    return (liveRevisionOf(own || sameList[0] || {}) || sameList.find(version => version.status === 'pending') || own || {}).id || tab.id;
+  }
+  const TAB_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  function tabInnerMarkup(tab) {
+    const name = escapeHtml(tab.name || 'Price list');
+    return `<button type="button" class="file-tab-open" role="tab">
+        <span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>
+        <span class="file-tab-name">${name}</span>
+        <span class="file-tab-meta">${escapeHtml([tab.country, tab.priceLevel].filter(Boolean).join(' · '))}</span>
+      </button>
+      <span class="file-tab-dot" aria-hidden="true"></span>
+      <button type="button" class="file-tab-close" aria-label="Close ${name}" title="Close"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+  }
+  /**
+   * Draws the tab strip by updating the tabs already there (so colours ease instead of flashing),
+   * popping new tabs in and shrinking closed ones away. A pink underline glides to the tab shown
+   * in the editor.
+   */
+  function renderTabs() {
+    const bar = $('#fileTabs');
+    const list = bar?.querySelector('.file-tabs-list');
+    if (!list) return;
+    const activeKey = state.active ? tabKeyOf(state.active) : '';
+    // One file is open at a time, so the bar holds just that file (with its unsaved dot).
+    openTabs = state.active ? [{ key: activeKey, id: state.active.id || '', name: state.active.name, country: state.active.country, priceLevel: state.active.priceLevel, dirty: Boolean(state.active.isDraft) }] : [];
+    saveTabs();
+    const inEditor = !$('#workspacePanel')?.hidden;
+    bar.hidden = !openTabs.length;
+    document.body.classList.toggle('has-file-tabs', openTabs.length > 0);
+    const animate = state.booted && !reducedMotion();
+    let indicator = list.querySelector('.file-tab-indicator');
+    if (!indicator) {
+      indicator = document.createElement('span');
+      indicator.className = 'file-tab-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      list.append(indicator);
+    }
+    const existing = new Map([...list.querySelectorAll('.file-tab:not(.is-leaving)')].map(el => [el.dataset.tab, el]));
+    // The bar shows one file: a different file takes over the same tab (its contents cross-fade).
+    if (openTabs.length === 1 && !existing.has(openTabs[0].key) && existing.size === 1) {
+      const [[oldKey, el]] = [...existing];
+      existing.delete(oldKey);
+      el.dataset.tab = openTabs[0].key;
+      existing.set(openTabs[0].key, el);
+    }
+    openTabs.forEach((tab, index) => {
+      let el = existing.get(tab.key);
+      const signature = [tab.name, tab.country, tab.priceLevel].join('|');
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'file-tab';
+        el.dataset.tab = tab.key;
+        el.innerHTML = tabInnerMarkup(tab);
+        el.dataset.signature = signature;
+        list.insertBefore(el, list.querySelectorAll('.file-tab:not(.is-leaving)')[index] || indicator);
+        if (animate) el.animate([{ opacity: 0, maxWidth: '0px', minWidth: '0px', transform: 'translateY(8px)' }, { opacity: 1, maxWidth: '236px', minWidth: '140px', transform: 'none' }], { duration: 420, easing: TAB_EASE });
+      } else {
+        existing.delete(tab.key);
+        if (el.dataset.signature !== signature) {
+          el.innerHTML = tabInnerMarkup(tab);
+          el.dataset.signature = signature;
+          if (animate) [...el.children].forEach((child, i) => child.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: i * 40, easing: TAB_EASE, fill: 'backwards' }));
+        }
+      }
+      const current = tab.key === activeKey;
+      el.classList.toggle('is-current', current);
+      el.classList.toggle('is-active', current && inEditor);
+      el.classList.toggle('is-dirty', Boolean(tab.dirty));
+      const open = el.querySelector('.file-tab-open');
+      open.setAttribute('aria-selected', String(current && inEditor));
+      open.title = `${[tab.name, tab.country, tab.priceLevel].filter(Boolean).join(' · ')}${tab.dirty ? ' · unsaved changes' : ''}`;
+    });
+    // Closed tabs shrink away.
+    existing.forEach(el => {
+      if (!animate) return el.remove();
+      el.classList.add('is-leaving');
+      const out = el.animate([{ opacity: 1, maxWidth: `${el.offsetWidth}px`, minWidth: '0px' }, { opacity: 0, maxWidth: '0px', minWidth: '0px', paddingLeft: '0px', paddingRight: '0px' }], { duration: 260, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+      const gone = () => { el.remove(); placeTabIndicator(false); };
+      out.finished.then(gone, () => { });
+      setTimeout(() => el.isConnected && gone(), 420);
+    });
+    requestAnimationFrame(() => placeTabIndicator(animate));
+    list.querySelector('.file-tab.is-current')?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: animate ? 'smooth' : 'auto' });
+  }
+  /** The pink underline under the tab shown in the editor; it glides from tab to tab. */
+  let tabIndicatorBox = null;
+  function placeTabIndicator(glide = true) {
+    const list = $('#fileTabs .file-tabs-list');
+    const indicator = list?.querySelector('.file-tab-indicator');
+    if (!indicator) return;
+    const active = list.querySelector('.file-tab.is-active');
+    if (!active) { indicator.style.opacity = '0'; tabIndicatorBox = null; return; }
+    const box = { x: active.offsetLeft + 12, w: Math.max(0, active.offsetWidth - 24) };
+    const frame = b => ({ transform: `translateX(${b.x}px)`, width: `${b.w}px` });
+    const from = tabIndicatorBox;
+    Object.assign(indicator.style, frame(box), { opacity: '1' });
+    tabIndicatorBox = box;
+    if (glide && from && (from.x !== box.x || from.w !== box.w) && !reducedMotion()) {
+      const anim = indicator.animate([frame(from), frame(box)], { duration: 460, easing: TAB_EASE });
+      setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 700);
+    }
+  }
+  window.addEventListener('resize', () => placeTabIndicator(false));
+  /**
+   * Closes a tab. Unsaved changes ask first. Closing the list that is open moves to its neighbour
+   * (like a browser); with no tabs left, the editor goes back to Files.
+   */
+  async function closeTab(key) {
+    const index = openTabs.findIndex(tab => tab.key === key);
+    const tab = openTabs[index];
+    const isOpen = Boolean(state.active && tabKeyOf(state.active) === key);
+    if (!tab && !isOpen) return false;
+    const name = tab?.name || state.active?.name || 'this price list';
+    if (isOpen) {
+      if (state.active.isDraft && !(await confirmDiscardDraft(`Closing ${name}`))) return false;
+      if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
+      setPriceEditor(false);
+    } else if (can('update') && (tab.dirty || (await getDraft(draftKey(tab))))) {
+      if (!(await confirmDiscardDraft(`Closing ${name}`))) return false;
+    }
+    if (can('update')) await removeDraft(draftKey(isOpen ? state.active : tab));
+    if (index >= 0) openTabs.splice(index, 1);
+    saveTabs();
+    if (!isOpen) { renderTabs(); toast(`Closed ${name}.`); return true; }
+    const next = openTabs[index] || openTabs[index - 1];
+    const inEditor = !$('#workspacePanel')?.hidden;
+    if (next) {
+      try {
+        if (inEditor) await switchToTab(next); else await openVersion(tabTargetId(next), { silent: true, stay: true });
+        toast(`Closed ${name}.`);
+        return true;
+      } catch { /* the neighbour could not be opened: fall back to closing everything below */ }
+    }
     resetFilters();
     state.category = '';
     state.categoryChosen = false;
@@ -351,13 +521,71 @@
     state.rows = []; state.headers = []; state.priceColumns = [];
     state.adjustment = 0; state.categoryAdjustments = {};
     const leaving = await foldAwayOpenFile();
-    loadActive(null);
+    loadActive(null); // with no list open, this goes back to Files
     leaving.forEach(animation => animation.cancel()); // the hidden parts must not stay faded for the next file
-    riseInStartScreen();
     renderLists();
     renderFiles();
+    renderTabs();
     toast(`Closed ${name}.`);
+    return true;
   }
+  /** "Close file" in the editor = closing the open list's tab. */
+  function closeActiveFile() {
+    return state.active ? closeTab(tabKeyOf(state.active)) : Promise.resolve(false);
+  }
+  $('#fileTabs')?.addEventListener('click', async event => {
+    const tabEl = event.target.closest('.file-tab');
+    if (!tabEl) return;
+    const key = tabEl.dataset.tab;
+    if (event.target.closest('.file-tab-close')) return closeTab(key);
+    if (state.active && tabKeyOf(state.active) === key) return switchPanel('workspacePanel', true);
+    const tab = openTabs.find(item => item.key === key);
+    if (!tab) return;
+    try { await switchToTab(tab); } catch (error) { toast(error.message); }
+  });
+  /**
+   * Switching tabs while in the editor: the list you leave slides out toward its tab's side while
+   * the next one loads, then the next list slides in from the other side (no row-by-row replay).
+   */
+  let tabSwitching = 0;
+  async function switchToTab(tab) {
+    const id = tabTargetId(tab);
+    const inEditor = !$('#workspacePanel')?.hidden;
+    if (!inEditor || reducedMotion()) return openVersion(id, { silent: true });
+    const turn = ++tabSwitching;
+    const keys = openTabs.map(item => item.key);
+    const direction = keys.indexOf(tab.key) >= keys.indexOf(tabKeyOf(state.active)) ? 1 : -1;
+    const parts = [$('#workspacePanel .page-heading'), dom.dataView].filter(el => el && !el.hidden);
+    parts.forEach(el => el.getAnimations().forEach(anim => anim.id === 'tab-swap' && anim.cancel()));
+    const out = parts.map(el => {
+      const anim = el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translate3d(${-22 * direction}px, 0, 0)` }], { duration: 170, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+      anim.id = 'tab-swap';
+      return anim;
+    });
+    const hasDraft = can('update') && Boolean((await getDraft(draftKey(tab)))?.rows?.length);
+    const [preloaded] = await Promise.all([
+      hasDraft ? null : fetchVersion(id).catch(() => null),
+      Promise.race([Promise.all(out.map(anim => anim.finished.catch(() => { }))), new Promise(resolve => setTimeout(resolve, 260))]),
+    ]);
+    if (turn !== tabSwitching) return; // another tab was clicked meanwhile
+    suppressRowEnter = true; // the whole list slides in, so its rows don't replay their own entrance
+    try {
+      await openVersion(id, { silent: true, preloaded });
+    } finally {
+      suppressRowEnter = false;
+      out.forEach(anim => anim.cancel());
+    }
+    parts.forEach((el, index) => {
+      const anim = el.animate([{ opacity: 0, transform: `translate3d(${26 * direction}px, 0, 0)` }, { opacity: 1, transform: 'translate3d(0, 0, 0)' }], { duration: 440, delay: index * 50, easing: TAB_EASE, fill: 'backwards' });
+      anim.id = 'tab-swap';
+      setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 700);
+    });
+  }
+  // Middle-click closes a tab, as in a browser.
+  $('#fileTabs')?.addEventListener('auxclick', event => {
+    const tabEl = event.button === 1 && event.target.closest('.file-tab');
+    if (tabEl) { event.preventDefault(); closeTab(tabEl.dataset.tab); }
+  });
   /**
    * Closing a file: the table card shrinks back toward the "Close file" button and fades while the
    * file's actions and stats slide away. Resolves once that has played (at most ~0.4 s).
@@ -376,13 +604,6 @@
     ];
     await Promise.race([Promise.all(animations.map(animation => animation.finished.catch(() => { }))), new Promise(resolve => setTimeout(resolve, 420))]);
     return animations;
-  }
-  /** After closing: the start screen rises into place and the title cross-fades in. */
-  function riseInStartScreen() {
-    if (reducedMotion()) return;
-    const ease = 'cubic-bezier(0.22, 1, 0.36, 1)';
-    dom.emptyState.animate([{ opacity: 0, transform: 'translateY(18px) scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 560, easing: ease });
-    $('#workspacePanel .heading-left')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 360, easing: 'ease-out' });
   }
   function userName(username) {
     return state.directory.find(entry => entry.username === username)?.name || username || '';
@@ -469,7 +690,6 @@
   }
   function showApp() {
     dom.userName.textContent = state.user.name; dom.roleBadge.textContent = can('update') ? 'Admin' : 'Export only'; applyPermissions();
-    switchPanel(getInitialPanelId(), true);
   }
   function setPriceEditor(open) {
     const button = $('#editButton');
@@ -549,34 +769,64 @@
     applyStatePayload(data);
     let targetActive = null;
     let isRestoredDraft = false;
-    if (!skipDraftCheck && can('update')) {
-      const draft = await getDraft(draftKey());
-      if (draft && draft.rows && draft.rows.length) {
-        targetActive = draft;
-        isRestoredDraft = true;
-      }
+    loadTabs();
+    // The single draft of earlier builds moves under its list's own key (one draft per tab now).
+    let legacyDraft = null;
+    if (can('update')) {
+      legacyDraft = await getDraft(legacyDraftKey());
+      if (legacyDraft?.rows?.length) { await setDraft(draftKey(legacyDraft), legacyDraft); await removeDraft(legacyDraftKey()); upsertTab(legacyDraft, { quiet: true }); }
+      else legacyDraft = null;
     }
-    if (!targetActive) {
-      const rememberedId = rememberedVersionId();
-      let remembered = rememberedId ? versionSummaryById(rememberedId) : null;
-      // Reopen the current revision rather than one that has since been replaced.
-      if (remembered?.status === 'superseded') remembered = liveRevisionOf(remembered) || remembered;
-      if (remembered) {
-        try { targetActive = (await api('open', { method: 'POST', body: JSON.stringify({ id: remembered.id }) })).active; } catch { targetActive = null; }
-      }
+    // files.php?list=<id> opens that list; otherwise the one open last time.
+    const fromUrl = urlListId();
+    const rememberedId = (fromUrl && fromUrl !== 'open' && versionSummaryById(fromUrl) ? fromUrl : '') || rememberedVersionId();
+    let remembered = rememberedId ? versionSummaryById(rememberedId) : null;
+    // Reopen the current revision rather than one that has since been replaced.
+    if (remembered?.status === 'superseded') remembered = liveRevisionOf(remembered) || remembered;
+    const rememberedList = remembered || legacyDraft;
+    if (!skipDraftCheck && can('update') && rememberedList) {
+      const draft = await getDraft(draftKey(rememberedList)); // its unsaved changes, if any
+      if (draft?.rows?.length) { targetActive = draft; isRestoredDraft = true; }
+    }
+    if (!targetActive && remembered) {
+      try { targetActive = (await api('open', { method: 'POST', body: JSON.stringify({ id: remembered.id }) })).active; } catch { targetActive = null; }
     }
     showApp(); fillDatalists(); loadActive(targetActive); renderLists(); renderFiles(); renderHistory(); renderImageSettings(); renderNotifications();
+    renderTabs();
+    switchPanel(getInitialPanelId(), true); // after the list is loaded, so a ?list= address can open the editor
+    state.booted = true;
     setAppLoading(false);
     if (isRestoredDraft) toast('Restored your unsaved draft.');
   }
-  async function openVersion(id, { silent = false, stay = false } = {}) {
-    if (!silent && state.active?.isDraft && String(state.active.id || '') !== String(id) && !(await confirmDiscardDraft('Opening another price list'))) return null;
-    const data = await api('open', { method: 'POST', body: JSON.stringify({ id }) });
-    if (can('update')) await removeDraft(draftKey());
-    loadActive(data.active);
+  /**
+   * Opens a price list in the editor (as its tab). Other lists keep their unsaved changes in their own
+   * tabs; opening a list that has unsaved changes brings them back. Only opening a different version
+   * of the list you are editing would replace its changes, so that asks first.
+   */
+  async function openVersion(id, { silent = false, stay = false, preloaded = null } = {}) {
+    const summary = versionSummaryById(id);
+    const sameList = Boolean(summary && state.active && tabKeyOf(summary) === tabKeyOf(state.active));
+    if (sameList && String(state.active.id || '') === String(id)) {
+      if (!stay) switchPanel('workspacePanel', true); // already open (with any unsaved changes): just show it
+      return state.active;
+    }
+    // One file is open at a time: opening another one replaces it, so its unsaved changes are asked about first.
+    if (state.active?.isDraft) {
+      if (!silent && !(await confirmDiscardDraft(sameList ? 'Opening another version of this price list' : 'Opening another price list'))) return null;
+      if (can('update')) await removeDraft(draftKey());
+    }
+    let active = null;
+    if (summary && can('update') && !sameList) {
+      const draft = await getDraft(draftKey(summary));
+      if (draft?.rows?.length) active = draft;
+    }
+    const restored = Boolean(active);
+    // (A copy of a version fetched ahead, e.g. while the tab switch slides out: opening changes it.)
+    if (!active) active = preloaded ? structuredClone(preloaded) : (await api('open', { method: 'POST', body: JSON.stringify({ id }) })).active;
+    loadActive(active);
     if (!stay) switchPanel('workspacePanel', true);
-    if (!silent) toast(`Opened ${data.active.name}.`);
-    return data.active;
+    if (!silent) toast(restored ? `Opened ${active.name} with your unsaved changes.` : `Opened ${active.name}.`);
+    return active;
   }
   function setSavedMeta(text) {
     if (!dom.savedMeta) return;
@@ -600,6 +850,8 @@
       if (dom.bannerApproveBtn) dom.bannerApproveBtn.hidden = true;
       if (dom.bannerRejectBtn) dom.bannerRejectBtn.hidden = true;
       loadChangeMarks(null);
+      // No list open: the editor has nothing to show, so Files takes over (where lists are opened).
+      if (state.booted && !$('#workspacePanel')?.hidden) switchPanel('filesPanel', true);
       const canUpload = can('upload');
       dom.listTitle.textContent = canUpload ? 'Start with a workbook' : 'Open an approved price list';
       dom.listMeta.textContent = canUpload ? 'Upload an official .xlsx template to open and edit prices.' : 'Choose an approved price list to view and export.';
@@ -680,6 +932,11 @@
       dom.listCountry.textContent = active.country || 'Not set';
     }
     if (!active.isDraft && active.id) rememberOpenVersion(active.id);
+    // In the editor, the address follows the open list (a save makes a new version).
+    if (state.booted && !$('#workspacePanel')?.hidden && active.id) {
+      history.replaceState({ panel: 'workspacePanel' }, '', `files.php?list=${encodeURIComponent(active.id)}`);
+      document.title = `${active.name} · ${APP_TITLE}`;
+    }
 
     dom.activeBadge.hidden = false;
     $('#saveButton').classList.toggle('is-disabled', !canEdit);
@@ -713,6 +970,7 @@
     }
 
     // A coloured note after the sentence only when something needs attention (pending, rejected, older).
+    renderTabs(); // the unsaved dot on the list's tab
     const note = dom.approvalBanner;
     if (note) {
       let text = '';
@@ -2371,6 +2629,7 @@
           </div>
           <strong class="sheet-name" title="${name}">${name}</strong>
           <small class="sheet-meta" title="${escapeHtml(`${detail} · uploaded by ${version.savedBy || 'unknown'}`)}">${products.toLocaleString()} product${products === 1 ? '' : 's'} · ${updated ? 'changed' : 'uploaded'} ${escapeHtml(formatRelativeTime(changedAt))} · ${escapeHtml(version.savedBy || 'Unknown')}</small>
+          ${isOpen && state.active?.isDraft ? '<small class="sheet-unsaved">Unsaved changes in the editor</small>' : ''}
           ${waiting ? '<small class="sheet-waiting">Change waiting for approval</small>' : ''}
           ${rejected ? `<small class="sheet-rejected" title="${escapeHtml(rejected.rejectionRemarks || 'No remarks')}">Last change rejected${rejected.rejectedBy ? ` by ${escapeHtml(rejected.rejectedBy)}` : ''}</small>` : ''}
           <div class="sheet-actions">
@@ -2422,6 +2681,24 @@
         </header>
         <div class="tray-slips" role="list">${trayItems.map(slip).join('')}</div>
       </section>` : '';
+    // No price lists at all (and not just filtered away): a friendly starting point instead of an empty board.
+    const nothingYet = !files.length && !trayItems.length && !filtering;
+    $('#filesPanel')?.classList.toggle('is-empty', nothingYet);
+    if (nothingYet) {
+      $('#filesEmpty').hidden = true;
+      body.innerHTML = `<div class="files-empty">
+        <div class="files-empty-art" aria-hidden="true"><span class="ghost-sheet is-back"></span><span class="ghost-sheet is-middle"></span><span class="ghost-sheet is-front"><span class="ghost-lines"></span><span class="ghost-plus">+</span></span></div>
+        <h2>No price lists yet</h2>
+        <p>${can('upload') ? 'Upload an official Excel price list to get started. Uploads are live straight away; only later price changes need approval.' : 'Price lists will appear here once an admin uploads one. You can then open and export them.'}</p>
+        ${can('upload') ? '<button type="button" class="button primary files-empty-upload"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload a price list</button>' : ''}
+        <ol class="files-empty-steps">
+          <li><b>1</b><span><strong>Upload</strong> the Excel template</span></li>
+          <li><b>2</b><span><strong>Adjust</strong> prices by category</span></li>
+          <li><b>3</b><span><strong>Approve &amp; export</strong> to Excel or PDF</span></li>
+        </ol>
+      </div>`;
+      return;
+    }
     flipMove(body, () => {
       body.innerHTML = tray + uploadTile + [...groups.values()]
         .sort((a, b) => a.country.localeCompare(b.country))
@@ -2440,7 +2717,13 @@
     });
   }
   // The blank sheet opens the upload dialog (same as the "Upload files" button).
-  $('#filesTable')?.addEventListener('click', event => { if (event.target.closest('.sheet-upload')) openUploadModal(); });
+  $('#filesTable')?.addEventListener('click', event => {
+    if (event.target.closest('.sheet-upload, .files-empty-upload')) return openUploadModal();
+    // Opening a list from its sheet (or slip): remember where, so the editor unfolds out of it.
+    // (Capture phase: this runs before the shared handler that opens the list.)
+    const opener = event.target.closest('.row-primary[data-action="open"]');
+    if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip') || opener).getBoundingClientRect();
+  }, true);
   $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; renderFiles(); });
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
@@ -2799,7 +3082,56 @@
       stagedFiles.push({ file, name: file.name.replace(/\.xlsx$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '' });
     });
     if (overLimit) toast(`Up to ${MAX_BULK_FILES} files per batch. ${overLimit} file${overLimit === 1 ? ' was' : 's were'} not added.`);
-    renderStagedFiles();
+    const before = $$('#stagedFilesList .staged-row').length;
+    const panelWasHidden = $('#stagedFilesPanel')?.hidden;
+    // The first file: the list grows open as the drop area shrinks. More files: the new rows rise in.
+    morphUploadWindow(renderStagedFiles, () => (panelWasHidden ? [] : $$('#stagedFilesList .staged-row').slice(before)));
+  }
+  /**
+   * Attaching or removing workbooks: the upload window glides to its new size (like the Template
+   * rules switch). Inside it, the drop area, the file list and the error box ease between their old
+   * and new heights together, so nothing jumps; new file rows rise in.
+   */
+  let uploadMorph = 0;
+  function morphUploadWindow(update, entering = () => []) {
+    const dialog = dom.uploadModal;
+    const smooth = Boolean(dialog?.open) && typeof dialog.animate === 'function' && !reducedMotion();
+    const parts = [dom.modalDropZone, $('#stagedFilesPanel'), $('#uploadValidationErrors')].filter(Boolean);
+    const heights = smooth ? parts.map(el => (el.hidden ? 0 : el.getBoundingClientRect().height)) : [];
+    const from = smooth ? dialog.getBoundingClientRect() : null;
+    update();
+    if (!smooth) return;
+    parts.forEach((el, index) => {
+      if (el.hidden) return;
+      const was = heights[index];
+      const now = el.getBoundingClientRect().height;
+      if (Math.abs(now - was) < 1) return;
+      el.getAnimations().forEach(anim => anim.id === 'upload-part' && anim.cancel());
+      el.style.overflow = 'hidden';
+      const grow = el.animate([{ height: `${was}px`, opacity: was ? 1 : 0 }, { height: `${now}px`, opacity: 1 }], { duration: 480, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+      grow.id = 'upload-part';
+      const clear = () => { el.style.overflow = ''; };
+      grow.finished.then(clear, clear);
+      setTimeout(() => { if (grow.playState === 'running') grow.finish(); }, 720);
+      // The drop area's own text and button cross-fade into their new layout.
+      if (el === dom.modalDropZone && was) [...el.children].forEach(child => child.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 120, easing: 'ease-out', fill: 'backwards' }));
+    });
+    const to = dialog.getBoundingClientRect();
+    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';
+    const turn = ++uploadMorph;
+    if (Math.abs(from.height - to.height) > 1 || Math.abs(from.width - to.width) > 1) {
+      dialog.getAnimations().forEach(anim => anim.id === 'upload-swap' && anim.cancel());
+      dialog.classList.add('is-resizing');
+      const resize = dialog.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], { duration: 480, easing: ease });
+      resize.id = 'upload-swap';
+      const settle = () => { if (turn === uploadMorph) dialog.classList.remove('is-resizing'); };
+      resize.finished.then(settle, () => { });
+      setTimeout(settle, 720); // never left clipped if frames stall
+    }
+    entering().filter(Boolean).forEach((el, index) => el.animate(
+      [{ opacity: 0, transform: 'translateY(10px) scale(0.985)' }, { opacity: 1, transform: 'none' }],
+      { duration: 440, delay: 90 + index * 60, easing: ease, fill: 'backwards' }
+    ));
   }
   function renderStagedFiles() {
     const panel = $('#stagedFilesPanel');
@@ -2926,7 +3258,6 @@
 
   async function openUploadModal() {
     if (!can('upload')) return toast('Your role cannot upload price lists.');
-    if (state.active?.isDraft && !(await confirmDiscardDraft('Uploading a new file'))) return false;
     clearStagedFile();
     fillDatalists();
     renderTemplateGuide();
@@ -3128,7 +3459,7 @@
   /** A failed validation never changes the active file or discards its draft. */
   async function parseWorkbook(file, meta = {}) {
     const data = await uploadList(file, meta);
-    if (can('update')) await removeDraft(draftKey());
+    if (can('update')) await removeDraft(draftKey(data.active)); // a fresh upload replaces that list's old unsaved changes
     resetFilters();
     state.category = '';
     rememberCategory('');
@@ -4803,25 +5134,38 @@
   // The tab title is "<page> · <app name>" (set by components/app_shell.php).
   const APP_TITLE = document.title.split(' · ').slice(1).join(' · ') || document.title;
   // Each page has its own file in pages/; the page file tells the shell which panel to open.
+  // The editor has no menu tab of its own: it opens from Files, like a workbook from Excel's start
+  // screen, at files.php?list=<id> (prices.php still works and opens the last list).
   const PANEL_PAGES = {
-    workspacePanel: 'prices.php',
+    workspacePanel: 'files.php',
     filesPanel: 'files.php',
     historyPanel: 'audit_logs.php',
     settingsPanel: 'config.php'
   };
+  const NAV_PARENT = { workspacePanel: 'filesPanel', listsPanel: 'filesPanel' }; // pages without a menu tab of their own light this one
+  const urlListId = () => new URLSearchParams(location.search).get('list');
   function getInitialPanelId() {
     const panel = document.body.dataset.panel;
-    return PANEL_PAGES[panel] ? panel : 'workspacePanel';
+    if (panel === 'filesPanel' && urlListId()) return 'workspacePanel';
+    return PANEL_PAGES[panel] ? panel : 'filesPanel';
   }
+  function panelUrl(panelId) {
+    if (panelId === 'workspacePanel') return `files.php?list=${encodeURIComponent(state.active?.id || 'open')}`;
+    return PANEL_PAGES[panelId];
+  }
+  let openOriginRect = null; // the sheet a list was opened from, so the editor can unfold out of it
 
   function switchPanel(panelId, updateUrl = true) {
     if (panelId === 'listsPanel') panelId = 'filesPanel'; // Approvals merged into Files
-    let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === panelId);
+    if (panelId === 'workspacePanel' && !state.active) panelId = 'filesPanel'; // no editor without an open list
+    const previousPanel = $$('.panel').find(panel => !panel.hidden)?.id || null;
+    let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === (NAV_PARENT[panelId] || panelId));
     if (!targetButton || targetButton.hidden) {
       targetButton = $$('.nav-item')[0];
+      panelId = targetButton?.dataset.panel;
     }
     if (!targetButton) return;
-    const finalPanelId = targetButton.dataset.panel;
+    const finalPanelId = panelId;
     setPriceEditor(false);
     // Nothing from the page being left stays floating over the next one.
     toggleSwitcher(false);
@@ -4851,18 +5195,62 @@
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
 
-    // Show the page's own file in the address bar, so a refresh or bookmark opens this page.
-    const pageFile = PANEL_PAGES[finalPanelId];
-    const pageName = targetButton.querySelector('strong')?.textContent.trim();
+    // Show the page's own address, so a refresh or bookmark opens this page (and this list), and the
+    // browser's Back button steps between Files and the editor.
+    const pageName = finalPanelId === 'workspacePanel' ? state.active?.name : targetButton.querySelector('strong')?.textContent.trim();
     if (pageName) document.title = `${pageName} · ${APP_TITLE}`;
-    if (updateUrl && pageFile && !location.pathname.endsWith(`/${pageFile}`)) {
-      history.replaceState(null, '', pageFile);
+    const url = panelUrl(finalPanelId);
+    const here = (location.pathname.split('/').pop() || '') + location.search;
+    if (updateUrl && url && here !== url) {
+      if (state.booted && previousPanel && previousPanel !== finalPanelId) history.pushState({ panel: finalPanelId }, '', url);
+      else history.replaceState({ panel: finalPanelId }, '', url);
     }
+    renderTabs();
+
+    // Files ↔ editor: the editor unfolds out of the sheet it was opened from, and going back the
+    // list's sheet "lands" on the board.
+    if (state.booted && previousPanel !== finalPanelId && !reducedMotion()) {
+      if (finalPanelId === 'workspacePanel' && openOriginRect) { const rect = openOriginRect; setTimeout(() => unfoldEditor(rect), 0); }
+      else if (finalPanelId === 'filesPanel' && previousPanel === 'workspacePanel') setTimeout(landOnActiveSheet, 0);
+    }
+    openOriginRect = null;
+  }
+  /** The editor opens out of the sheet you clicked: its outline grows from that sheet to the full page. */
+  function unfoldEditor(rect) {
+    const panel = $('#workspacePanel');
+    if (!panel || panel.hidden) return;
+    panel.querySelectorAll(':scope > *').forEach(el => el.getAnimations().forEach(anim => anim.id === 'pla-page' && anim.cancel()));
+    const box = panel.getBoundingClientRect();
+    const from = `inset(${Math.max(0, rect.top - box.top)}px ${Math.max(0, box.right - rect.right)}px ${Math.max(0, box.bottom - rect.bottom)}px ${Math.max(0, rect.left - box.left)}px round 10px)`;
+    const anim = panel.animate([{ clipPath: from, opacity: 0.4 }, { clipPath: 'inset(0px 0px 0px 0px round 0px)', opacity: 1 }], { duration: 560, easing: FOLDER_EASE });
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 800);
+  }
+  /** Back on Files, the sheet of the list you were editing settles onto the board. */
+  function landOnActiveSheet() {
+    if (!state.active) return;
+    const key = [state.active.name, state.active.country, state.active.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|');
+    const sheet = $$('#filesTableBody .file-sheet[data-key]').find(el => el.dataset.key === key);
+    if (!sheet) return;
+    sheet.scrollIntoView({ block: 'nearest' });
+    const anim = sheet.animate([{ transform: 'translateY(-10px) scale(1.06)' }, { transform: 'none' }], { duration: 620, easing: 'cubic-bezier(.34, 1.56, .64, 1)' });
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 900);
   }
 
   $$('.nav-item').forEach(button => button.addEventListener('click', () => {
     switchPanel(button.dataset.panel, true);
   }));
+  // Back / Forward between Files and an open list.
+  window.addEventListener('popstate', async () => {
+    const file = location.pathname.split('/').pop();
+    const listId = urlListId();
+    if ((file === 'files.php' && listId) || file === 'prices.php') {
+      if (listId && listId !== 'open' && String(state.active?.id) !== listId) {
+        try { await openVersion(listId, { stay: true, silent: true }); } catch { /* falls back to Files below if nothing is open */ }
+      }
+      return switchPanel('workspacePanel', false);
+    }
+    switchPanel(Object.keys(PANEL_PAGES).find(id => id !== 'workspacePanel' && PANEL_PAGES[id] === file) || 'filesPanel', false);
+  });
 
   window.addEventListener('hashchange', () => {
     switchPanel(getInitialPanelId(), false);
@@ -5507,8 +5895,13 @@
   $('#stagedFilesList')?.addEventListener('click', event => {
     const remove = event.target.closest('.staged-remove');
     if (!remove) return;
-    stagedFiles.splice(Number(remove.dataset.index), 1);
-    renderStagedFiles();
+    const row = remove.closest('.staged-row');
+    const drop = () => morphUploadWindow(() => { stagedFiles.splice(Number(remove.dataset.index), 1); renderStagedFiles(); });
+    if (!row || reducedMotion()) return drop();
+    // The row slides out first, then the window settles to its new size.
+    remove.disabled = true;
+    const out = row.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(14px)' }], { duration: 200, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+    Promise.race([out.finished.catch(() => { }), new Promise(resolve => setTimeout(resolve, 260))]).then(drop);
   });
   $('#applyAllBtn')?.addEventListener('click', () => {
     const country = $('#applyAllCountry').value.trim();
@@ -6766,7 +7159,9 @@
       const serverTargets = selected.filter(key => key !== 'draft');
       let message = '';
       if (selected.includes('draft')) {
-        await removeDraft(draftKey());
+        await clearAllDrafts();
+        openTabs.forEach(tab => { tab.dirty = false; });
+        saveTabs();
         if (state.active?.isDraft) loadActive(null);
         rememberCategory('');
         message = 'Cleared the local draft.';

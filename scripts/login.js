@@ -49,7 +49,7 @@
         showMessage(data.message, 'success');
         // A fresh sign-in starts on "All categories".
         try { sessionStorage.removeItem('pla_view_category'); } catch { }
-        const target = data.data && data.data.redirect ? data.data.redirect : 'prices.php';
+        const target = data.data && data.data.redirect ? data.data.redirect : 'files.php';
         let left = false;
         const go = () => { if (!left) { left = true; window.location.href = target; } };
         // The sign-in page closes in a circle into the Sign in button; the app then opens from that

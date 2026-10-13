@@ -8,7 +8,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 try {
     if (isLoggedIn()) {
-        header('Location: prices.php');
+        header('Location: files.php');
         exit;
     }
 } catch (Throwable $error) {
@@ -103,6 +103,6 @@ try {
     </aside>
 </main>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/login.js?v=4"></script>
+<script src="../scripts/login.js?v=5"></script>
 </body>
 </html>

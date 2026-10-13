@@ -29,7 +29,7 @@ $base = '/pricelistautomation/';
     <strong>404</strong>
     <h1>Page not found</h1>
     <p>The page you were looking for doesn't exist.</p>
-    <a class="button primary" href="<?= $base ?>pages/prices.php">Back to price lists</a>
+    <a class="button primary" href="<?= $base ?>pages/files.php">Back to price lists</a>
 </main>
 </body>
 </html>
