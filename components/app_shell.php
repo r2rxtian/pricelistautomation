@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=159">
+    <link rel="stylesheet" href="../styles/app.css?v=162">
     <script>
     (function() {
         try {
@@ -554,7 +554,6 @@ $panel = APP_PAGES[$page]['panel'];
                         </div>
                         <div class="country-body">
                             <div class="option-rows" data-option-rows></div>
-                            <nav class="country-index" aria-label="Jump to letter"></nav>
                         </div>
                         <footer class="country-foot"><span data-country-showing></span><span class="country-foot-hint">Hover a country to remove it</span></footer>
                     </section>
@@ -905,7 +904,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=160"></script>
+<script src="../scripts/app.js?v=161"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

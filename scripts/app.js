@@ -6060,7 +6060,6 @@
   const countryView = { tab: 'all' };
   const COUNTRY_LOOKUP = new Map(Object.entries(window.PLA_COUNTRY_CODES || {}).map(([name, code]) => [name.toLowerCase(), { name, code }]));
   const countryCodeOf = name => COUNTRY_LOOKUP.get(String(name || '').trim().toLowerCase())?.code || '';
-  const countryLetter = name => String(name || '').trim().charAt(0).toUpperCase() || '#';
   const flagMarkup = (name, code) => code
     ? `<img src="../assets/flags/${code}.svg" alt="" loading="lazy">`
     : `<span class="flag-fallback" style="--tile-hue: ${countryHue(name)}">${escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase())}</span>`;
@@ -6069,29 +6068,11 @@
     const code = countryCodeOf(item.name);
     const used = item.usedBy > 0;
     const uses = `${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}`;
-    return `<div class="option-row country-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" data-letter="${escapeHtml(countryLetter(item.name))}" ${used ? `title="Used by ${uses}, so it stays"` : ''}>
+    return `<div class="option-row country-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" ${used ? `title="Used by ${uses}, so it stays"` : ''}>
       <span class="country-flag" aria-hidden="true">${flagMarkup(item.name, code)}</span>
       <span class="country-text"><strong title="${name}">${name}</strong><small>${code ? code.toUpperCase() : 'No flag'}${used ? ` · <em>${uses}</em>` : ''}</small></span>
       ${used ? '' : `<button type="button" class="country-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
     </div>`;
-  }
-  /** The A–Z index beside the cards: only letters that have countries; the current one follows scrolling. */
-  function renderCountryIndex(section, entries) {
-    const index = section.querySelector('.country-index');
-    if (!index) return;
-    const letters = [...new Set(entries.map(({ item }) => countryLetter(item.name)))];
-    index.hidden = letters.length < 4;
-    index.innerHTML = letters.map(letter => `<button type="button" data-country-letter="${escapeHtml(letter)}" aria-label="Jump to ${escapeHtml(letter)}">${escapeHtml(letter)}</button>`).join('');
-    requestAnimationFrame(() => markCountryLetter(section));
-  }
-  function markCountryLetter(section) {
-    const rows = section.querySelector('[data-option-rows]');
-    const index = section.querySelector('.country-index');
-    if (!rows || !index || index.hidden) return;
-    // A letter you clicked stays lit (near the end the list can't scroll it to the top) until you scroll yourself.
-    const top = rows.getBoundingClientRect().top + 4;
-    const letter = rows.dataset.pinnedLetter || [...rows.querySelectorAll('.country-card')].find(card => card.getBoundingClientRect().bottom > top)?.dataset.letter;
-    index.querySelectorAll('[data-country-letter]').forEach(button => button.classList.toggle('is-current', button.dataset.countryLetter === letter));
   }
   // Price levels are a ladder: numbered rungs in a straight column, in the order the dropdowns show them.
   function levelStep(item, index, count, editing) {
@@ -6126,7 +6107,6 @@
           || `<p class="option-empty">${query ? 'No matches.' : countries && countryView.tab === 'used' ? 'No country is used by a price list yet.' : 'Nothing here yet.'}</p>`;
       });
       if (countries) {
-        renderCountryIndex(section, visible);
         const showing = section.querySelector('[data-country-showing]');
         if (showing) showing.textContent = visible.length === items.length ? `${items.length} countr${items.length === 1 ? 'y' : 'ies'}` : `Showing ${visible.length} of ${items.length} countries`;
       }
@@ -6181,25 +6161,12 @@
     if (event.key === 'Enter') { event.preventDefault(); event.target.closest('.option-row').querySelector('[data-option-action="save"]').click(); }
     if (event.key === 'Escape') { event.preventDefault(); optionEditing = null; renderListOptions(); }
   });
-  // --- Countries: tabs, the A–Z index, and the "Add country" row (suggests names and shows the flag). ---
+  // --- Countries: tabs and the "Add country" row (suggests names and shows the flag). ---
   $$('#listsCard [data-country-tab]').forEach(tab => tab.addEventListener('click', () => {
     countryView.tab = tab.dataset.countryTab;
     $$('#listsCard [data-country-tab]').forEach(other => { other.classList.toggle('is-active', other === tab); other.setAttribute('aria-selected', String(other === tab)); });
     renderListOptions();
   }));
-  $('#listsCard .country-index')?.addEventListener('click', event => {
-    const letter = event.target.closest('[data-country-letter]')?.dataset.countryLetter;
-    const section = event.target.closest('.option-list');
-    const rows = section?.querySelector('[data-option-rows]');
-    const card = rows?.querySelector(`.country-card[data-letter="${CSS.escape(letter || '')}"]`);
-    if (!card) return;
-    rows.dataset.pinnedLetter = letter;
-    markCountryLetter(section);
-    rows.scrollTo({ top: rows.scrollTop + card.getBoundingClientRect().top - rows.getBoundingClientRect().top - 12, behavior: reducedMotion() ? 'auto' : 'smooth' });
-  });
-  const countryRows = $('#listsCard .country-list [data-option-rows]');
-  countryRows?.addEventListener('scroll', () => requestAnimationFrame(() => markCountryLetter(countryRows.closest('.option-list'))), { passive: true });
-  ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(type => countryRows?.addEventListener(type, () => { delete countryRows.dataset.pinnedLetter; }, { passive: true }));
   const countryAddForm = $('#countryAddForm');
   function setCountryAdd(open) {
     if (!countryAddForm) return;

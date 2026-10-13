@@ -9817,11 +9817,6 @@ dialog.version-history-dialog > .dialog-card { width: auto !important; max-width
 .country-remove:focus-visible { opacity: 1; transform: translateY(-50%) scale(1); }
 .country-remove:hover { background: #fde8e8; color: #b91c1c; }
 .country-card:hover .country-text { padding-right: 18px; }
-.country-index { display: flex; flex: none; flex-direction: column; align-items: center; gap: 1px; width: 26px; margin: 12px 8px 16px 0; padding: 4px 0; overflow-y: auto; border-radius: 999px; scrollbar-width: none; }
-.country-index[hidden] { display: none; }
-.country-index button { display: grid; place-items: center; flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-subtle); font: 700 0.6rem/1 var(--sans); cursor: pointer; transition: background .2s ease, color .2s ease; }
-.country-index button:hover { color: var(--pink); }
-.country-index button.is-current { background: var(--pink); color: #fff; }
 .country-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line-soft); color: var(--text-muted); font-size: 0.72rem; }
 .country-foot-hint { color: var(--text-subtle); }
 @media (prefers-reduced-motion: reduce) { .country-card, .country-remove { transition: none; } }
@@ -10790,3 +10785,16 @@ dialog.version-history-dialog { width: min(800px, calc(100vw - 32px)); }
 [data-theme="dark"] .log-step.edit { background: #1f1a33; color: #c4b5fd; }
 [data-theme="dark"] .log-session-items { border-top-color: #2a2d34; }
 [data-theme="dark"] .log-session-toggle { color: #f0a3b7; }
+
+/* Config (countries, price levels, photo library, product type photos, the photo picker): slim pink
+   scrollbars (darker while hovered), matching the rest of the app instead of the browser's grey ones. */
+.option-rows, .library-content, .library-sidebar, .image-settings-list, .picker-grid { scrollbar-width: thin; scrollbar-color: #e4c3cc transparent; }
+.option-rows:hover, .library-content:hover, .library-sidebar:hover, .image-settings-list:hover, .picker-grid:hover { scrollbar-color: #d29aab transparent; }
+.option-rows::-webkit-scrollbar, .library-content::-webkit-scrollbar, .library-sidebar::-webkit-scrollbar, .image-settings-list::-webkit-scrollbar, .picker-grid::-webkit-scrollbar { width: 8px; height: 8px; }
+.option-rows::-webkit-scrollbar-track, .library-content::-webkit-scrollbar-track, .library-sidebar::-webkit-scrollbar-track, .image-settings-list::-webkit-scrollbar-track, .picker-grid::-webkit-scrollbar-track { background: transparent; }
+.option-rows::-webkit-scrollbar-thumb, .library-content::-webkit-scrollbar-thumb, .library-sidebar::-webkit-scrollbar-thumb, .image-settings-list::-webkit-scrollbar-thumb, .picker-grid::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #e4c3cc padding-box; }
+.option-rows:hover::-webkit-scrollbar-thumb, .library-content:hover::-webkit-scrollbar-thumb, .library-sidebar:hover::-webkit-scrollbar-thumb, .image-settings-list:hover::-webkit-scrollbar-thumb, .picker-grid:hover::-webkit-scrollbar-thumb { background-color: #d29aab; }
+[data-theme="dark"] .option-rows, [data-theme="dark"] .library-content, [data-theme="dark"] .library-sidebar, [data-theme="dark"] .image-settings-list, [data-theme="dark"] .picker-grid { scrollbar-color: #4e2a36 transparent; }
+[data-theme="dark"] .option-rows:hover, [data-theme="dark"] .library-content:hover, [data-theme="dark"] .library-sidebar:hover, [data-theme="dark"] .image-settings-list:hover, [data-theme="dark"] .picker-grid:hover { scrollbar-color: #7a3c50 transparent; }
+[data-theme="dark"] .option-rows::-webkit-scrollbar-thumb, [data-theme="dark"] .library-content::-webkit-scrollbar-thumb, [data-theme="dark"] .library-sidebar::-webkit-scrollbar-thumb, [data-theme="dark"] .image-settings-list::-webkit-scrollbar-thumb, [data-theme="dark"] .picker-grid::-webkit-scrollbar-thumb { background-color: #4e2a36; }
+[data-theme="dark"] .option-rows:hover::-webkit-scrollbar-thumb, [data-theme="dark"] .library-content:hover::-webkit-scrollbar-thumb, [data-theme="dark"] .library-sidebar:hover::-webkit-scrollbar-thumb, [data-theme="dark"] .image-settings-list:hover::-webkit-scrollbar-thumb, [data-theme="dark"] .picker-grid:hover::-webkit-scrollbar-thumb { background-color: #7a3c50; }
