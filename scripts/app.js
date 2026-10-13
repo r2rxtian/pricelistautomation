@@ -6308,7 +6308,7 @@
     const uploadPrint = searching ? '' : `<button type="button" class="library-upload-print"><span class="library-upload-plus" aria-hidden="true">+</span><strong>Upload photos</strong><small>${state.libraryFolder === null ? 'JPG, PNG or WebP · up to 6 MB' : `Into ${escapeHtml(folderLabel(state.libraryFolder))}`}</small></button>`;
     grid.innerHTML = uploadPrint + visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
   }
-  /** Moves the Config section highlight (Product photos / Countries & price levels) under the active one. */
+  /** Moves the Config section highlight (Photo library / Product type photos / Countries & price levels) under the active one. */
   function placeConfigGlider(glide = true) {
     const active = $('.config-section-btn.is-active');
     const glider = $('.config-sections-glider');
@@ -6319,47 +6319,39 @@
     if (glide && from.width && from.transform !== frame.transform && !reducedMotion()) glider.animate([from, frame], { duration: 480, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
   }
   window.addEventListener('resize', () => placeConfigGlider(false));
-  let lastPhotoTab = state.configTab === 'types' ? 'types' : 'library';
+  // Config has three sections in one switcher (no second row of tabs), so its content starts high.
+  const CONFIG_SECTIONS = {
+    library: { title: 'Photo library', subtitle: 'Category folders of product photos, ready to pick for each product type.', card: '#libraryCard' },
+    types: { title: 'Product type photos', subtitle: 'The photo shown for each product type in the price list and the PDF.', card: '#typesCard' },
+    lists: { title: 'Countries & price levels', subtitle: 'The choices offered when uploading and saving price lists.', card: '#listsCard' },
+  };
   function switchConfigTab(tab) {
-    if (!['library', 'types', 'lists'].includes(tab)) tab = 'library';
+    if (!CONFIG_SECTIONS[tab]) tab = 'library';
     const previous = state.configTab;
-    if (tab === 'library' || tab === 'types') lastPhotoTab = tab;
     try { sessionStorage.setItem(CONFIG_TAB_KEY, tab); } catch { }
     state.configTab = tab;
-    const section = tab === 'lists' ? tab : 'photos';
     $$('.config-section-btn').forEach(button => {
-      const active = button.dataset.configSection === section;
+      const active = button.dataset.configSection === tab;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-selected', String(active));
     });
     requestAnimationFrame(() => placeConfigGlider(true));
-    $$('.config-tab-btn').forEach(button => {
-      const active = button.dataset.configTab === tab;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-selected', String(active));
-    });
-    $('#photoTabBar').hidden = section !== 'photos';
-    $('#libraryCard').hidden = tab !== 'library';
-    $('#typesCard').hidden = tab !== 'types';
-    $('#listsCard').hidden = tab !== 'lists';
-    $('#configTitle').textContent = { lists: 'Countries & price levels' }[section] || 'Product photos';
-    $('#configSubtitle').textContent = {
-      lists: 'The choices offered when uploading and saving price lists.',
-    }[section] || 'Organize category folders and choose photos for each product type.';
+    Object.entries(CONFIG_SECTIONS).forEach(([key, section]) => { $(section.card).hidden = key !== tab; });
+    $('#configTitle').textContent = CONFIG_SECTIONS[tab].title;
+    $('#configSubtitle').textContent = CONFIG_SECTIONS[tab].subtitle;
     // Changing section: its content glides in from the side of the section chosen.
-    const sectionOf = value => value === 'lists' ? value : 'photos';
-    const order = ['photos', 'lists'];
-    if (previous && sectionOf(previous) !== section && !reducedMotion()) {
-      const fromRight = order.indexOf(section) > order.indexOf(sectionOf(previous));
-      const parts = [section === 'photos' ? $('#photoTabBar') : null, $({ library: '#libraryCard', types: '#typesCard', lists: '#listsCard' }[tab])].filter(Boolean);
-      requestAnimationFrame(() => parts.forEach((el, index) => el.animate(
+    const order = Object.keys(CONFIG_SECTIONS);
+    if (previous && previous !== tab && !reducedMotion()) {
+      const fromRight = order.indexOf(tab) > order.indexOf(previous);
+      const card = $(CONFIG_SECTIONS[tab].card);
+      requestAnimationFrame(() => card.animate(
         [{ opacity: 0, transform: `translate3d(${fromRight ? 24 : -24}px, 0, 0)` }, { opacity: 1, offset: 0.35 }, { opacity: 1, transform: 'none' }],
-        { duration: 560, delay: index * 50, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' })));
+        { duration: 560, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }));
     }
     if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else renderListOptions();
   }
   $$('.config-section-btn').forEach(button => button.addEventListener('click', () => {
-    if (!button.classList.contains('is-active')) switchConfigTab(button.dataset.configSection === 'photos' ? lastPhotoTab : button.dataset.configSection);
+    if (!button.classList.contains('is-active')) switchConfigTab(button.dataset.configSection);
   }));
 
   // --- Config › Countries & price levels: the choices in the upload and save dropdowns. Switching
@@ -6971,7 +6963,6 @@
     input.addEventListener('blur', () => finish(true));
     ['click', 'dblclick', 'mousedown'].forEach(type => input.addEventListener(type, event => event.stopPropagation()));
   }
-  $$('.config-tab-btn').forEach(button => button.addEventListener('click', () => switchConfigTab(button.dataset.configTab)));
   $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; renderLibrary(); });
   $('#libraryFolders')?.addEventListener('click', event => {
     const button = event.target.closest('[data-library-folder]');

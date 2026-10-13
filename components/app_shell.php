@@ -38,7 +38,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=183">
+    <link rel="stylesheet" href="../styles/app.css?v=185">
     <script>
     (function() {
         try {
@@ -483,14 +483,10 @@ $panel = APP_PAGES[$page]['panel'];
                     </div>
                     <div class="config-sections" role="tablist" aria-label="Config sections">
                         <span class="config-sections-glider" aria-hidden="true"></span>
-                        <button type="button" class="config-section-btn is-active" data-config-section="photos" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Product photos</span></button>
+                        <button type="button" class="config-section-btn is-active" data-config-section="library" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Photo library</span><span id="libraryCountBadge" class="config-section-count">0</span></button>
+                        <button type="button" class="config-section-btn" data-config-section="types" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Product type photos</span><span id="typesCountBadge" class="config-section-count">0</span></button>
                         <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Countries &amp; price levels</span></button>
                     </div>
-                </div>
-
-                <div class="audit-tab-bar" id="photoTabBar" role="tablist" aria-label="Photo settings">
-                    <button type="button" class="config-tab-btn audit-tab-btn active" data-config-tab="library" role="tab" aria-selected="true"><span>Photo library</span><span id="libraryCountBadge" class="audit-tab-count">0</span></button>
-                    <button type="button" class="config-tab-btn audit-tab-btn" data-config-tab="types" role="tab" aria-selected="false"><span>Product type photos</span><span id="typesCountBadge" class="audit-tab-count">0</span></button>
                 </div>
 
                 <div class="image-settings-card library-workspace" id="libraryCard">
@@ -506,18 +502,17 @@ $panel = APP_PAGES[$page]['panel'];
                         <p class="library-sidebar-note">Category folders also appear automatically from your price lists.</p>
                     </aside>
                     <section class="library-content" aria-labelledby="libraryFolderTitle">
+                        <!-- One row: which folder you're in, search, how many, and upload (into a folder). -->
                         <div class="library-content-heading">
-                            <div><p class="kicker">Photo library</p><h2 id="libraryFolderTitle">All photos</h2><p id="libraryFolderDescription" class="muted">Browse your library or open a category folder.</p></div>
+                            <div class="library-folder-heading"><h2 id="libraryFolderTitle">All photos</h2><p id="libraryFolderDescription" class="muted">Browse your library or open a category folder.</p></div>
+                            <label class="search settings-search library-search"><span>Search photos</span><input id="librarySearchInput" type="search" placeholder="Search photos by name..."></label>
+                            <span id="libraryCount" class="history-count"></span>
                             <div class="library-upload-controls">
                                 <label class="library-upload-destination" for="libraryUploadFolder"><span>Upload to</span><select id="libraryUploadFolder" aria-label="Upload destination folder"></select></label>
                                 <button type="button" id="libraryUploadButton" class="button primary" title="JPG, PNG or WebP · up to 6 MB each">Upload photos</button>
                                 <span id="libraryUploadStatus" class="library-upload-status" role="status" aria-live="polite"></span>
                             </div>
                         </div>
-                    <div class="image-settings-toolbar">
-                        <label class="search settings-search"><span>Search photos</span><input id="librarySearchInput" type="search" placeholder="Search photos by name..."></label>
-                        <span id="libraryCount" class="history-count"></span>
-                    </div>
                     <div id="libraryGrid" class="library-grid" aria-live="polite"></div>
                     <div id="libraryEmpty" class="settings-empty" hidden><h2>The library is empty</h2><p>Upload product photos above. You can then pick them for any product type.</p></div>
                     </section>
@@ -929,7 +924,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=176"></script>
+<script src="../scripts/app.js?v=177"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=11"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

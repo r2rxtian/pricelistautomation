@@ -11240,3 +11240,34 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 .management-page > .audit-tab-bar { margin: -5px -5px 3px; padding: 5px; }
 @media (min-width: 981px) { .user-lane .lane-cards { margin: -4px -6px; padding: 6px 6px 6px; } }
 .file-tabs-list { margin: 0 -6px; padding: 0 6px; }
+
+/* ==========================================================================
+   Config starts high: one switcher for its three sections (each with its count), no second tab row,
+   and the photo library's folder title, search, count and upload share a single row.
+   ========================================================================== */
+.config-section-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-muted) 12%, transparent); color: var(--text-muted); font-size: 0.66rem; font-weight: 800; line-height: 1.5; text-align: center; transition: background .2s ease, color .2s ease; }
+.config-section-btn.is-active .config-section-count { background: var(--pink-subtle); color: var(--pink); }
+[data-theme="dark"] .config-section-count { background: #23252c; color: #a1a1aa; }
+[data-theme="dark"] .config-section-btn.is-active .config-section-count { background: #2a161e; color: #f0a3b7; }
+
+.library-content-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px 14px; padding: 14px 20px; border-bottom: 1px solid var(--line-soft); }
+.library-folder-heading { display: grid; gap: 1px; flex: 0 1 260px; min-width: 150px; }
+.library-content-heading .library-folder-heading h2 { margin: 0; overflow: hidden; font-size: 1.15rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.library-content-heading .library-folder-heading .muted { overflow: hidden; font-size: 0.7rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.library-content-heading .library-search { flex: 1 1 220px; width: auto; min-width: 180px; }
+.library-content-heading .history-count { flex: none; white-space: nowrap; }
+.library-content-heading .library-upload-controls { display: flex; flex: none; align-items: center; gap: 8px; margin-left: auto; }
+.library-content-heading .library-upload-destination { display: flex; align-items: center; gap: 8px; }
+.library-content-heading .library-upload-destination > span { white-space: nowrap; }
+.library-content-heading .library-upload-destination select,
+.library-content-heading .library-upload-destination .select-dropdown { min-width: 150px; }
+.library-content-heading .library-upload-status:empty { display: none; }
+.library-content-heading .library-upload-status { flex-basis: 100%; }
+@media (max-width: 1180px) {
+  .library-folder-heading { flex-basis: 100%; }
+  .library-content-heading .library-upload-controls { margin-left: 0; }
+}
+[data-theme="dark"] .library-content-heading { border-bottom-color: #26292e; }
+.library-content-heading .library-upload-controls { padding-left: 14px; border-left: 1px solid var(--line-soft); }
+@media (max-width: 1180px) { .library-content-heading .library-upload-controls { padding-left: 0; border-left: 0; } }
+[data-theme="dark"] .library-content-heading .library-upload-controls { border-left-color: #26292e; }
