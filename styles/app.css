@@ -11205,3 +11205,38 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 .lane-add-foot { display: flex; justify-content: flex-end; gap: 8px; }
 .lane-add-foot .button { min-height: 36px; height: 36px; }
 .lane-add-foot .button[hidden] { display: none; }
+/* Long lanes scroll on their own: the lanes fill the board's height, each keeps its header and
+   "+ Add" in place, so every lane stays a drop target however long the others are. */
+@media (min-width: 981px) {
+  .user-board { align-items: stretch; overflow: hidden; }
+  .user-lane { min-height: 0; }
+  .user-lane .lane-cards { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 2px 6px 4px; scrollbar-width: thin; scrollbar-color: #e4c3cc transparent; }
+  .user-lane .lane-cards::-webkit-scrollbar { width: 8px; }
+  .user-lane .lane-cards::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #e4c3cc padding-box; }
+  .user-lane > .lane-head, .user-lane > .lane-add, .user-lane > .lane-drop-hint, .user-lane > .lane-empty { flex: none; }
+  .user-lane > .lane-add-panel { flex: none; max-height: 70%; overflow-y: auto; }
+  [data-theme="dark"] .user-lane .lane-cards { scrollbar-color: #4e2a36 transparent; }
+  [data-theme="dark"] .user-lane .lane-cards::-webkit-scrollbar-thumb { background-color: #4e2a36; }
+}
+/* Long dropdowns stay inside the window: the menu is capped to the space below it (set when it opens)
+   and its lists scroll, while the search and the upload footer stay put. */
+.list-switcher-menu .lsm-columns { flex: 0 1 auto; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.list-switcher-menu .lsm-col > div { flex: 1 1 auto; min-height: 0; }
+.list-switcher-menu .lsm-search, .list-switcher-menu .lsm-footer, .list-switcher-menu > .lsm-heading { flex: none; }
+.category-menu .cm-list { flex: 0 1 auto; min-height: 0; }
+.list-switcher-menu .lsm-col > div, .category-menu .cm-list { scrollbar-width: thin; scrollbar-color: #e4c3cc transparent; }
+.list-switcher-menu .lsm-col > div::-webkit-scrollbar, .category-menu .cm-list::-webkit-scrollbar { width: 8px; }
+.list-switcher-menu .lsm-col > div::-webkit-scrollbar-thumb, .category-menu .cm-list::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #e4c3cc padding-box; }
+[data-theme="dark"] .list-switcher-menu .lsm-col > div, [data-theme="dark"] .category-menu .cm-list { scrollbar-color: #4e2a36 transparent; }
+
+/* ==========================================================================
+   Room at the edges: containers that clip (pages, scrolling strips) reach a few pixels past their
+   content and pad it back. Nothing moves, but a hover lift, shadow or focus ring on something at
+   the edge (Export / Saved in the editor, the first tab of a tab bar, the top card of a list) is no
+   longer cut off.
+   ========================================================================== */
+#appView .content > .panel { margin: -6px; padding: 6px; width: calc(100% + 12px); max-width: none; }
+.data-panel .table-tools .filter-group.filter-group-wide { margin: -5px 0 -5px -5px; padding: 5px 0 5px 5px; }
+.management-page > .audit-tab-bar { margin: -5px -5px 3px; padding: 5px; }
+@media (min-width: 981px) { .user-lane .lane-cards { margin: -4px -6px; padding: 6px 6px 6px; } }
+.file-tabs-list { margin: 0 -6px; padding: 0 6px; }

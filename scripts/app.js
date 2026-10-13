@@ -2199,12 +2199,8 @@
 
     content.innerHTML = fileStrip + body;
     content.scrollTop = 0;
-    if (actions) {
-      const canOpen = Boolean(version);
-      const isOpen = canOpen && String(state.active?.id) === String(version.id);
-      actions.innerHTML = `${canOpen ? `<button type="button" class="button primary open-version" data-id="${escapeHtml(version.id)}">${isOpen ? 'Back to the editor' : 'Open this file'}</button>` : ''}
-        <button value="cancel" class="button secondary">Close</button>`;
-    }
+    // Audit Logs is a record to read: files are opened from Files, not from here.
+    if (actions) actions.innerHTML = '<button value="cancel" class="button secondary">Close</button>';
     if (!dialog.open) dialog.showModal();
     content.tabIndex = -1;
     content.focus({ preventScroll: true }); // not the × (it would show a focus ring on open)
@@ -2751,6 +2747,7 @@
     const width = Math.min(680, window.innerWidth - 32);
     switcherMenu.style.width = `${width}px`;
     switcherMenu.style.top = `${Math.round(rect.bottom + 6)}px`;
+    switcherMenu.style.maxHeight = `${Math.max(220, Math.round(window.innerHeight - rect.bottom - 18))}px`; // its columns scroll inside, never past the window
     switcherMenu.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
   }
   function toggleSwitcher(open) {
@@ -2867,6 +2864,7 @@
       const width = Math.max(rect.width, 260);
       categoryMenu.style.width = `${width}px`;
       categoryMenu.style.top = `${Math.round(rect.bottom + 6)}px`;
+      categoryMenu.style.maxHeight = `${Math.max(200, Math.round(window.innerHeight - rect.bottom - 18))}px`;
       categoryMenu.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
       requestAnimationFrame(() => ($('#categoryMenuSearchWrap').hidden ? categoryMenu.querySelector('.lsm-item.is-current, .lsm-item') : $('#categoryMenuSearch'))?.focus());
     } else {
@@ -5280,16 +5278,6 @@
       }
     }
 
-    const openButton = event.target.closest('.open-version');
-    if (openButton) {
-      try {
-        await openVersion(openButton.dataset.id);
-      } catch (error) {
-        toast(error.message);
-      }
-      return;
-    }
-
     const moreTrigger = event.target.closest('.more-menu-trigger');
     if (moreTrigger) {
       event.stopPropagation();
@@ -5602,22 +5590,6 @@
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       activateNotification(event.target.closest('.notification-item'));
-    }
-  });
-
-  // Audit / History modal dialog action delegation (e.g. open version in workspace)
-  $('#historyChangesDialog')?.addEventListener('click', async event => {
-    const openBtn = event.target.closest('.open-version');
-    if (openBtn) {
-      const versionId = openBtn.dataset.id;
-      if (versionId) {
-        $('#historyChangesDialog')?.close();
-        try {
-          await openVersion(versionId);
-        } catch (error) {
-          toast(error.message);
-        }
-      }
     }
   });
 
