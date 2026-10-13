@@ -599,6 +599,7 @@
       if (dom.approvalBanner) dom.approvalBanner.hidden = true;
       if (dom.bannerApproveBtn) dom.bannerApproveBtn.hidden = true;
       if (dom.bannerRejectBtn) dom.bannerRejectBtn.hidden = true;
+      loadChangeMarks(null);
       const canUpload = can('upload');
       dom.listTitle.textContent = canUpload ? 'Start with a workbook' : 'Open an approved price list';
       dom.listMeta.textContent = canUpload ? 'Upload an official .xlsx template to open and edit prices.' : 'Choose an approved price list to view and export.';
@@ -629,6 +630,27 @@
     active.headers = state.headers;
     active.rows = state.rows;
     state.priceColumns = (active.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(state.headers[index] || '')));
+    // Opening a saved list: its prices (with any approved % already applied) simply become the current
+    // prices, shown without a "+10%". A new % then applies on top of them, so +5% means 5% more than
+    // now, not "+5% instead of +10%". Saves say so (adjustBase: 'current'). Unsaved drafts keep theirs.
+    if (!active.isDraft) {
+      foldAdjustments(state.rows, active, state.priceColumns);
+      active.adjustment = 0;
+      active.categoryAdjustments = {};
+      active.pricesBaked = true;
+      // How the list looks as opened, so undoing every change (or "Reset prices") is not an unsaved edit.
+      openedSnapshot = { id: active.id, rows: JSON.stringify(state.rows) };
+    } else if (active.id && active.pricesBaked && openedSnapshot?.id !== active.id) {
+      // A draft restored after a refresh: rebuild the opened state from the saved version.
+      openedSnapshot = null;
+      fetchVersion(active.id).then(saved => {
+        if (!saved || state.active !== active) return;
+        const rows = normalizeRows(saved.rows || [], saved.priceLevel, saved.country);
+        const headers = normalizeHeaders(saved.headers);
+        foldAdjustments(rows, saved, (saved.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(headers[index] || ''))));
+        openedSnapshot = { id: active.id, rows: JSON.stringify(rows) };
+      }).catch(() => {});
+    }
     state.adjustment = Number(active.adjustment || 0);
     state.categoryAdjustments = active.categoryAdjustments ? { ...active.categoryAdjustments } : {};
     const canEdit = Boolean(state.canEdit);
@@ -664,6 +686,7 @@
     $('#saveButton').setAttribute('aria-disabled', String(!canEdit));
     renderWorkflowState();
     updateMetrics(); renderTable(); renderImageSettings();
+    loadChangeMarks(active);
   }
 
   /** Status badge, approval banner and export lock for the open price list. */
@@ -753,12 +776,36 @@
     }
   }
 
-  /** Marks the open list as an unsaved draft and stores it locally. */
+  /** Applies a version's % adjustments to its price cells (rows are changed in place). */
+  function foldAdjustments(rows, version, priceColumns) {
+    const rateFor = category => Number(version.categoryAdjustments?.[String(category ?? '').trim()] ?? version.adjustment ?? 0) || 0;
+    rows.forEach(row => {
+      const rate = rateFor(row[COL.category]);
+      if (!rate) return;
+      priceColumns.forEach(col => {
+        if (isNumeric(row[col])) row[col] = Math.max(0, Math.round(numeric(row[col]) * (1 + rate / 100) * 10000) / 10000);
+      });
+    });
+  }
+  let openedSnapshot = null; // { id, rows } of the list as it was opened
+  /** True when the open list is exactly as it was opened: same cells, no % adjustment. */
+  function matchesOpenedList() {
+    return Boolean(state.active?.id && openedSnapshot && openedSnapshot.id === state.active.id && !hasPriceAdjustments() && JSON.stringify(state.rows) === openedSnapshot.rows);
+  }
+  /** Marks the open list as an unsaved draft and stores it locally (or clears it when nothing differs any more). */
   function markDraft() {
     if (!state.active) return;
     state.active.rows = state.rows;
     state.active.categoryAdjustments = { ...state.categoryAdjustments };
     state.active.adjustment = state.adjustment;
+    if (matchesOpenedList()) {
+      // Every change was undone (or "Reset prices" brought it back): nothing to save.
+      state.active.isDraft = false;
+      state.active.pendingChanges = [];
+      removeDraft(draftKey());
+      renderWorkflowState();
+      return;
+    }
     if (!state.active.isDraft) {
       state.active.isDraft = true;
       state.active.pendingChanges = [];
@@ -1167,6 +1214,7 @@
     hoveredColumn = -1;
     hoveredHeader = null;
     hoveredRow = null;
+    applyChangeMarks(); // a change under review shows what it changed ("was 1.25")
     updateFormulaBar();
   }
 
@@ -1497,8 +1545,10 @@
           newValue: shown(row[colIdx])
         };
         markDraft();
-        state.active.pendingChanges.push(change);
-        setDraft(draftKey(), state.active);
+        if (state.active.isDraft) { // still different from the list as opened
+          state.active.pendingChanges.push(change);
+          setDraft(draftKey(), state.active);
+        }
         renderWorkflowState();
         logActivity('cell_edit', `Edited ${change.column} of ${change.code || 'a product'}`, `${change.product || change.code}: ${change.oldValue || 'empty'} → ${change.newValue || 'empty'}`, {
           productCode: change.code, productName: change.product, category: change.category, column: change.column, oldValue: change.oldValue, newValue: change.newValue
@@ -2088,60 +2138,93 @@
 
     if (dom.historyEmpty) dom.historyEmpty.hidden = true;
 
-    const { startIdx, endIdx } = updatePaginationControls(filteredLogs.length, state.historyPage, pageSize, 'items', 'item');
-    const pageItems = filteredLogs.slice(startIdx, endIdx);
-
-    let previousDay = '';
-    dom.historyTableBody.innerHTML = pageItems.map(log => {
-      const typeLabel = getAuditTypeLabel(log.type);
-      const icon = getAuditTypeIcon(log.type);
+    // Logbook: back-and-forth edits by one person on one file within 15 minutes fold into one
+    // "editing session"; everything else is its own entry. Pages count entries.
+    const EDIT_TYPES = ['price_adjust', 'reset_prices', 'cell_edit', 'row_add', 'row_delete'];
+    const entries = [];
+    filteredLogs.forEach(log => {
+      const last = entries[entries.length - 1];
+      const lastLog = last?.logs[last.logs.length - 1];
+      const sameSession = last && EDIT_TYPES.includes(log.type) && EDIT_TYPES.includes(lastLog.type) &&
+        log.actor === lastLog.actor && getLogFileName(log) === getLogFileName(lastLog) &&
+        auditDayLabel(log.timestamp) === auditDayLabel(lastLog.timestamp) &&
+        Math.abs(new Date(lastLog.timestamp) - new Date(log.timestamp)) <= 15 * 60000;
+      if (sameSession) last.logs.push(log); else entries.push({ logs: [log] });
+    });
+    const { startIdx, endIdx } = updatePaginationControls(entries.length, state.historyPage, pageSize, 'entries', 'entry');
+    const pageEntries = entries.slice(startIdx, endIdx);
+    const dayCounts = new Map();
+    entries.forEach(entry => { const day = auditDayLabel(entry.logs[0].timestamp); dayCounts.set(day, (dayCounts.get(day) || 0) + entry.logs.length); });
+    const timeOf = iso => (iso ? new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(new Date(iso)) : '');
+    const initialsOfActor = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    const fileChip = log => {
+      const fileName = getLogFileName(log);
+      if (['login', 'image_update', 'image_delete', 'user_access', 'list_options'].includes(log.type) || !fileName || fileName === 'Unknown file' || fileName === '—') return '';
+      return `<span class="audit-file-tag" title="${escapeHtml(fileName)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span>${escapeHtml(fileName)}</span>${isLogCurrentFile(log) ? '<em>Open now</em>' : ''}</span>`;
+    };
+    /** One event as a timeline entry: time, a coloured node, and a short card with the sentence. */
+    const entryMarkup = (log, { nested = false } = {}) => {
       const inspect = auditInspectKind(log.type);
       const role = String(log.role || 'user').toLowerCase();
-      const roleLabel = role === 'admin' ? 'Admin' : role === 'user' ? 'Export only' : role;
-      const fileName = getLogFileName(log);
-      const hasFile = !['login', 'image_update', 'image_delete'].includes(log.type) && fileName && fileName !== 'Unknown file';
-      const isCurrent = hasFile && isLogCurrentFile(log);
-      const day = auditDayLabel(log.timestamp);
-      const divider = day !== previousDay ? `<tr class="audit-day-row"><td colspan="6">${escapeHtml(day)}</td></tr>` : '';
+      return `<li class="log-entry audit-event-row type-${escapeHtml(log.type || 'info')} ${inspect ? 'is-inspectable' : ''} ${nested ? 'is-nested' : ''}" ${inspect ? `data-log-id="${escapeHtml(log.id)}"` : ''}>
+        <time class="log-time" datetime="${escapeHtml(log.timestamp || '')}" title="${escapeHtml(displayDate(log.timestamp))}">${escapeHtml(timeOf(log.timestamp))}</time>
+        <span class="log-node" aria-hidden="true">${getAuditTypeIcon(log.type)}</span>
+        <div class="log-card">
+          <div class="log-head">
+            ${nested ? '' : `<span class="user-avatar log-avatar" aria-hidden="true">${escapeHtml(initialsOfActor(log.actor))}</span>`}
+            <p class="log-sentence">${nested ? '' : `<strong>${escapeHtml(log.actor || 'Someone')}</strong> · `}${escapeHtml(log.title || getAuditTypeLabel(log.type))}</p>
+            <span class="log-type">${escapeHtml(getAuditTypeLabel(log.type))}</span>
+          </div>
+          ${log.details ? `<p class="log-details" title="${escapeHtml(log.details)}">${escapeHtml(log.details)}</p>` : ''}
+          <div class="log-foot">
+            ${nested ? '' : fileChip(log)}
+            <span class="log-change">${getAuditDiffMarkup(log).includes('audit-no-action') ? '' : getAuditDiffMarkup(log)}</span>
+            ${nested ? '' : `<span class="log-ago">${escapeHtml(formatRelativeTime(log.timestamp))}${role === 'admin' ? '' : ' · Export only'}</span>`}
+            ${inspect ? `<button type="button" class="history-view-changes-btn view-audit-diff-btn" data-log-id="${escapeHtml(log.id)}">${inspect === 'changes' ? 'View changes' : 'View details'} ›</button>` : ''}
+          </div>
+        </div>
+      </li>`;
+    };
+    /** Several quick edits by one person on one file: one entry with a strip of the steps, expandable. */
+    const sessionMarkup = logs => {
+      const first = logs[logs.length - 1];
+      const last = logs[0];
+      const step = log => {
+        const meta = log.metadata || {};
+        if (log.type === 'price_adjust') { const pct = Number(meta.percentage || 0); return `<span class="log-step ${pct > 0 ? 'up' : 'down'}">${pct > 0 ? '▲ +' : '▼ '}${pct}%${meta.category ? ` ${escapeHtml(meta.category)}` : ''}</span>`; }
+        if (log.type === 'reset_prices') return '<span class="log-step reset">↺ reset</span>';
+        if (log.type === 'cell_edit') return `<span class="log-step edit">✎ ${escapeHtml(meta.column || 'cell')}</span>`;
+        if (log.type === 'row_add') return '<span class="log-step up">+ product</span>';
+        if (log.type === 'row_delete') return '<span class="log-step down">− product</span>';
+        return `<span class="log-step">${escapeHtml(getAuditTypeLabel(log.type))}</span>`;
+      };
+      const span = timeOf(first.timestamp) === timeOf(last.timestamp) ? timeOf(last.timestamp) : `${timeOf(first.timestamp)}–${timeOf(last.timestamp)}`;
+      return `<li class="log-entry log-session">
+        <time class="log-time" title="${escapeHtml(displayDate(last.timestamp))}">${escapeHtml(timeOf(last.timestamp))}</time>
+        <span class="log-node is-session" aria-hidden="true">${logs.length}</span>
+        <div class="log-card">
+          <div class="log-head">
+            <span class="user-avatar log-avatar" aria-hidden="true">${escapeHtml(initialsOfActor(last.actor))}</span>
+            <p class="log-sentence"><strong>${escapeHtml(last.actor || 'Someone')}</strong> · edited prices ${logs.length} times</p>
+            <span class="log-type">Editing session</span>
+          </div>
+          <div class="log-steps">${[...logs].reverse().map(step).join('<span class="log-step-sep" aria-hidden="true">→</span>')}</div>
+          <div class="log-foot">
+            ${fileChip(last)}
+            <span class="log-ago">${escapeHtml(span)} · ${escapeHtml(formatRelativeTime(last.timestamp))}</span>
+            <button type="button" class="log-session-toggle" aria-expanded="false">Show each step <span aria-hidden="true">▾</span></button>
+          </div>
+          <ol class="log-session-items" hidden>${logs.map(log => entryMarkup(log, { nested: true })).join('')}</ol>
+        </div>
+      </li>`;
+    };
+    let previousDay = '';
+    dom.historyTableBody.innerHTML = pageEntries.map(entry => {
+      const day = auditDayLabel(entry.logs[0].timestamp);
+      const header = day !== previousDay ? `${previousDay ? '</ol></section>' : ''}<section class="log-day"><h3 class="log-day-head"><span>${escapeHtml(day)}</span><small>${dayCounts.get(day)} event${dayCounts.get(day) === 1 ? '' : 's'}</small></h3><ol class="log-list">` : '';
       previousDay = day;
-      const time = log.timestamp ? new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(new Date(log.timestamp)) : '';
-
-      return `${divider}
-        <tr class="history-data-row audit-event-row ${inspect ? 'is-inspectable' : ''}" ${inspect ? `data-log-id="${escapeHtml(log.id)}"` : ''}>
-          <td class="history-date-cell">
-            <div class="audit-time-main">${escapeHtml(time)}</div>
-            <div class="audit-time-relative">${formatRelativeTime(log.timestamp)}</div>
-          </td>
-          <td class="history-by-cell">
-            <div class="audit-actor-wrap">
-              <span class="audit-actor-name">${escapeHtml(log.actor || 'User')}</span>
-              <span class="audit-role-pill ${role}">${escapeHtml(roleLabel)}</span>
-            </div>
-          </td>
-          <td class="audit-type-cell">
-            <span class="audit-type-badge type-${escapeHtml(log.type || 'info')}">
-              ${icon}
-              <span>${typeLabel}</span>
-            </span>
-          </td>
-          <td class="audit-desc-cell">
-            <div class="audit-title-text">${escapeHtml(log.title || 'Price List Event')}</div>
-            ${log.details ? `<div class="audit-details-text">${escapeHtml(log.details)}</div>` : ''}
-            ${hasFile ? `<div class="audit-file-tag" title="${escapeHtml(fileName)}">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-              <span>${escapeHtml(fileName)}</span>${isCurrent ? '<em>Open now</em>' : ''}
-            </div>` : ''}
-          </td>
-          <td class="audit-diff-cell">
-            ${getAuditDiffMarkup(log)}
-          </td>
-          <td class="history-actions-cell">
-            ${inspect
-              ? `<button type="button" class="history-view-changes-btn view-audit-diff-btn" data-log-id="${escapeHtml(log.id)}">${inspect === 'changes' ? 'View changes' : 'View details'} ›</button>`
-              : '<span class="audit-no-action" aria-hidden="true">—</span>'}
-          </td>
-        </tr>`;
-    }).join('');
+      return header + (entry.logs.length > 1 ? sessionMarkup(entry.logs) : entryMarkup(entry.logs[0]));
+    }).join('') + (pageEntries.length ? '</ol></section>' : '');
   }
   // --- Country › Price level › Price list navigator (one saved price list per country) ---
   function sameText(a, b) {
@@ -2242,53 +2325,118 @@
     $('#filesCount').textContent = `${visible.length} file${visible.length === 1 ? '' : 's'}`;
     const filtering = Boolean(query || filesView.country || filesView.level);
     const showUpload = can('upload') && !filtering;
-    $('#filesEmpty').hidden = visible.length > 0 || showUpload;
+    // Approvals (merged into this page): price changes waiting for approval and rejected ones sit in
+    // the tray at the top; approved changes are simply each file's current prices.
+    const changes = (state.versions || []).filter(version => version.source !== 'upload' && version.status !== 'superseded');
+    const trayItems = changes.filter(version => ['pending', 'rejected'].includes(version.status) &&
+      (!filesView.country || version.country === filesView.country) &&
+      (!filesView.level || version.priceLevel === filesView.level) &&
+      (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))))
+      .sort((a, b) => Number(Boolean(b.canApprove)) - Number(Boolean(a.canApprove)) || Number(a.status !== 'pending') - Number(b.status !== 'pending') || String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+    const latestChange = key => changes.filter(version => listKey(version) === key).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0];
+    $('#filesEmpty').hidden = visible.length > 0 || showUpload || trayItems.length > 0;
     $('#filesEmptyText').textContent = files.length ? 'No files match these filters.' : (can('upload') ? 'Use “Upload files” to add price lists. Uploads need no approval.' : 'Uploaded price lists will appear here.');
-    // Each file is a paper sheet: a tiny spreadsheet preview, the name, the country as a stamp, the
-    // price level as a numbered medal, the status as an inked stamp and who uploaded it. The list
-    // open in the editor wears a pink bookmark.
-    const hue = text => [...String(text || '')].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
-    const initialsOf = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    // Files are grouped by country (with its flag), each group sorted by price level. Every file is a
+    // small sheet of paper: price level and status on top, the name, then products, when it last
+    // changed and who uploaded it. The list open in the editor wears a pink bookmark.
+    const levelNumber = level => Number((String(level || '').match(/\d+/) || [Infinity])[0]);
     const levelMark = level => (String(level || '').match(/\d+/) || [String(level || '?').trim().charAt(0).toUpperCase()])[0];
-    const uploadSheet = showUpload ? `<button type="button" class="file-sheet sheet-upload" data-key="upload" role="listitem">
-        <span class="sheet-upload-plus" aria-hidden="true">+</span><strong>Upload files</strong><small>Excel price lists · uploads need no approval</small>
-      </button>` : '';
-    flipMove(body, () => {
-      body.innerHTML = uploadSheet + visible.map(version => {
-        const current = liveRevisionOf(version) || version;
-        const updated = current.id !== version.id;
-        const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
-        const cid = escapeHtml(current.id);
-        const name = escapeHtml(version.name);
-        const isOpen = [current.id, version.id].some(id => String(state.active?.id) === String(id));
-        const versions = listHistory(version).length;
-        const detail = updated ? `Prices changed ${displayDate(current.approvedAt || current.savedAt)}` : 'Original prices';
-        const products = Number(current.productCount || version.productCount || 0);
-        return `<article class="file-sheet ${updated ? 'is-updated' : 'is-uploaded'} ${isOpen ? 'is-open' : ''}" role="listitem" data-key="${escapeHtml(listKey(version))}" aria-label="${name}">
-          <div class="sheet-paper">
-            <div class="sheet-preview" aria-hidden="true"><span class="sheet-preview-head"></span><span class="sheet-preview-price"></span></div>
-            ${isOpen ? '<span class="sheet-ribbon" title="Open in the editor"></span>' : ''}
-            <span class="sheet-stamp ${updated ? 'is-updated' : 'is-uploaded'}">${updated ? 'Updated' : 'Uploaded'}</span>
-            <div class="sheet-body">
-              <strong class="sheet-name" title="${name}">${name}</strong>
-              <small class="sheet-meta">${products.toLocaleString()} product${products === 1 ? '' : 's'} · ${escapeHtml(detail)}</small>
-              ${waiting ? '<small class="sheet-waiting">Changes awaiting approval</small>' : ''}
-              <div class="sheet-tags">
-                <span class="sheet-country" style="--tile-hue: ${hue(version.country)}">${escapeHtml(version.country || 'No country')}</span>
-                <span class="sheet-level" title="${escapeHtml(version.priceLevel || '')}"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>
-                ${versions > 1 ? `<button type="button" class="version-history-link sheet-history" data-id="${cid}" title="See every saved version"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>${versions} versions</button>` : ''}
-              </div>
-              <div class="sheet-by">
-                <span class="user-avatar sheet-avatar" aria-hidden="true">${escapeHtml(initialsOf(version.savedBy))}</span>
-                <span><span class="sheet-by-name">${escapeHtml(version.savedBy || 'Unknown')}</span><time>${displayDate(version.savedAt)}</time></span>
-              </div>
-            </div>
-            <div class="sheet-actions">
-              <div class="list-actions"><button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button><button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div>
-            </div>
+    const groups = new Map();
+    visible.forEach(version => {
+      const country = String(version.country || '').trim() || 'No country';
+      const key = country.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { country, files: [] });
+      groups.get(key).files.push(version);
+    });
+    const sheet = version => {
+      const current = liveRevisionOf(version) || version;
+      const updated = current.id !== version.id;
+      const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
+      const cid = escapeHtml(current.id);
+      const name = escapeHtml(version.name);
+      const isOpen = [current.id, version.id].some(id => String(state.active?.id) === String(id));
+      const versions = listHistory(version).length;
+      const products = Number(current.productCount || version.productCount || 0);
+      const changedAt = updated ? (current.approvedAt || current.savedAt) : version.savedAt;
+      const detail = updated ? `Prices changed ${displayDate(changedAt)}` : `Original prices, uploaded ${displayDate(version.savedAt)}`;
+      const last = latestChange(listKey(version));
+      const rejected = last?.status === 'rejected' ? last : null;
+      const stamp = waiting ? ['is-pending', 'Pending', 'A price change is waiting for approval (see the tray above)'] : updated ? ['is-updated', 'Updated', detail] : ['is-uploaded', 'Uploaded', detail];
+      return `<article class="file-sheet ${updated ? 'is-updated' : 'is-uploaded'} ${waiting ? 'is-pending' : ''} ${isOpen ? 'is-open' : ''}" role="listitem" data-key="${escapeHtml(listKey(version))}" aria-label="${name}, ${escapeHtml(version.priceLevel || '')}">
+        <div class="sheet-paper">
+          ${isOpen ? '<span class="sheet-ribbon" title="Open in the editor"></span>' : ''}
+          <div class="sheet-top">
+            <span class="sheet-level" title="Price level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>
+            <span class="sheet-stamp ${stamp[0]}" title="${escapeHtml(stamp[2])}">${stamp[1]}</span>
           </div>
-        </article>`;
-      }).join('');
+          <strong class="sheet-name" title="${name}">${name}</strong>
+          <small class="sheet-meta" title="${escapeHtml(`${detail} · uploaded by ${version.savedBy || 'unknown'}`)}">${products.toLocaleString()} product${products === 1 ? '' : 's'} · ${updated ? 'changed' : 'uploaded'} ${escapeHtml(formatRelativeTime(changedAt))} · ${escapeHtml(version.savedBy || 'Unknown')}</small>
+          ${waiting ? '<small class="sheet-waiting">Change waiting for approval</small>' : ''}
+          ${rejected ? `<small class="sheet-rejected" title="${escapeHtml(rejected.rejectionRemarks || 'No remarks')}">Last change rejected${rejected.rejectedBy ? ` by ${escapeHtml(rejected.rejectedBy)}` : ''}</small>` : ''}
+          <div class="sheet-actions">
+            <button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button>
+            ${versions > 1 ? `<button type="button" class="version-history-link sheet-history" data-id="${cid}" title="See all ${versions} versions"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>${versions}</button>` : ''}
+            <button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>
+          </div>
+        </div>
+      </article>`;
+    };
+    const uploadTile = showUpload ? `<button type="button" class="sheet-upload" data-key="upload"><span class="sheet-upload-plus" aria-hidden="true">+</span><strong>Upload files</strong><small>Excel price lists · uploads need no approval</small></button>` : '';
+    // The approval tray: each change is a paper-clipped slip. Approvers get Approve / Reject / Review
+    // right on it; everyone else can review it. Rejected changes stay until they're deleted.
+    const slip = version => {
+      const vid = escapeHtml(version.id);
+      const name = escapeHtml(version.name);
+      const pending = version.status === 'pending';
+      const { waiting: waitingOn } = approvalProgress(version);
+      const note = pending
+        ? `Saved by ${version.savedBy || 'someone'} · ${formatRelativeTime(version.savedAt)}${waitingOn.length ? ` · waiting for ${waitingOn.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}`
+        : `Rejected by ${version.rejectedBy || 'an approver'}${version.rejectionRemarks ? `: “${version.rejectionRemarks}”` : ''}`;
+      const stampText = version.canApprove ? 'Needs you' : pending ? 'Pending' : 'Rejected';
+      const actions = version.canApprove
+        ? `<button type="button" class="row-primary is-approve" data-action="approve" data-id="${vid}">Approve</button><button type="button" class="row-primary slip-reject" data-action="reject" data-id="${vid}">Reject</button><button type="button" class="row-primary slip-review" data-action="review" data-id="${vid}" title="See every price this change makes">Review</button>`
+        : `<button type="button" class="row-primary" data-action="review" data-id="${vid}">Review changes</button>`;
+      const edits = Number(version.changeCount || 0);
+      const what = adjustmentChips(version) + (edits ? `<span class="adj-chip edits">${edits} cell edit${edits === 1 ? '' : 's'}</span>` : '') || '<span class="adj-chip edits">No price adjustments</span>';
+      return `<article class="approval-slip ${pending ? 'is-pending' : 'is-rejected'} ${version.canApprove ? 'is-mine' : ''}" role="listitem" data-key="change-${vid}" aria-label="${name}, ${escapeHtml(stampText)}">
+        <svg class="slip-clip" width="16" height="34" viewBox="0 0 16 34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 24V7a3 3 0 0 1 6 0v19a5 5 0 0 1-10 0V9"/></svg>
+        <div class="slip-head">
+          <span class="country-flag" aria-hidden="true">${flagMarkup(version.country, countryCodeOf(version.country))}</span>
+          <strong class="slip-name" title="${name}">${name}</strong>
+          <span class="slip-stamp">${stampText}</span>
+        </div>
+        <div class="slip-tags"><span class="sheet-level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span></div>
+        <div class="slip-what">${what}</div>
+        <small class="slip-note" title="${escapeHtml(note)}">${escapeHtml(note)}</small>
+        <div class="slip-actions">${actions}<button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div>
+      </article>`;
+    };
+    const pendingCount = trayItems.filter(version => version.status === 'pending').length;
+    const mineCount = trayItems.filter(version => version.canApprove).length;
+    const rejectedCount = trayItems.length - pendingCount;
+    const tray = trayItems.length ? `<section class="approval-tray" id="approvalTray" aria-label="Approvals">
+        <header class="tray-head">
+          <span class="tray-label">Approvals</span>
+          <span class="tray-summary">${[pendingCount ? `${pendingCount} waiting` : '', rejectedCount ? `${rejectedCount} rejected` : ''].filter(Boolean).join(' · ')}</span>
+          ${mineCount ? `<span class="tray-mine">${mineCount} need${mineCount === 1 ? 's' : ''} your approval</span>` : ''}
+        </header>
+        <div class="tray-slips" role="list">${trayItems.map(slip).join('')}</div>
+      </section>` : '';
+    flipMove(body, () => {
+      body.innerHTML = tray + uploadTile + [...groups.values()]
+        .sort((a, b) => a.country.localeCompare(b.country))
+        .map(({ country, files: list }) => {
+          const code = countryCodeOf(country);
+          list.sort((a, b) => levelNumber(a.priceLevel) - levelNumber(b.priceLevel) || String(a.priceLevel).localeCompare(String(b.priceLevel)) || String(a.name).localeCompare(String(b.name)));
+          return `<section class="sheet-group" aria-label="${escapeHtml(country)}">
+            <header class="sheet-group-head">
+              <span class="country-flag" aria-hidden="true">${flagMarkup(country, code)}</span>
+              <h3>${escapeHtml(country)}</h3>
+              <span class="sheet-group-count">${list.length} file${list.length === 1 ? '' : 's'}</span>
+            </header>
+            <div class="sheet-grid" role="list">${list.map(sheet).join('')}</div>
+          </section>`;
+        }).join('');
     });
   }
   // The blank sheet opens the upload dialog (same as the "Upload files" button).
@@ -2531,22 +2679,21 @@
     return (version.approvals || []).some(approval => approval.auto);
   }
   function renderLists() {
-    if (!dom.listsTableBody) return;
-    // Approvals = price changes only (uploads live on the Files page). Changes approved on save by an
-    // auto-approver are listed too, under Approved, marked "Approved on save".
+    // Approvals now live on the Files page (its approval tray). This keeps the "waiting for you"
+    // count on the Files nav item up to date; the old table below only runs if its markup exists.
     const allVersions = (state.versions || []).filter(version => version.source !== 'upload');
-    // Each price list shows once, as its current version. Older versions are in each list's
-    // Version history (row menu), not in this table.
     const versions = allVersions.filter(version => version.status !== 'superseded');
     const awaitingMine = versions.filter(version => version.canApprove);
     const approved = versions.filter(version => version.status === 'approved');
+    const badge = dom.pendingApprovalCount || $('#pendingApprovalCount');
+    if (badge) {
+      badge.hidden = !awaitingMine.length;
+      badge.textContent = String(awaitingMine.length);
+    }
+    if (!dom.listsTableBody) return;
     dom.listAllCount.textContent = String(versions.length);
     dom.listMineCount.textContent = String(awaitingMine.length);
     dom.listApprovedCount.textContent = String(approved.length);
-    if (dom.pendingApprovalCount) {
-      dom.pendingApprovalCount.hidden = !awaitingMine.length;
-      dom.pendingApprovalCount.textContent = String(awaitingMine.length);
-    }
     if (dom.listsSubtitle) {
       dom.listsSubtitle.textContent = can('update')
         ? 'Review saved price changes and approval decisions.'
@@ -3121,6 +3268,8 @@
         priceColumns: state.priceColumns,
         adjustment: state.adjustment,
         categoryAdjustments: state.categoryAdjustments,
+        // 'current': the rows are the prices as they were when opened, and the % applies on top of them.
+        adjustBase: state.active?.pricesBaked ? 'current' : 'original',
         changes: state.active?.pendingChanges || []
       })
     });
@@ -3825,7 +3974,7 @@
     setPriceEditor(false);
 
     const scopeText = isAll ? 'all categories' : selectedCats.length === 1 ? selectedCats[0] : `${selectedCats.length} categories`;
-    logActivity('price_adjust', `Applied ${sign}${value}% to ${scopeText}`, `${sign}${value}% applied to ${affectedProducts.toLocaleString()} products (${selectedCats.join(', ')}). Calculated from the uploaded prices.`, {
+    logActivity('price_adjust', `Applied ${sign}${value}% to ${scopeText}`, `${sign}${value}% applied to ${affectedProducts.toLocaleString()} products (${selectedCats.join(', ')}). Calculated from the prices when the list was opened.`, {
       percentage: value, applyAll: isAll, categories: selectedCats, category: selectedCats.length === 1 ? selectedCats[0] : '', adjustedProducts: affectedProducts
     });
     toast(`Applied ${sign}${value}% to ${scopeText}. ${state.autoApprove ? 'Save to approve it and make it exportable.' : 'Save to submit for approval.'}`);
@@ -4218,6 +4367,35 @@
     return (state.versions || []).filter(item => key(item) === key(version))
       .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
   }
+  /** Opens or closes a "What changed" panel by easing its height, with its content fading in. */
+  const DETAIL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  function slideDetail(detail, open) {
+    detail.getAnimations().forEach(anim => anim.cancel());
+    if (reducedMotion()) { detail.hidden = !open; return; }
+    if (open) detail.hidden = false;
+    const full = detail.scrollHeight;
+    const closed = { height: '0px', paddingTop: '0px', paddingBottom: '0px', borderTopWidth: '0px', borderBottomWidth: '0px', opacity: 0, marginTop: '-8px' };
+    const shown = { height: `${full}px`, opacity: 1 };
+    detail.style.overflow = 'hidden';
+    const anim = detail.animate(open ? [closed, shown] : [{ height: `${detail.getBoundingClientRect().height}px`, opacity: 1 }, closed], { duration: open ? 420 : 300, easing: DETAIL_EASE, fill: open ? 'none' : 'forwards' });
+    const done = () => { detail.style.overflow = ''; if (!open) { detail.hidden = true; anim.cancel(); } };
+    anim.finished.then(done).catch(() => {});
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, open ? 600 : 450); // lands even if frames pause
+    if (open) [...detail.children].forEach((child, index) => child.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: 80 + index * 40, easing: DETAIL_EASE, fill: 'backwards' }));
+  }
+  /** Swaps a panel's content and eases it from its old height to the new one. */
+  function growTo(detail, update) {
+    if (detail.hidden || reducedMotion()) return update();
+    const from = detail.getBoundingClientRect().height;
+    detail.getAnimations().forEach(anim => anim.finish());
+    update();
+    const to = detail.getBoundingClientRect().height;
+    detail.style.overflow = 'hidden';
+    const anim = detail.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: 460, easing: DETAIL_EASE });
+    anim.finished.then(() => { detail.style.overflow = ''; }).catch(() => {});
+    setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 650);
+    [...detail.children].forEach((child, index) => child.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: 60 + Math.min(index, 6) * 45, easing: DETAIL_EASE, fill: 'backwards' }));
+  }
   function openVersionHistory(version) {
     const history = listHistory(version);
     const current = liveRevisionOf(version) || history.find(item => ['approved', 'uploaded'].includes(item.status));
@@ -4225,9 +4403,12 @@
     $('#versionHistoryMeta').textContent = `${[version.country, version.priceLevel].filter(Boolean).join(' · ')} · ${history.length} version${history.length === 1 ? '' : 's'}`;
     $('#versionHistoryList').innerHTML = history.map(item => {
       const isCurrent = current && item.id === current.id;
-      const what = item.source === 'upload'
-        ? '<span class="history-adj-pill neutral">Uploaded file</span>'
-        : `${adjustmentPill(item)}${item.changeCount ? `<span class="version-edits">${Number(item.changeCount).toLocaleString()} cell edit${item.changeCount === 1 ? '' : 's'}</span>` : ''}`;
+      const upload = item.source === 'upload';
+      const edits = Number(item.changeCount || 0);
+      // What this version did: each category's real price effect, and how many cells were edited.
+      const what = upload
+        ? `<span class="adj-chip">Uploaded file</span><span class="adj-chip">${Number(item.productCount || 0).toLocaleString()} products${(item.categories || []).length ? ` · ${item.categories.length} categories` : ''}</span>`
+        : (adjustmentSummaryChip(item) + (edits ? `<span class="adj-chip edits">${edits.toLocaleString()} cell edit${edits === 1 ? '' : 's'}</span>` : '')) || '<span class="adj-chip">No price changes</span>';
       const status = isCurrent ? '<span class="list-status-pill status-approved">Current</span>'
         : item.status === 'superseded' ? '<span class="list-status-pill status-superseded">Older</span>'
         : statusPill(item.status);
@@ -4236,15 +4417,40 @@
         <span class="version-dot" aria-hidden="true"></span>
         <div class="version-main">
           <strong>${displayDate(item.savedAt)}</strong>
-          <small>${item.source === 'upload' ? 'Uploaded' : 'Saved'} by ${escapeHtml(item.savedBy || 'a user')}${item.approvedBy && item.status !== 'pending' && item.approvedBy !== item.savedBy ? ` · approved by ${escapeHtml(item.approvedBy)}` : ''}</small>
+          <small>${upload ? 'Uploaded' : 'Saved'} by ${escapeHtml(item.savedBy || 'a user')}${item.approvedBy && item.status !== 'pending' && item.approvedBy !== item.savedBy ? ` · approved by ${escapeHtml(item.approvedBy)}` : ''}${item.status === 'rejected' && item.rejectedBy ? ` · rejected by ${escapeHtml(item.rejectedBy)}` : ''}</small>
         </div>
-        <div class="version-what">${what}</div>
         <div class="version-side">${status}<button type="button" class="button secondary version-open" data-id="${escapeHtml(item.id)}">${isOpen ? 'Open now' : 'Open'}</button></div>
+        <div class="version-what">${what}${upload ? '' : `<button type="button" class="version-details-toggle" data-id="${escapeHtml(item.id)}" aria-expanded="false">What changed <span aria-hidden="true">▾</span></button>`}</div>
+        ${upload ? '' : '<div class="version-detail" hidden></div>'}
       </li>`;
     }).join('');
     $('#versionHistoryDialog').showModal();
   }
   $('#versionHistoryList')?.addEventListener('click', async event => {
+    // "What changed": every price before → after, the category adjustments and any other cell edits.
+    const toggle = event.target.closest('.version-details-toggle');
+    if (toggle) {
+      const detail = toggle.closest('.version-entry').querySelector('.version-detail');
+      const open = detail.hidden;
+      toggle.setAttribute('aria-expanded', String(open));
+      if (!open) return slideDetail(detail, false);
+      if (!detail.dataset.loaded) detail.innerHTML = '<p class="review-loading">Comparing with the version before it…</p>';
+      slideDetail(detail, true);
+      if (!detail.dataset.loaded) {
+        detail.dataset.loaded = '1';
+        let markup;
+        try {
+          const change = await fetchVersion(toggle.dataset.id);
+          const base = change?.basedOn ? await fetchVersion(change.basedOn).catch(() => null) : null;
+          markup = reviewMarkup(change, compareVersions(change, base), base);
+        } catch (error) {
+          delete detail.dataset.loaded;
+          markup = `<p class="review-note is-rejected">${escapeHtml(error.message || 'Could not load this version.')}</p>`;
+        }
+        growTo(detail, () => { detail.innerHTML = markup; }); // the loading line grows into the full detail
+      }
+      return;
+    }
     const button = event.target.closest('.version-open');
     if (!button) return;
     $('#versionHistoryDialog').close();
@@ -4252,9 +4458,218 @@
     try { await openVersion(button.dataset.id); } catch (error) { toast(error.message); }
   });
 
+  // --- Change review: exactly what a saved price change does, compared with the version it was made
+  // from (its "basedOn"). Prices are compared as people see them (with each version's % adjustments),
+  // other columns as text. Used by the review window and to mark changed cells in the editor. ---
+  const versionCache = new Map(); // "id|savedAt" -> promise of the full version (versions/open has no side effects)
+  function fetchVersion(id) {
+    if (!id) return Promise.resolve(null);
+    const key = `${id}|${versionSummaryById(id)?.savedAt || ''}`;
+    if (!versionCache.has(key)) {
+      versionCache.set(key, api('open', { method: 'POST', body: JSON.stringify({ id }) }).then(data => data.active).catch(error => { versionCache.delete(key); throw error; }));
+    }
+    return versionCache.get(key);
+  }
+  const pricedColumns = (version, headers) => (version?.priceColumns || []).filter(index => /price\s*\/\s*(pc|box)/i.test(String(headers[index] || '')));
+  function shownValue(version, row, col, priceCols) {
+    const raw = row?.[col];
+    if (!priceCols.includes(col) || !isNumeric(raw)) return String(raw ?? '').trim();
+    const category = String(row[0] ?? '').trim();
+    const rate = Number(version.categoryAdjustments?.[category] ?? version.adjustment ?? 0) || 0;
+    const value = numeric(raw);
+    return rate ? Math.max(0, Math.round(value * (1 + rate / 100) * 10000) / 10000) : value;
+  }
+  function compareVersions(change, base) {
+    const headers = normalizeHeaders(change.headers);
+    const rows = normalizeRows(change.rows || [], change.priceLevel, change.country);
+    const priceCols = pricedColumns(change, headers);
+    const result = { prices: [], edits: [], cells: new Map(), added: 0, removed: 0, compared: Boolean(base) };
+    if (!base) return result;
+    const baseHeaders = normalizeHeaders(base.headers);
+    const baseRows = normalizeRows(base.rows || [], base.priceLevel, base.country);
+    const basePriceCols = pricedColumns(base, baseHeaders);
+    const keyOf = (row, index) => String(row?.[COL.code] ?? '').trim().toLowerCase() || `#${index}`;
+    const baseByKey = new Map(baseRows.map((row, index) => [keyOf(row, index), row]));
+    const seen = new Set();
+    rows.forEach((row, index) => {
+      const key = keyOf(row, index);
+      seen.add(key);
+      const old = baseByKey.get(key);
+      if (!old) { result.added++; return; }
+      const product = { index, code: row[COL.code], name: row[2] || row[1], category: row[0], cols: [] };
+      headers.forEach((header, col) => {
+        if (col === 0 || !String(header || '').trim()) return;
+        const isPrice = priceCols.includes(col);
+        const before = isPrice ? shownValue(base, old, col, basePriceCols.length ? basePriceCols : priceCols) : String(old[col] ?? '').trim();
+        const after = isPrice ? shownValue(change, row, col, priceCols) : String(row[col] ?? '').trim();
+        const same = isPrice && isNumeric(before) && isNumeric(after) ? Math.abs(numeric(before) - numeric(after)) < 0.00005 : String(before) === String(after);
+        if (same) return;
+        result.cells.set(`${index}|${col}`, { before, isPrice });
+        if (isPrice) product.cols.push({ col, header: String(header).replace(/\s+/g, ' ').trim(), before, after });
+        else result.edits.push({ code: row[COL.code], name: product.name, header: String(header).replace(/\s+/g, ' ').trim(), before, after });
+      });
+      if (product.cols.length) result.prices.push(product);
+    });
+    baseRows.forEach((row, index) => { if (!seen.has(keyOf(row, index))) result.removed++; });
+    return result;
+  }
+  const priceText = value => (isNumeric(value) ? money.format(numeric(value)) : escapeHtml(value || '—'));
+  function deltaMarkup(before, after) {
+    if (!isNumeric(before) || !isNumeric(after) || !numeric(before)) return '';
+    const pct = (numeric(after) - numeric(before)) / numeric(before) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    return `<span class="review-delta ${rounded > 0 ? 'up' : rounded < 0 ? 'down' : ''}">${rounded > 0 ? '▲' : rounded < 0 ? '▼' : ''} ${rounded > 0 ? '+' : ''}${rounded}%</span>`;
+  }
+  /**
+   * What a change really does to each category's prices, compared with the version it was made from.
+   * Percentages always apply to the original uploaded prices, so going from +10% to +5% is a 4.5%
+   * price cut, not "+5%". Without the earlier version, the plain percentage is all we know.
+   */
+  function netAdjustments(change, base) {
+    const rate = (version, category) => Number(version?.categoryAdjustments?.[category] ?? version?.adjustment ?? 0) || 0;
+    const categories = uniqueValues([...(change.categories || []), ...(change.summary?.adjustedCategories || []).map(item => item.category)]);
+    const counts = new Map((change.summary?.adjustedCategories || []).map(item => [item.category, item.productCount]));
+    // Saved with the newer logic: the % was applied on top of the prices at the time, so it is the change.
+    if (change.adjustOnCurrent) {
+      return categories.map(category => ({ category, net: rate(change, category), onCurrent: true, productCount: counts.get(category) })).filter(item => item.net !== 0);
+    }
+    return categories.map(category => {
+      const to = rate(change, category);
+      const from = base ? rate(base, category) : 0;
+      const net = Math.round(((1 + to / 100) / (1 + from / 100) - 1) * 1000) / 10;
+      return { category, from, to, net, known: Boolean(base), productCount: counts.get(category) };
+    }).filter(item => item.net !== 0);
+  }
+  const signed = value => `${value > 0 ? '+' : ''}${value}%`;
+  function netChip(item, large = false) {
+    const how = item.onCurrent
+      ? `${item.category}: ${signed(item.net)} on the current prices${item.productCount ? ` (${item.productCount} product${item.productCount === 1 ? '' : 's'})` : ''}`
+      : item.known
+        ? `${item.category}: was ${signed(item.from)}, now ${signed(item.to)} of the original prices, so prices go ${item.net > 0 ? 'up' : 'down'} ${Math.abs(item.net)}%`
+        : `${item.category}: ${signed(item.to)} on the original prices`;
+    return `<span class="adj-chip ${item.net > 0 ? 'up' : 'down'}" title="${escapeHtml(how)}">${escapeHtml(item.category)} <b>${item.net > 0 ? '▲' : '▼'} ${Math.abs(item.net)}%</b>${large && item.known ? `<small>${signed(item.from)} → ${signed(item.to)}</small>` : ''}</span>`;
+  }
+  /** One short chip for a change: "6 categories ▲ 5%" (or "6 categories adjusted" when rates differ); hover lists them. */
+  function adjustmentSummaryChip(version) {
+    const items = netAdjustments(version, versionSummaryById(version.basedOn));
+    if (!items.length) return '';
+    const list = items.map(item => `${item.category} ${item.net > 0 ? '▲' : '▼'} ${Math.abs(item.net)}%`).join(', ');
+    const same = items.every(item => item.net === items[0].net);
+    const up = items.every(item => item.net > 0) ? 'up' : items.every(item => item.net < 0) ? 'down' : '';
+    const label = items.length === 1 ? escapeHtml(list)
+      : same ? `${items.length} categories <b>${items[0].net > 0 ? '▲' : '▼'} ${Math.abs(items[0].net)}%</b>`
+      : `${items.length} categories adjusted`;
+    return `<span class="adj-chip ${up}" title="${escapeHtml(list)}">${label}</span>`;
+  }
+  /** Category chips for a change: "Breads ▼ 4.5%" (up to `limit`, then "+3 more"). */
+  function adjustmentChips(version, limit = 3) {
+    const items = netAdjustments(version, versionSummaryById(version.basedOn));
+    if (!items.length) return '';
+    const more = items.length - limit;
+    return items.slice(0, limit).map(item => netChip(item)).join('') + (more > 0 ? `<span class="adj-chip more" title="${escapeHtml(items.slice(limit).map(item => `${item.category} ${item.net > 0 ? '▲' : '▼'} ${Math.abs(item.net)}%`).join(', '))}">+${more} more</span>` : '');
+  }
+  function reviewMarkup(change, diff, base) {
+    const adjusted = netAdjustments(change, base);
+    const stat = (value, label) => `<div class="review-stat"><strong>${value}</strong><span>${label}</span></div>`;
+    const priceCount = diff.prices.reduce((sum, product) => sum + product.cols.length, 0);
+    const stats = `<div class="review-stats">${stat(diff.compared ? diff.prices.length : '—', `product${diff.prices.length === 1 ? '' : 's'} repriced`)}${stat(adjusted.length, `categor${adjusted.length === 1 ? 'y' : 'ies'} adjusted`)}${stat(diff.compared ? diff.edits.length : (change.changeCount || 0), `other edit${(diff.compared ? diff.edits.length : change.changeCount) === 1 ? '' : 's'}`)}</div>`;
+    const status = change.status === 'rejected'
+      ? `<p class="review-note is-rejected">Rejected by ${escapeHtml(change.rejectedBy || 'an approver')}${change.rejectionRemarks ? `: “${escapeHtml(change.rejectionRemarks)}”` : ''}</p>` : '';
+    const adjustedSection = adjusted.length ? `<section class="review-section"><h3>Category adjustments <small>${change.adjustOnCurrent ? 'on top of the prices it was made from' : base ? 'compared with the current prices · the small figures are the % on the original upload' : '% on the original upload prices'}</small></h3><div class="review-chips">${adjusted.map(item => netChip(item, true)).join('')}</div></section>` : '';
+    let priceSection = '';
+    if (!diff.compared) {
+      priceSection = `<p class="review-note">The version this change was made from is no longer available, so prices can't be compared side by side.${(change.changes || []).length ? ' The cell edits recorded with it are listed below.' : ''}</p>`;
+    } else if (diff.prices.length) {
+      const columns = [...new Map(diff.prices.flatMap(product => product.cols).map(col => [col.col, col.header])).entries()].sort((a, b) => a[0] - b[0]);
+      let lastCategory = null;
+      priceSection = `<section class="review-section"><h3>Price changes <small>${priceCount} price${priceCount === 1 ? '' : 's'} on ${diff.prices.length} product${diff.prices.length === 1 ? '' : 's'}</small></h3>
+        <div class="review-table-wrap"><table class="review-table"><thead><tr><th>Product</th>${columns.map(([, header]) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${diff.prices.map(product => {
+          const categoryRow = product.category !== lastCategory ? `<tr class="review-category"><td colspan="${columns.length + 1}">${escapeHtml(product.category)}</td></tr>` : '';
+          lastCategory = product.category;
+          return `${categoryRow}<tr><td class="review-product"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.code || '')}</small></td>${columns.map(([col]) => {
+            const cell = product.cols.find(item => item.col === col);
+            return cell ? `<td class="review-price"><span class="review-before">${priceText(cell.before)}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${priceText(cell.after)}</strong>${deltaMarkup(cell.before, cell.after)}</td>` : '<td class="review-same">unchanged</td>';
+          }).join('')}</tr>`;
+        }).join('')}</tbody></table></div></section>`;
+    } else {
+      priceSection = '<p class="review-note">No prices are different from the version it was made from.</p>';
+    }
+    const edits = diff.compared ? diff.edits : (change.changes || []).map(item => ({ code: item.code, name: item.product, header: item.column, before: item.oldValue, after: item.newValue }));
+    const editSection = edits.length ? `<section class="review-section"><h3>Other edits <small>${edits.length}</small></h3><ul class="review-edits">${edits.map(edit => `<li><span class="review-edit-what"><strong>${escapeHtml(edit.name || edit.code || 'Row')}</strong> · ${escapeHtml(edit.header || '')}</span><span class="review-before">${escapeHtml(edit.before || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(edit.after || '(empty)')}</strong></li>`).join('')}</ul></section>` : '';
+    const rowsNote = diff.added || diff.removed ? `<p class="review-note">${[diff.added ? `${diff.added} product${diff.added === 1 ? '' : 's'} added` : '', diff.removed ? `${diff.removed} product${diff.removed === 1 ? '' : 's'} removed` : ''].filter(Boolean).join(' · ')}</p>` : '';
+    return status + stats + adjustedSection + priceSection + editSection + rowsNote;
+  }
+  let reviewingId = null;
+  async function openChangeReview(id) {
+    const summary = versionSummaryById(id);
+    const dialog = $('#changeReviewDialog');
+    if (!summary || !dialog) return toast('Price change not found. Refresh and try again.');
+    reviewingId = id;
+    $('#changeReviewKicker').textContent = summary.status === 'pending' ? (summary.canApprove ? 'Waiting for your approval' : 'Waiting for approval') : summary.status === 'rejected' ? 'Rejected price change' : 'Price change';
+    $('#changeReviewTitle').textContent = summary.name;
+    $('#changeReviewMeta').textContent = [summary.country, summary.priceLevel, `saved by ${summary.savedBy || 'a user'} · ${displayDate(summary.savedAt)}`].filter(Boolean).join(' · ');
+    $('#changeReviewApprove').hidden = !summary.canApprove;
+    $('#changeReviewReject').hidden = !summary.canApprove;
+    $('#changeReviewOpen').textContent = String(state.active?.id) === String(id) ? 'Back to the editor' : 'Open in editor';
+    const body = $('#changeReviewBody');
+    body.innerHTML = '<p class="review-loading">Comparing with the previous version…</p>';
+    if (!dialog.open) dialog.showModal();
+    try {
+      const change = await fetchVersion(id);
+      const base = change?.basedOn ? await fetchVersion(change.basedOn).catch(() => null) : null;
+      if (reviewingId !== id) return;
+      body.innerHTML = reviewMarkup(change, compareVersions(change, base), base);
+    } catch (error) {
+      if (reviewingId === id) body.innerHTML = `<p class="review-note is-rejected">${escapeHtml(error.message || 'Could not load this price change.')}</p>`;
+    }
+  }
+  $('#changeReviewApprove')?.addEventListener('click', () => { $('#changeReviewDialog').close(); openDecisionDialog('approve', reviewingId); });
+  $('#changeReviewReject')?.addEventListener('click', () => { $('#changeReviewDialog').close(); openDecisionDialog('reject', reviewingId); });
+  $('#changeReviewOpen')?.addEventListener('click', () => { $('#changeReviewDialog').close(); runListAction('open', reviewingId); });
+
+  /** In the editor, a pending or rejected change marks every cell it changed ("was 1.25") and the banner offers the full review. */
+  let changeMarksFor = null;
+  async function loadChangeMarks(active) {
+    state.changeMarks = null;
+    changeMarksFor = active?.id || null;
+    const reviewing = active && !active.isDraft && active.source !== 'upload' && ['pending', 'rejected'].includes(active.status) && active.basedOn;
+    if (!reviewing) return renderChangeMarksButton();
+    try {
+      const base = await fetchVersion(active.basedOn);
+      if (changeMarksFor !== active.id || state.active !== active) return;
+      state.changeMarks = compareVersions(active, base);
+      applyChangeMarks();
+    } catch { /* no marks: the review window still lists the recorded edits */ }
+    renderChangeMarksButton();
+  }
+  function applyChangeMarks() {
+    const marks = state.changeMarks;
+    if (!marks || !dom.table) return;
+    marks.cells.forEach(({ before, isPrice }, key) => {
+      const [row, col] = key.split('|');
+      const td = dom.table.querySelector(`.excel-cell[data-row="${row}"][data-col="${col}"]`);
+      if (!td || td.classList.contains('is-changed')) return;
+      const was = isPrice ? priceText(before) : escapeHtml(before || '(empty)');
+      td.classList.add('is-changed');
+      td.title = `Was ${isPrice && isNumeric(before) ? money.format(numeric(before)) : before || '(empty)'}`;
+      td.insertAdjacentHTML('beforeend', `<span class="cell-was">was ${was}</span>`);
+    });
+  }
+  function renderChangeMarksButton() {
+    const button = $('#bannerReviewBtn');
+    if (!button) return;
+    const active = state.active;
+    const show = Boolean(active && !active.isDraft && active.source !== 'upload' && ['pending', 'rejected'].includes(active.status));
+    button.hidden = !show;
+    const count = state.changeMarks ? state.changeMarks.cells.size : 0;
+    button.textContent = count ? `See ${count} change${count === 1 ? '' : 's'}` : 'See changes';
+  }
+  $('#bannerReviewBtn')?.addEventListener('click', () => state.active?.id && openChangeReview(state.active.id));
+
   async function runListAction(action, id) {
     const version = versionSummaryById(id);
     if (!version) return toast('Price list not found. Refresh and try again.');
+    if (action === 'review') return openChangeReview(id);
     if (action === 'open') {
       if (String(state.active?.id) === String(id)) return switchPanel('workspacePanel', true);
       try { await openVersion(id); } catch (error) { toast(error.message); }
@@ -4283,6 +4698,7 @@
   // --- Row kebab menu (single shared, fixed-position element so the scrolling table cannot clip it) ---
   const rowMenu = $('#rowMenu');
   const menuIcons = {
+    review: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     open: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 14"/>',
     approve: '<polyline points="20 6 9 17 4 12"/>',
@@ -4312,6 +4728,7 @@
         <span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</button>`;
     const groups = [
       [
+        ...(version.source !== 'upload' ? [item('review', 'Review changes', { hint: 'Before → after' })] : []),
         item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' }),
         ...(listHistory(version).length > 1 ? [item('history', 'Version history', { hint: `${listHistory(version).length} versions` })] : []),
       ],
@@ -4389,7 +4806,6 @@
   const PANEL_PAGES = {
     workspacePanel: 'prices.php',
     filesPanel: 'files.php',
-    listsPanel: 'approvals.php',
     historyPanel: 'audit_logs.php',
     settingsPanel: 'config.php'
   };
@@ -4399,6 +4815,7 @@
   }
 
   function switchPanel(panelId, updateUrl = true) {
+    if (panelId === 'listsPanel') panelId = 'filesPanel'; // Approvals merged into Files
     let targetButton = $$('.nav-item').find(btn => btn.dataset.panel === panelId);
     if (!targetButton || targetButton.hidden) {
       targetButton = $$('.nav-item')[0];
@@ -4474,6 +4891,16 @@
     }
   });
   dom.historyTable?.addEventListener('click', async event => {
+    // An editing session opens to show each step (with its own "View changes").
+    const sessionToggle = event.target.closest('.log-session-toggle');
+    if (sessionToggle) {
+      const items = sessionToggle.closest('.log-card').querySelector('.log-session-items');
+      const open = items.hidden;
+      sessionToggle.setAttribute('aria-expanded', String(open));
+      sessionToggle.firstChild.textContent = open ? 'Hide steps ' : 'Show each step ';
+      slideDetail(items, open);
+      return;
+    }
     const viewAuditDiffBtn = event.target.closest('.view-audit-diff-btn');
     if (viewAuditDiffBtn) {
       event.stopPropagation();
@@ -4795,8 +5222,8 @@
   // Notification Bell -> Audit Hub Navigation
   dom.openAuditLogsFromBell?.addEventListener('click', () => {
     toggleNotifications(false);
-    state.listTab = 'mine'; // straight to "Awaiting my approval"
-    switchPanel('listsPanel', true);
+    switchPanel('filesPanel', true); // approvals are the tray at the top of Files
+    requestAnimationFrame(() => $('#approvalTray')?.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' }));
   });
   async function activateNotification(item) {
     if (!item) return;
@@ -4887,7 +5314,7 @@
     updateMetrics();
     renderTable();
     rollPrices(pricesBefore);
-    toast('All price adjustments reset to original (0%). Uploaded file retained.');
+    toast(state.active?.isDraft ? 'Price adjustments cleared. Other edits are kept.' : 'Prices are back to how they were when you opened the list.');
   });
 
   // --- Spreadsheet Event Listeners ---
@@ -5627,30 +6054,44 @@
     const used = item.usedBy > 0;
     return `${levels ? `<button type="button" class="option-icon" data-option-action="up" aria-label="Move ${escapeHtml(item.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="option-icon" data-option-action="down" aria-label="Move ${escapeHtml(item.name)} down" ${index === count - 1 ? 'disabled' : ''}>↓</button>` : ''}<button type="button" class="option-icon" data-option-action="edit" aria-label="Edit ${escapeHtml(item.name)}" title="Edit">✎</button><button type="button" class="option-icon danger" data-option-action="remove" aria-label="Remove ${escapeHtml(item.name)}" ${used ? `disabled title="Used by ${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}: switch it off instead"` : 'title="Remove"'}>×</button>`;
   }
-  // Countries are an A–Z directory: each letter heads a row of country chips. Hover a chip for its ×;
-  // a country used by saved price lists shows how many instead, and stays.
-  function countryChip(item, index) {
+  // Countries are cards with their flag (assets/flags, matched by name via scripts/country-flags.js),
+  // name and code; an A–Z index on the side jumps to a letter. Hover a card for its ×; a country
+  // used by saved price lists says so instead, and stays.
+  const countryView = { tab: 'all' };
+  const COUNTRY_LOOKUP = new Map(Object.entries(window.PLA_COUNTRY_CODES || {}).map(([name, code]) => [name.toLowerCase(), { name, code }]));
+  const countryCodeOf = name => COUNTRY_LOOKUP.get(String(name || '').trim().toLowerCase())?.code || '';
+  const countryLetter = name => String(name || '').trim().charAt(0).toUpperCase() || '#';
+  const flagMarkup = (name, code) => code
+    ? `<img src="../assets/flags/${code}.svg" alt="" loading="lazy">`
+    : `<span class="flag-fallback" style="--tile-hue: ${countryHue(name)}">${escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase())}</span>`;
+  function countryCard(item, index) {
     const name = escapeHtml(item.name);
+    const code = countryCodeOf(item.name);
+    const used = item.usedBy > 0;
     const uses = `${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}`;
-    return `<span class="option-row country-chip ${item.usedBy > 0 ? 'is-used' : ''}" data-index="${index}" data-key="${name}" style="--tile-hue: ${countryHue(item.name)}" ${item.usedBy > 0 ? `title="Used by ${uses}, so it stays"` : ''}>
-      <span class="chip-dot" aria-hidden="true"></span>
-      <span class="chip-name">${name}</span>
-      ${item.usedBy > 0
-        ? `<span class="chip-uses" aria-label="Used by ${uses}">${item.usedBy}</span>`
-        : `<button type="button" class="chip-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
-    </span>`;
+    return `<div class="option-row country-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" data-letter="${escapeHtml(countryLetter(item.name))}" ${used ? `title="Used by ${uses}, so it stays"` : ''}>
+      <span class="country-flag" aria-hidden="true">${flagMarkup(item.name, code)}</span>
+      <span class="country-text"><strong title="${name}">${name}</strong><small>${code ? code.toUpperCase() : 'No flag'}${used ? ` · <em>${uses}</em>` : ''}</small></span>
+      ${used ? '' : `<button type="button" class="country-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
+    </div>`;
   }
-  function countryDirectory(entries) {
-    const letters = new Map();
-    entries.forEach(entry => {
-      const letter = entry.item.name.trim().charAt(0).toUpperCase() || '#';
-      if (!letters.has(letter)) letters.set(letter, []);
-      letters.get(letter).push(entry);
-    });
-    return [...letters].map(([letter, group]) => `<section class="country-letter" aria-label="${escapeHtml(letter)}">
-      <span class="letter-mark" aria-hidden="true">${escapeHtml(letter)}</span>
-      <div class="letter-chips">${group.map(({ item, index }) => countryChip(item, index)).join('')}</div>
-    </section>`).join('');
+  /** The A–Z index beside the cards: only letters that have countries; the current one follows scrolling. */
+  function renderCountryIndex(section, entries) {
+    const index = section.querySelector('.country-index');
+    if (!index) return;
+    const letters = [...new Set(entries.map(({ item }) => countryLetter(item.name)))];
+    index.hidden = letters.length < 4;
+    index.innerHTML = letters.map(letter => `<button type="button" data-country-letter="${escapeHtml(letter)}" aria-label="Jump to ${escapeHtml(letter)}">${escapeHtml(letter)}</button>`).join('');
+    requestAnimationFrame(() => markCountryLetter(section));
+  }
+  function markCountryLetter(section) {
+    const rows = section.querySelector('[data-option-rows]');
+    const index = section.querySelector('.country-index');
+    if (!rows || !index || index.hidden) return;
+    // A letter you clicked stays lit (near the end the list can't scroll it to the top) until you scroll yourself.
+    const top = rows.getBoundingClientRect().top + 4;
+    const letter = rows.dataset.pinnedLetter || [...rows.querySelectorAll('.country-card')].find(card => card.getBoundingClientRect().bottom > top)?.dataset.letter;
+    index.querySelectorAll('[data-country-letter]').forEach(button => button.classList.toggle('is-current', button.dataset.countryLetter === letter));
   }
   // Price levels are a ladder: numbered rungs in a straight column, in the order the dropdowns show them.
   function levelStep(item, index, count, editing) {
@@ -5675,13 +6116,20 @@
       section.querySelector('[data-option-summary]').textContent = `${items.length} ${countries ? 'countr' + (items.length === 1 ? 'y' : 'ies') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
       const query = (optionSearch[type] || '').trim().toLowerCase();
       const rows = section.querySelector('[data-option-rows]');
-      const visible = items.map((item, index) => ({ item, index })).filter(({ item }) => !query || item.name.toLowerCase().includes(query));
+      const visible = items.map((item, index) => ({ item, index })).filter(({ item }) =>
+        (!query || item.name.toLowerCase().includes(query) || countryCodeOf(item.name) === query) &&
+        (!countries || countryView.tab !== 'used' || item.usedBy > 0));
       flipMove(rows, () => {
         rows.innerHTML = (countries
-          ? countryDirectory(visible)
+          ? visible.map(({ item, index }) => countryCard(item, index)).join('')
           : visible.map(({ item, index }) => levelStep(item, index, items.length, optionEditing === `${type}|${index}`)).join(''))
-          || `<p class="option-empty">${query ? 'No matches.' : 'Nothing here yet.'}</p>`;
+          || `<p class="option-empty">${query ? 'No matches.' : countries && countryView.tab === 'used' ? 'No country is used by a price list yet.' : 'Nothing here yet.'}</p>`;
       });
+      if (countries) {
+        renderCountryIndex(section, visible);
+        const showing = section.querySelector('[data-country-showing]');
+        if (showing) showing.textContent = visible.length === items.length ? `${items.length} countr${items.length === 1 ? 'y' : 'ies'}` : `Showing ${visible.length} of ${items.length} countries`;
+      }
       if (optionEditing?.startsWith(`${type}|`)) requestAnimationFrame(() => { const input = rows.querySelector('.is-editing input:not([disabled])'); input?.focus(); input?.select(); });
     });
   }
@@ -5714,7 +6162,7 @@
     if (action === 'toggle') return flipSwitch(button).then(() => changeListOptions(section, items => { items[index].active = !items[index].active; }, `${item.name} ${item.active ? 'switched off for new price lists' : 'offered again'}.`));
     if (action === 'remove') {
       const remove = () => changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`);
-      const chip = button.closest('.country-chip');
+      const chip = button.closest('.country-card');
       if (!chip || reducedMotion()) return remove();
       chip.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.6)' }], { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
       return setTimeout(remove, 200); // the chip shrinks away, then the list saves
@@ -5733,12 +6181,58 @@
     if (event.key === 'Enter') { event.preventDefault(); event.target.closest('.option-row').querySelector('[data-option-action="save"]').click(); }
     if (event.key === 'Escape') { event.preventDefault(); optionEditing = null; renderListOptions(); }
   });
+  // --- Countries: tabs, the A–Z index, and the "Add country" row (suggests names and shows the flag). ---
+  $$('#listsCard [data-country-tab]').forEach(tab => tab.addEventListener('click', () => {
+    countryView.tab = tab.dataset.countryTab;
+    $$('#listsCard [data-country-tab]').forEach(other => { other.classList.toggle('is-active', other === tab); other.setAttribute('aria-selected', String(other === tab)); });
+    renderListOptions();
+  }));
+  $('#listsCard .country-index')?.addEventListener('click', event => {
+    const letter = event.target.closest('[data-country-letter]')?.dataset.countryLetter;
+    const section = event.target.closest('.option-list');
+    const rows = section?.querySelector('[data-option-rows]');
+    const card = rows?.querySelector(`.country-card[data-letter="${CSS.escape(letter || '')}"]`);
+    if (!card) return;
+    rows.dataset.pinnedLetter = letter;
+    markCountryLetter(section);
+    rows.scrollTo({ top: rows.scrollTop + card.getBoundingClientRect().top - rows.getBoundingClientRect().top - 12, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  });
+  const countryRows = $('#listsCard .country-list [data-option-rows]');
+  countryRows?.addEventListener('scroll', () => requestAnimationFrame(() => markCountryLetter(countryRows.closest('.option-list'))), { passive: true });
+  ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(type => countryRows?.addEventListener(type, () => { delete countryRows.dataset.pinnedLetter; }, { passive: true }));
+  const countryAddForm = $('#countryAddForm');
+  function setCountryAdd(open) {
+    if (!countryAddForm) return;
+    countryAddForm.hidden = !open;
+    $('#countryAddToggle')?.setAttribute('aria-expanded', String(open));
+    if (open) {
+      const list = $('#countryNameList');
+      if (list && !list.childElementCount) list.innerHTML = [...COUNTRY_LOOKUP.values()].map(({ name }) => `<option value="${escapeHtml(name)}"></option>`).join('');
+      countryAddForm.querySelector('input').focus();
+    } else {
+      countryAddForm.querySelector('input').value = '';
+      showCountryAddFlag('');
+    }
+  }
+  function showCountryAddFlag(name) {
+    const holder = $('#countryAddFlag');
+    if (!holder) return;
+    const code = countryCodeOf(name);
+    holder.innerHTML = code ? `<img src="../assets/flags/${code}.svg" alt="">` : '';
+    holder.classList.toggle('has-flag', Boolean(code));
+  }
+  $('#countryAddToggle')?.addEventListener('click', () => setCountryAdd(countryAddForm.hidden));
+  $('#countryAddClose')?.addEventListener('click', () => setCountryAdd(false));
+  countryAddForm?.querySelector('input').addEventListener('input', event => showCountryAddFlag(event.target.value));
+  countryAddForm?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); setCountryAdd(false); } });
   $$('#listsCard [data-option-add]').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();
     const input = form.querySelector('input');
-    const name = input.value.trim().replace(/\s+/g, ' ');
+    let name = input.value.trim().replace(/\s+/g, ' ');
     if (!name) return;
     const section = form.closest('.option-list');
+    // A known country is saved with its usual spelling (so "japan" becomes "Japan" and gets its flag).
+    if (section.dataset.optionType === 'countries') name = COUNTRY_LOOKUP.get(name.toLowerCase())?.name || name;
     if ((state.listOptions[section.dataset.optionType] || []).some(item => item.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already in the list.`);
     await changeListOptions(section, items => {
       if (section.dataset.optionType === 'countries') {
@@ -5748,6 +6242,7 @@
       } else items.push({ name, description: '', active: true, usedBy: 0 });
     }, `${name} added.`);
     input.value = '';
+    if (form === countryAddForm) { showCountryAddFlag(''); input.focus(); } // stays open to add another
   }));
   // --- Config › Users (same flow as QRTS): look a person up by biometrics number in the master
   // list, choose a role, add. Change roles or turn access off in the list. You can't change your

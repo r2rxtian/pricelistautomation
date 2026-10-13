@@ -120,6 +120,11 @@ foreach ($categories as $category => $count) {
     }
 }
 
+// A price change that changes nothing (e.g. prices edited, then reset) is not saved as a new version.
+if (!$isUpload && !$adjustedCategories && isset($editBase) && rows_match_version($cleanRows, $editBase, $priceColumns)) {
+    json_response(['ok' => false, 'message' => 'Nothing has changed since this price list was opened, so there is nothing to save.'], 422);
+}
+
 $changes = [];
 foreach (array_slice(is_array($data['changes'] ?? null) ? $data['changes'] : [], 0, 1000) as $change) {
     if (!is_array($change)) continue;
@@ -233,6 +238,9 @@ $version = [
     'rejectionRemarks' => null,
     'basedOn' => $base['id'] ?? null,
     'templateVersion' => $editBase['templateVersion'] ?? null,
+    // The editor opens a list at its current prices (any approved % already applied), so a % saved
+    // with it is on top of those prices: +5% means 5% more than before, not "+5% of the upload".
+    'adjustOnCurrent' => ($data['adjustBase'] ?? '') === 'current',
 ];
 // Top approvers (e.g. Ms. Gen) publish directly: their saves are approved on the spot.
 $autoApproved = is_auto_approver($user['username']);

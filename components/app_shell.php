@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * The signed-in app (top bar, the five pages and their dialogs). Rendered by the page files in
- * pages/ — prices.php, files.php, approvals.php, audit_logs.php, config.php — which set $page to the
+ * pages/ — prices.php, files.php, audit_logs.php, config.php (approvals.php now opens Files) — which set $page to the
  * page to open. Switching pages in the top bar happens in the browser (scripts/app.js) and updates
  * the address to that page's file, so a refresh or bookmark opens the same page.
  */
@@ -13,7 +13,7 @@ require_once __DIR__ . '/logo.php';
 const APP_PAGES = [
     'prices' => ['panel' => 'workspacePanel', 'title' => 'Prices'],
     'files' => ['panel' => 'filesPanel', 'title' => 'Files'],
-    'approvals' => ['panel' => 'listsPanel', 'title' => 'Approvals'],
+    'approvals' => ['panel' => 'filesPanel', 'title' => 'Files'], // merged into Files; old links still work
     'audit_logs' => ['panel' => 'historyPanel', 'title' => 'Audit Logs'],
     'config' => ['panel' => 'settingsPanel', 'title' => 'Config'],
 ];
@@ -36,7 +36,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=151">
+    <link rel="stylesheet" href="../styles/app.css?v=159">
     <script>
     (function() {
         try {
@@ -78,8 +78,7 @@ $panel = APP_PAGES[$page]['panel'];
         </div>
         <nav class="top-nav" aria-label="Primary">
             <button class="nav-item active" data-panel="workspacePanel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg><strong>Prices</strong></button>
-            <button class="nav-item" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong></button>
-            <button class="nav-item" data-panel="listsPanel" id="priceListsNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><strong>Approvals</strong><span id="pendingApprovalCount" class="nav-count" hidden>0</span></button>
+            <button class="nav-item" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
             <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
             <button id="settingsNav" class="nav-item perm-manageImages" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
         </nav>
@@ -151,6 +150,7 @@ $panel = APP_PAGES[$page]['panel'];
                                     <span id="approvalBannerText" class="workflow-note-text"></span>
                                 </span>
                                 <span class="decision-actions">
+                                    <button type="button" id="bannerReviewBtn" class="mini-action review" hidden>See changes</button>
                                     <button type="button" id="bannerApproveBtn" class="mini-action approve" hidden>Approve</button>
                                     <button type="button" id="bannerRejectBtn" class="mini-action reject" hidden>Reject</button>
                                 </span>
@@ -290,82 +290,12 @@ $panel = APP_PAGES[$page]['panel'];
                 </section>
             </section>
 
-            <section id="listsPanel" class="panel management-page" hidden>
-                <div class="page-heading history-heading">
-                    <div class="heading-left">
-                        <p class="kicker history-kicker">APPROVAL WORKFLOW</p>
-                        <h1 class="history-title">Approvals</h1>
-                        <p class="muted history-subtitle" id="listsSubtitle">Review saved price changes and approval decisions.</p>
-                    </div>
-                </div>
-
-                <div class="audit-tab-bar" role="tablist" aria-label="Price list views" id="listTabBar">
-                    <button type="button" class="list-tab-btn audit-tab-btn active" data-list-tab="all" role="tab" aria-selected="true"><span>All</span><span id="listAllCount" class="audit-tab-count">0</span></button>
-                    <button type="button" class="list-tab-btn audit-tab-btn perm-approve" data-list-tab="mine" role="tab" aria-selected="false" hidden><span>Awaiting my approval</span><span id="listMineCount" class="audit-tab-count">0</span></button>
-                    <button type="button" class="list-tab-btn audit-tab-btn" data-list-tab="approved" role="tab" aria-selected="false"><span>Approved</span><span id="listApprovedCount" class="audit-tab-count">0</span></button>
-                </div>
-
-                <div class="history-card">
-                    <div class="history-tools">
-                        <div class="history-filter-group">
-                            <div class="history-search-control">
-                                <svg class="history-search-icon" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                <input id="listSearchInput" type="search" placeholder="Search price lists..." autocomplete="off" aria-label="Search price lists">
-                            </div>
-                            <div class="history-select-control">
-                                <select id="listPriceLevelFilter" aria-label="Filter by price level"><option value="">All price levels</option></select>
-                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </div>
-                            <div class="history-select-control">
-                                <select id="listCountryFilter" aria-label="Filter by country"><option value="">All countries</option></select>
-                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </div>
-                            <div class="history-select-control perm-update" hidden>
-                                <select id="listStatusFilter" aria-label="Filter by status">
-                                    <option value="">All statuses</option>
-                                    <option value="pending">Pending approval</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
-                                <svg class="history-chevron-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </div>
-                        </div>
-                        <div class="history-tools-meta">
-                            <span id="listCount" class="history-count">0 price lists</span>
-                            <button type="button" id="refreshListsBtn" class="audit-refresh-btn" title="Refresh" aria-label="Refresh price lists">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="history-table-frame">
-                        <table id="listsTable" class="lists-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 25%;">Price list</th>
-                                    <th style="width: 11%;">Price level</th>
-                                    <th style="width: 10%;">Country</th>
-                                    <th style="width: 14%;">Saved</th>
-                                    <th style="width: 13%;">Adjustment</th>
-                                    <th style="width: 14%;">Status</th>
-                                    <th style="width: 13%;" class="col-actions"><span class="sr-only">Actions</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="listsTableBody"></tbody>
-                        </table>
-                        <div id="listsEmpty" class="history-empty-card" hidden>
-                            <h2 id="listsEmptyTitle">No price lists yet</h2>
-                            <p id="listsEmptyText">Saved price lists will appear here.</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <section id="filesPanel" class="panel management-page" hidden>
                 <div class="page-heading history-heading">
                     <div class="heading-left">
-                        <p class="kicker history-kicker">UPLOADED PRICE LISTS</p>
+                        <p class="kicker history-kicker">PRICE LISTS &amp; APPROVALS</p>
                         <h1 class="history-title">Files</h1>
-                        <p class="muted history-subtitle">Your uploaded price lists, each with its current prices.</p>
+                        <p class="muted history-subtitle">Every price list with its current prices, and the changes waiting for approval.</p>
                     </div>
                 </div>
                 <div class="history-card">
@@ -386,7 +316,7 @@ $panel = APP_PAGES[$page]['panel'];
                     <div class="history-table-frame">
                         <!-- Every uploaded price list is a paper sheet on a board; the first sheet uploads new ones. -->
                         <div id="filesTable" class="sheet-board">
-                            <div id="filesTableBody" class="sheet-grid" role="list" aria-label="Uploaded price lists"></div>
+                            <div id="filesTableBody" class="sheet-groups" aria-label="Uploaded price lists"></div>
                         </div>
                         <div id="filesEmpty" class="history-empty-card" hidden>
                             <h2>No uploaded files yet</h2>
@@ -470,20 +400,10 @@ $panel = APP_PAGES[$page]['panel'];
                     </div>
 
                     <div class="history-table-frame">
-                        <table id="historyTable">
-                            <thead id="auditTableHead">
-                                <tr>
-                                    <th style="width: 11%;">Time <span class="sort-arrow">↓</span></th>
-                                    <th style="width: 14%;">User</th>
-                                    <th style="width: 13%;">Event</th>
-                                    <th style="width: 38%;">Activity</th>
-                                    <th style="width: 13%;">Change</th>
-                                    <th style="width: 11%;"><span class="sr-only">Action</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="historyTableBody">
-                            </tbody>
-                        </table>
+                        <!-- The logbook: a timeline per day; quick back-and-forth edits fold into editing sessions. -->
+                        <div id="historyTable" class="audit-logbook">
+                            <div id="historyTableBody" class="log-days"></div>
+                        </div>
                         <div id="historyEmpty" class="history-empty-card" hidden>
                             <div class="empty-archive-icon">
                                 <svg viewBox="0 0 48 48" width="56" height="56" fill="none" stroke="currentColor" aria-hidden="true">
@@ -613,13 +533,30 @@ $panel = APP_PAGES[$page]['panel'];
                     <div id="imageSettingsEmpty" class="settings-empty" hidden><h2>No product types available</h2><p>Open a price list first. Its categories and product groups will appear here.</p></div>
                 </div>
                 <div class="lists-card" id="listsCard" hidden>
-                    <section class="option-list" data-option-type="countries" aria-labelledby="countriesTitle">
+                    <section class="option-list country-list" data-option-type="countries" aria-labelledby="countriesTitle">
                         <header class="option-list-head">
                             <div><h2 id="countriesTitle">Countries</h2><p class="option-list-sub" data-option-summary></p></div>
-                            <label class="option-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" data-option-search placeholder="Search countries…" aria-label="Search countries" autocomplete="off"></label>
+                            <div class="country-head-tools">
+                                <label class="option-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" data-option-search placeholder="Search countries…" aria-label="Search countries" autocomplete="off"></label>
+                                <button type="button" class="button primary country-add-toggle" id="countryAddToggle" aria-expanded="false" aria-controls="countryAddForm"><span aria-hidden="true">+</span> Add country</button>
+                            </div>
                         </header>
-                        <div class="option-rows" data-option-rows></div>
-                        <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a country…" aria-label="New country" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
+                        <form class="option-add country-add" id="countryAddForm" data-option-add hidden>
+                            <span class="country-add-flag" id="countryAddFlag" aria-hidden="true"></span>
+                            <input type="text" maxlength="80" list="countryNameList" placeholder="Type a country, e.g. Japan" aria-label="New country" autocomplete="off">
+                            <button type="submit" class="button primary">Add</button>
+                            <button type="button" class="option-icon country-add-close" id="countryAddClose" aria-label="Close" title="Close">×</button>
+                            <datalist id="countryNameList"></datalist>
+                        </form>
+                        <div class="country-tabs" role="tablist" aria-label="Show countries">
+                            <button type="button" class="country-tab is-active" data-country-tab="all" role="tab" aria-selected="true">All countries</button>
+                            <button type="button" class="country-tab" data-country-tab="used" role="tab" aria-selected="false">In use</button>
+                        </div>
+                        <div class="country-body">
+                            <div class="option-rows" data-option-rows></div>
+                            <nav class="country-index" aria-label="Jump to letter"></nav>
+                        </div>
+                        <footer class="country-foot"><span data-country-showing></span><span class="country-foot-hint">Hover a country to remove it</span></footer>
                     </section>
                     <section class="option-list" data-option-type="priceLevels" aria-labelledby="levelsTitle">
                         <header class="option-list-head">
@@ -895,6 +832,20 @@ $panel = APP_PAGES[$page]['panel'];
     </form>
 </dialog>
 
+<!-- Change review: exactly what a saved price change does, compared with the version it was made from. -->
+<dialog id="changeReviewDialog" class="change-review-dialog" aria-labelledby="changeReviewTitle">
+    <form method="dialog" class="dialog-card">
+        <div class="dialog-heading"><div><p class="kicker" id="changeReviewKicker">Price change</p><h2 id="changeReviewTitle">Price list</h2><p class="muted" id="changeReviewMeta"></p></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <div id="changeReviewBody" class="change-review-body" aria-live="polite"></div>
+        <div class="dialog-actions change-review-actions">
+            <button type="button" class="button secondary" id="changeReviewOpen">Open in editor</button>
+            <span class="change-review-spacer"></span>
+            <button type="button" class="button secondary change-review-reject" id="changeReviewReject" hidden>Reject</button>
+            <button type="button" class="button primary" id="changeReviewApprove" hidden>Approve</button>
+        </div>
+    </form>
+</dialog>
+
 <dialog id="logoutDialog">
     <form method="dialog" class="dialog-card" id="logoutForm">
         <div class="dialog-heading"><div><p class="kicker">Session</p><h2>Sign out?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
@@ -953,7 +904,8 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
-<script src="../scripts/app.js?v=145"></script>
+<script src="../scripts/country-flags.js?v=1"></script>
+<script src="../scripts/app.js?v=160"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=10"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

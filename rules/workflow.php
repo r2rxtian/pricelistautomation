@@ -40,7 +40,7 @@ function same_price_list(array $a, array $b): bool
 const VERSION_SUMMARY_KEYS = [
     'id', 'name', 'priceLevel', 'country', 'revision', 'status', 'adjustment', 'categoryAdjustments', 'summary',
     'savedAt', 'savedBy', 'savedByUser', 'requiredApprovers', 'approvals', 'approvedAt', 'approvedBy',
-    'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount', 'source', 'basedOn',
+    'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount', 'source', 'basedOn', 'adjustOnCurrent',
 ];
 
 function version_summary(array $version): array
@@ -143,6 +143,34 @@ function version_delete_block(array $version): ?string
     return in_array((string) ($version['id'] ?? ''), versions_built_on(), true)
         ? 'Price changes were made from this file, so it is kept'
         : null;
+}
+
+/**
+ * True when rows as the editor saves them (the list's prices with any approved % already applied)
+ * are exactly a saved version's prices and cells, so saving them would change nothing. Prices are
+ * compared to 4 decimals, other cells as text. Any doubt (different shape) counts as a change.
+ */
+function rows_match_version(array $rows, array $version, array $priceColumns): bool
+{
+    $base = is_array($version['rows'] ?? null) ? $version['rows'] : [];
+    if (count($rows) !== count($base)) return false;
+    $adjustments = is_array($version['categoryAdjustments'] ?? null) ? $version['categoryAdjustments'] : [];
+    foreach (array_values($rows) as $i => $row) {
+        $old = is_array($base[$i] ?? null) ? $base[$i] : [];
+        $rate = (float) ($adjustments[trim((string) ($old[0] ?? ''))] ?? $version['adjustment'] ?? 0);
+        $width = max(count($row), count($old));
+        for ($col = 0; $col < $width; $col++) {
+            $new = $row[$col] ?? '';
+            $was = $old[$col] ?? '';
+            if (in_array($col, $priceColumns, true) && is_numeric($new) && is_numeric($was)) {
+                $shown = round(max(0.0, (float) $was * (1 + $rate / 100)), 4);
+                if (abs((float) $new - $shown) > 0.00005) return false;
+            } elseif (trim((string) $new) !== trim((string) $was)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 function version_for_client(array $user, array $version): array
