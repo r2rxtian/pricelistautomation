@@ -92,7 +92,9 @@ const COUNTRIES = [
 ];
 
 // Activity the browser may log on its own (everything else is logged by the server).
-const CLIENT_AUDIT_TYPES = ['import_workbook', 'price_adjust', 'cell_edit', 'reset_prices'];
+// Edits are no longer logged as they happen (the save records them); the old types stay accepted for
+// pages still open on the previous script.
+const CLIENT_AUDIT_TYPES = ['import_workbook', 'price_adjust', 'cell_edit', 'reset_prices', 'discard_changes'];
 
 // ---------------------------------------------------------------------------
 // Storage

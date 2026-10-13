@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * User management (Config › Users), the same flow as QRTS: look a person up by biometrics number in
+ * User management (the Users page), the same flow as QRTS: look a person up by biometrics number in
  * the HR master list, then give them access with a role. Names, departments and sign-in always come
  * from the company tables; PLA_ACD_Users only holds who has access, their role and a short username.
  * IT department staff are not managed here: they get Admin automatically at sign-in.
@@ -74,7 +74,7 @@ function list_accounts(): array
     ], $rows);
 }
 
-/** The accounts Config › Users manages: IT staff are left out because their access is automatic. */
+/** The accounts the Users page manages: IT staff are left out because their access is automatic. */
 function managed_accounts(): array
 {
     return array_values(array_filter(list_accounts(), fn(array $account) => !$account['managedByIt']));

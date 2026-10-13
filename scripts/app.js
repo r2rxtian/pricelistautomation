@@ -18,7 +18,7 @@
   // The Config tab (photo library, product type photos, search keywords) also survives a refresh.
   const CONFIG_TAB_KEY = 'pla_config_tab';
   function rememberedConfigTab() {
-    try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types', 'lists', 'users'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
+    try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types', 'lists'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   let suppressRowEnter = false; // set while a price roll re-renders the table (see rollPrices)
@@ -390,6 +390,7 @@
         <span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>
         <span class="file-tab-name">${name}</span>
         <span class="file-tab-meta">${escapeHtml([tab.country, tab.priceLevel].filter(Boolean).join(' · '))}</span>
+        <span class="file-tab-return" aria-hidden="true">Back to editor<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
       <span class="file-tab-dot" aria-hidden="true"></span>
       <button type="button" class="file-tab-close" aria-label="Close ${name}" title="Close"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
@@ -494,13 +495,20 @@
     const isOpen = Boolean(state.active && tabKeyOf(state.active) === key);
     if (!tab && !isOpen) return false;
     const name = tab?.name || state.active?.name || 'this price list';
+    let discarded = null;
     if (isOpen) {
       if (state.active.isDraft && !(await confirmDiscardDraft(`Closing ${name}`))) return false;
+      if (state.active.isDraft) discarded = state.active;
       if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
       setPriceEditor(false);
-    } else if (can('update') && (tab.dirty || (await getDraft(draftKey(tab))))) {
-      if (!(await confirmDiscardDraft(`Closing ${name}`))) return false;
+    } else if (can('update')) {
+      const draft = await getDraft(draftKey(tab));
+      if (tab.dirty || draft) {
+        if (!(await confirmDiscardDraft(`Closing ${name}`))) return false;
+        discarded = draft;
+      }
     }
+    logDiscardedChanges(discarded);
     if (can('update')) await removeDraft(draftKey(isOpen ? state.active : tab));
     if (index >= 0) openTabs.splice(index, 1);
     saveTabs();
@@ -813,6 +821,7 @@
     // One file is open at a time: opening another one replaces it, so its unsaved changes are asked about first.
     if (state.active?.isDraft) {
       if (!silent && !(await confirmDiscardDraft(sameList ? 'Opening another version of this price list' : 'Opening another price list'))) return null;
+      logDiscardedChanges(state.active);
       if (can('update')) await removeDraft(draftKey());
     }
     let active = null;
@@ -938,7 +947,6 @@
       document.title = `${active.name} · ${APP_TITLE}`;
     }
 
-    dom.activeBadge.hidden = false;
     $('#saveButton').classList.toggle('is-disabled', !canEdit);
     $('#saveButton').setAttribute('aria-disabled', String(!canEdit));
     renderWorkflowState();
@@ -955,18 +963,20 @@
     const dotClass = status === 'approved' || status === 'uploaded' ? '' : 'warning';
     dom.activeBadge.className = `status-badge ${badgeClass}`.trim();
     dom.activeBadge.innerHTML = `<span class="pulse-dot ${dotClass}" aria-hidden="true"><span class="pulse-ring"></span></span>${escapeHtml(statusLabel(status))}`;
+    // An approved or freshly uploaded list is the normal state, so the header stays quiet: who saved
+    // or approved it, and what changed, are in Files, the notifications and Audit Logs. A status shows
+    // only when it needs attention (unsaved, waiting for approval, rejected, replaced).
+    const settled = status === 'approved' || status === 'uploaded';
+    dom.activeBadge.hidden = settled;
 
-    if (status === 'draft') {
+    if (settled) {
+      setSavedMeta('');
+    } else if (status === 'draft') {
       const edits = (active.pendingChanges || []).length;
       setSavedMeta(active.id ? `Unsaved edits to the version saved by ${active.savedBy || 'a user'}${edits ? ` · ${edits} cell edit${edits === 1 ? '' : 's'}` : ''}` : 'Imported workbook · Unsaved');
     } else {
-      // One plain sentence after the status badge: who saved it, who approved it, when.
-      const by = active.savedBy || 'a user';
-      const approver = active.approvedBy || '';
-      const when = displayDate(active.approvedAt || active.savedAt);
-      setSavedMeta(status === 'uploaded' ? `Uploaded by ${by} · ${displayDate(active.savedAt)} · original prices`
-        : status === 'approved' ? (approver && approver !== by ? `Saved by ${by} · approved by ${approver} · ${when}` : `Saved and approved by ${by} · ${when}`)
-        : active.savedAt ? `Saved by ${by} · ${displayDate(active.savedAt)}` : 'Saved');
+      // One plain sentence after the status badge: who saved it and when.
+      setSavedMeta(active.savedAt ? `Saved by ${active.savedBy || 'a user'} · ${displayDate(active.savedAt)}` : 'Saved');
     }
 
     // A coloured note after the sentence only when something needs attention (pending, rejected, older).
@@ -1807,10 +1817,7 @@
           state.active.pendingChanges.push(change);
           setDraft(draftKey(), state.active);
         }
-        renderWorkflowState();
-        logActivity('cell_edit', `Edited ${change.column} of ${change.code || 'a product'}`, `${change.product || change.code}: ${change.oldValue || 'empty'} → ${change.newValue || 'empty'}`, {
-          productCode: change.code, productName: change.product, category: change.category, column: change.column, oldValue: change.oldValue, newValue: change.newValue
-        });
+        renderWorkflowState(); // not logged here: the save records every edit, so unsaved edits never reach the audit log
       }
     }
 
@@ -1993,6 +2000,7 @@
       case 'price_adjust': return 'Price Adjust';
       case 'cell_edit': return 'Cell Edit';
       case 'save_version': return 'Saved Version';
+      case 'discard_changes': return 'Not Saved';
       case 'row_add': return 'Added Row';
       case 'row_delete': return 'Deleted Row';
       case 'reset_prices': return 'Reset Prices';
@@ -2013,7 +2021,7 @@
   /** 'changes' when the event altered prices/data, 'details' when there is more to show, null when the row says it all. */
   function auditInspectKind(type) {
     if (['cell_edit', 'price_adjust', 'reset_prices', 'save_version', 'row_add', 'row_delete'].includes(type)) return 'changes';
-    if (['import_workbook', 'approve_version', 'reject_version', 'delete_version'].includes(type)) return 'details';
+    if (['import_workbook', 'approve_version', 'reject_version', 'delete_version', 'discard_changes'].includes(type)) return 'details';
     return null;
   }
   function auditDayLabel(iso) {
@@ -2073,199 +2081,149 @@
     return '<span class="audit-no-action" aria-hidden="true">—</span>';
   }
 
-  function showAuditLogModal(log) {
+  /** A log title without the status tacked on ("Saved 'X' (approved)" → "Saved “X”" + approved). */
+  function cleanLogTitle(log) {
+    let text = String(log.title || getAuditTypeLabel(log.type));
+    let status = '';
+    if (/\s*\(approved\)\s*$/i.test(text)) { status = 'approved'; text = text.replace(/\s*\(approved\)\s*$/i, ''); }
+    else if (/\s+for approval\s*$/i.test(text)) { status = 'pending'; text = text.replace(/\s+for approval\s*$/i, ''); }
+    else if (/\s*\(partial\)\s*$/i.test(text)) { status = 'partial'; text = text.replace(/\s*\(partial\)\s*$/i, ''); }
+    return { text: text.replace(/'([^']+)'/g, (_, name) => `“${name}”`), status };
+  }
+
+  /**
+   * One audit event, laid out like its logbook entry: who did what and when on top, the file it was
+   * done to, then exactly what happened (for a saved version, every price before → after, as in the
+   * approval review). Only the body scrolls.
+   */
+  let inspectingLogId = null;
+  async function showAuditLogModal(log) {
     const dialog = $('#historyChangesDialog');
-    const kicker = $('#historyChangesKicker');
-    const title = $('#historyChangesTitle');
-    const meta = $('#historyChangesMeta');
     const content = $('#historyChangesContent');
     const actions = $('#historyChangesActions');
-    if (!dialog || !title || !meta || !content) return;
-
-    if (kicker) kicker.textContent = 'AUDIT EVENT INSPECTOR';
-    title.textContent = log.title || 'Event Details';
-    meta.textContent = `Action by ${log.actor || 'User'} (${log.role || 'user'}) • ${displayDate(log.timestamp)} (${formatRelativeTime(log.timestamp)})`;
-
+    if (!dialog || !content) return;
+    inspectingLogId = log.id;
     const logMeta = log.metadata || {};
+    const version = logMeta.versionId ? versionSummaryById(logMeta.versionId) : null;
+    const { text: titleText, status: titleStatus } = cleanLogTitle(log);
+    const initials = String(log.actor || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    const role = String(log.role || 'user').toLowerCase() === 'admin' ? 'Admin' : 'Export only';
+
+    dialog.dataset.type = log.type || 'info'; // colours the node like the logbook
+    $('#auditEntryNode').innerHTML = getAuditTypeIcon(log.type);
+    $('#historyChangesKicker').textContent = getAuditTypeLabel(log.type);
+    $('#historyChangesTitle').textContent = titleText;
+    $('#historyChangesMeta').innerHTML = `<span class="user-avatar log-avatar" aria-hidden="true">${escapeHtml(initials)}</span>
+      <span><strong>${escapeHtml(log.actor || 'Someone')}</strong> · ${role}</span>
+      <span class="audit-entry-when" title="${escapeHtml(displayDate(log.timestamp))}">${escapeHtml(displayDate(log.timestamp))} · ${escapeHtml(formatRelativeTime(log.timestamp))}</span>`;
+
+    // The file it was done to: flag, name, country · price level, and its status at the time.
     const fileName = getLogFileName(log);
-    const isCurrent = isLogCurrentFile(log);
-    const fileHeaderField = `
-      <div class="audit-modal-field audit-modal-field-file">
-        <span class="audit-modal-label">Target File / Workbook</span>
-        <div class="audit-modal-file-box">
-          <svg class="audit-file-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-          <strong class="audit-modal-file-name">${escapeHtml(fileName)}</strong>
-          ${isCurrent ? `<span class="audit-current-file-badge"><span class="pulse-dot tiny"></span>Current file</span>` : ''}
-        </div>
-      </div>`;
+    const hasFile = fileName && !['—', 'Unknown file'].includes(fileName);
+    const country = logMeta.country || version?.country || '';
+    const level = logMeta.priceLevel || version?.priceLevel || '';
+    const fileStatus = titleStatus === 'partial' ? '<span class="list-status-pill status-pending">Partly approved</span>'
+      : titleStatus ? statusPill(titleStatus) : '';
+    const fileStrip = hasFile ? `<div class="audit-entry-file">
+        ${country ? `<span class="country-flag" aria-hidden="true">${flagMarkup(country, countryCodeOf(country))}</span>` : '<svg class="audit-entry-file-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'}
+        <span class="audit-entry-file-text"><strong>${escapeHtml(fileName)}</strong>${country || level ? `<small>${escapeHtml([country, level].filter(Boolean).join(' · '))}</small>` : ''}</span>
+        ${fileStatus}${isLogCurrentFile(log) ? '<span class="audit-entry-open-now">Open now</span>' : ''}
+      </div>` : '';
 
-    let bodyHtml = '';
+    const fact = (label, value) => `<div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`;
+    const facts = items => `<dl class="audit-facts">${items.filter(Boolean).join('')}</dl>`;
+    const note = textValue => (textValue ? `<p class="audit-entry-note">${escapeHtml(textValue)}</p>` : '');
+    const plural = (count, word) => `${Number(count || 0).toLocaleString()} ${word}${Number(count) === 1 ? '' : 's'}`;
+    const pctChip = pct => `<span class="adj-chip ${pct > 0 ? 'up' : pct < 0 ? 'down' : ''}"><b>${pct > 0 ? '▲ +' : pct < 0 ? '▼ ' : ''}${pct}%</b></span>`;
 
+    let body = '';
+    let loadReview = null;
     if (log.type === 'cell_edit') {
-      const prodName = logMeta.productName || logMeta.product || 'Product';
-      const prodCode = logMeta.productCode || logMeta.code || 'N/A';
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Product Name</span>
-              <strong>${escapeHtml(prodName)}</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Product Code</span>
-              <code>${escapeHtml(prodCode)}</code>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Modified Column</span>
-              <strong>${escapeHtml(logMeta.column || 'Spreadsheet Cell')}</strong>
-            </div>
-          </div>
-          <div class="audit-diff-compare-box">
-            <div class="audit-diff-side before">
-              <span class="audit-diff-label">Previous Value</span>
-              <div class="audit-diff-val old">${escapeHtml(String(logMeta.oldValue ?? '—'))}</div>
-            </div>
-            <div class="audit-diff-divider">➔</div>
-            <div class="audit-diff-side after">
-              <span class="audit-diff-label">New Value</span>
-              <div class="audit-diff-val new">${escapeHtml(String(logMeta.newValue ?? '—'))}</div>
-            </div>
-          </div>
+      body = facts([
+        fact('Product', `<strong>${escapeHtml(logMeta.productName || logMeta.product || 'Product')}</strong>${logMeta.productCode || logMeta.code ? ` <code>${escapeHtml(logMeta.productCode || logMeta.code)}</code>` : ''}`),
+        fact('Column', escapeHtml(logMeta.column || 'Cell')),
+        logMeta.category ? fact('Category', escapeHtml(logMeta.category)) : '',
+      ]) + `<div class="audit-compare">
+          <div class="audit-compare-side is-before"><span>Before</span><p>${escapeHtml(String(logMeta.oldValue ?? '') || '(empty)')}</p></div>
+          <span class="audit-compare-arrow" aria-hidden="true">→</span>
+          <div class="audit-compare-side is-after"><span>After</span><p>${escapeHtml(String(logMeta.newValue ?? '') || '(empty)')}</p></div>
         </div>`;
     } else if (log.type === 'price_adjust') {
       const pct = Number(logMeta.percentage || 0);
-      const sign = pct > 0 ? '+' : '';
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Scope</span>
-              <strong>${escapeHtml(logMeta.category || (logMeta.isAllCategories || logMeta.applyAll ? 'All Categories' : 'Category Adjustment'))}</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Adjustment Rate</span>
-              <span class="history-adj-pill has-adj ${pct < 0 ? 'neg' : ''}" style="width:fit-content;"><strong>${sign}${pct}%</strong></span>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Affected Count</span>
-              <strong>${Number(logMeta.adjustedProducts || logMeta.productCount || 0).toLocaleString()} products</strong>
-            </div>
-          </div>
-          <div class="audit-modal-note">${escapeHtml(log.details || 'Percentage adjustment applied to active price list.')}</div>
-        </div>`;
+      const categories = Array.isArray(logMeta.categories) ? logMeta.categories : (logMeta.category ? [logMeta.category] : []);
+      body = facts([
+        fact('Change', pctChip(pct)),
+        fact('Applied to', escapeHtml(logMeta.applyAll || logMeta.isAllCategories ? 'All categories' : logMeta.category || `${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}`)),
+        fact('Products', plural(logMeta.adjustedProducts || logMeta.productCount, 'product')),
+      ]) + (categories.length ? `<section class="review-section"><h3>Categories <small>${categories.length}</small></h3><div class="review-chips">${categories.map(name => `<span class="adj-chip">${escapeHtml(name)}</span>`).join('')}</div></section>` : '')
+        + note('Made in the editor. It takes effect for everyone when the file is saved.');
     } else if (log.type === 'save_version') {
-      const targetVersion = (state.versions || []).find(v => String(v.id) === String(logMeta.versionId));
-      if (targetVersion && targetVersion.summary && Array.isArray(targetVersion.summary.adjustedCategories) && targetVersion.summary.adjustedCategories.length > 0) {
-        const catRows = targetVersion.summary.adjustedCategories.map(cat => {
-          const num = Number(cat.adjustment || 0);
-          const sign = num > 0 ? '+' : '';
-          const cls = num > 0 ? 'pos' : num < 0 ? 'neg' : 'zero';
-          return `
-            <div class="history-change-item">
-              <div>
-                <strong>${escapeHtml(cat.category)}</strong>
-                ${cat.productCount ? `<div class="history-change-subtext">${cat.productCount} pcs</div>` : ''}
-              </div>
-              <span class="change-badge ${cls}">${sign}${num}%</span>
-            </div>`;
-        }).join('');
-        bodyHtml = `
-          <div class="audit-modal-diff-card">
-            <div class="audit-modal-grid">
-              ${fileHeaderField}
-            </div>
-            <div class="history-changes-content">${catRows}</div>
-          </div>`;
-      } else {
-        bodyHtml = `
-          <div class="audit-modal-diff-card">
-            <div class="audit-modal-grid">
-              ${fileHeaderField}
-            </div>
-            <div class="audit-modal-note">${escapeHtml(log.details || 'Saved price list snapshot created.')}</div>
-          </div>`;
-      }
-    } else if (log.type === 'row_add' || log.type === 'row_delete') {
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Product Name</span>
-              <strong>${escapeHtml(logMeta.product || logMeta.productName || 'Product')}</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Product Code</span>
-              <code>${escapeHtml(logMeta.code || logMeta.productCode || 'N/A')}</code>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Category</span>
-              <strong>${escapeHtml(logMeta.category || 'Price list')}</strong>
-            </div>
-          </div>
-          <div class="audit-modal-note">${escapeHtml(log.details || '')}</div>
-        </div>`;
+      const approvers = (logMeta.approvers || []).filter(Boolean);
+      body = facts([
+        fact('Approval', logMeta.autoApproved ? 'Approved on save (no approval needed)' : approvers.length ? `Sent to ${escapeHtml(approvers.join(' & '))}` : 'Sent for approval'),
+        logMeta.revision ? fact('Revision', `#${escapeHtml(String(logMeta.revision))}`) : '',
+      ]) + '<div class="audit-entry-review"><p class="review-loading">Comparing with the version before it…</p></div>';
+      loadReview = async () => {
+        const change = await fetchVersion(logMeta.versionId);
+        const base = change?.basedOn ? await fetchVersion(change.basedOn).catch(() => null) : null;
+        return reviewMarkup(change, compareVersions(change, base), base);
+      };
     } else if (log.type === 'import_workbook') {
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Spreadsheet File</span>
-              <strong>${escapeHtml(logMeta.fileName || 'Excel Workbook')}</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Imported Rows</span>
-              <strong>${Number(logMeta.rowCount || 0).toLocaleString()} products</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Category Count</span>
-              <strong>${Number(logMeta.categoryCount || 0).toLocaleString()} categories</strong>
-            </div>
-          </div>
-          <div class="audit-modal-note">${escapeHtml(log.details || 'New spreadsheet imported into editor.')}</div>
-        </div>`;
+      body = facts([
+        fact('Workbook', escapeHtml(logMeta.sourceFile || logMeta.fileName || 'Excel workbook')),
+        fact('Products', plural(logMeta.rowCount || logMeta.productCount, 'product')),
+        fact('Categories', escapeHtml(String(Number(logMeta.categoryCount || 0)))),
+      ]) + note('Original prices from the uploaded workbook.');
+    } else if (log.type === 'row_add' || log.type === 'row_delete') {
+      body = facts([
+        fact('Product', `<strong>${escapeHtml(logMeta.product || logMeta.productName || 'Product')}</strong>${logMeta.code || logMeta.productCode ? ` <code>${escapeHtml(logMeta.code || logMeta.productCode)}</code>` : ''}`),
+        fact('Category', escapeHtml(logMeta.category || '—')),
+      ]);
     } else if (log.type === 'reset_prices') {
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Action</span>
-              <strong>Reset Price Adjustments</strong>
-            </div>
-            <div class="audit-modal-field">
-              <span class="audit-modal-label">Resulting State</span>
-              <span class="history-adj-pill neutral">Original prices</span>
-            </div>
-          </div>
-          <div class="audit-modal-note">${escapeHtml(log.details || 'All category and product percentage adjustments cleared.')}</div>
-        </div>`;
+      body = note('All price adjustments in the editor were cleared, back to the prices the file was opened with.');
+    } else if (log.type === 'discard_changes') {
+      const adjustments = (Array.isArray(logMeta.adjustments) ? logMeta.adjustments : []).filter(Boolean);
+      body = facts([
+        fact('Price adjustments', adjustments.length ? String(adjustments.length) : 'None'),
+        fact('Cell edits', String(Number(logMeta.cellEdits || 0))),
+      ]) + (adjustments.length ? `<section class="review-section"><h3>Adjustments not saved</h3><div class="review-chips">${adjustments.map(item => `<span class="adj-chip">${escapeHtml(item)}</span>`).join('')}</div></section>` : '')
+        + note('These changes were thrown away without saving, so the price list did not change.');
+    } else if (log.type === 'approve_version' || log.type === 'reject_version') {
+      body = facts([
+        fact('Decision', log.type === 'reject_version' ? statusPill('rejected') : titleStatus === 'partial' ? '<span class="list-status-pill status-pending">Partly approved</span>' : statusPill('approved')),
+        logMeta.remarks ? fact('Remarks', `“${escapeHtml(logMeta.remarks)}”`) : '',
+      ]) + note(log.details);
     } else {
-      bodyHtml = `
-        <div class="audit-modal-diff-card">
-          <div class="audit-modal-grid">
-            ${fileHeaderField}
-          </div>
-          <div class="audit-modal-note">${escapeHtml(log.details || log.title || 'Audit event record.')}</div>
-        </div>`;
+      body = note(log.details || titleText);
     }
 
-    content.innerHTML = bodyHtml;
-
+    content.innerHTML = fileStrip + body;
+    content.scrollTop = 0;
     if (actions) {
-      if (logMeta.versionId && versionSummaryById(logMeta.versionId)) {
-        actions.innerHTML = `
-          <button type="button" class="button primary open-version" data-id="${escapeHtml(logMeta.versionId)}">Open in workspace</button>
-          <button value="cancel" class="button secondary">Close</button>`;
-      } else {
-        actions.innerHTML = `<button value="cancel" class="button secondary">Close</button>`;
-      }
+      const canOpen = Boolean(version);
+      const isOpen = canOpen && String(state.active?.id) === String(version.id);
+      actions.innerHTML = `${canOpen ? `<button type="button" class="button primary open-version" data-id="${escapeHtml(version.id)}">${isOpen ? 'Back to the editor' : 'Open this file'}</button>` : ''}
+        <button value="cancel" class="button secondary">Close</button>`;
     }
+    if (!dialog.open) dialog.showModal();
+    content.tabIndex = -1;
+    content.focus({ preventScroll: true }); // not the × (it would show a focus ring on open)
 
-    dialog.showModal();
+    if (loadReview) {
+      const slot = content.querySelector('.audit-entry-review');
+      let markup;
+      try {
+        markup = await loadReview();
+      } catch (error) {
+        // The version is gone: what the log itself recorded is all there is.
+        const items = (logMeta.adjustedCategories || []).filter(item => Number(item.adjustment));
+        markup = `<p class="review-note">This version is no longer available, so prices can't be compared side by side.</p>`
+          + (items.length ? `<section class="review-section"><h3>Category adjustments</h3><div class="review-chips">${items.map(item => `<span class="adj-chip ${item.adjustment > 0 ? 'up' : 'down'}">${escapeHtml(item.category)} <b>${item.adjustment > 0 ? '▲ +' : '▼ '}${item.adjustment}%</b></span>`).join('')}</div></section>` : '')
+          + (logMeta.changeCount ? note(`${plural(logMeta.changeCount, 'cell edit')} were saved with it.`) : '');
+      }
+      if (inspectingLogId !== log.id || !slot.isConnected) return;
+      growTo(slot, () => { slot.innerHTML = markup; });
+    }
   }
 
   function renderHistory() {
@@ -2273,8 +2231,9 @@
 
     // 1. Update tab count badges
     const allLogs = state.auditLogs || [];
-    const editLogs = allLogs.filter(l => ['cell_edit', 'price_adjust', 'row_add', 'row_delete', 'reset_prices'].includes(l.type));
-    const workflowLogs = allLogs.filter(l => ['import_workbook', 'save_version', 'approve_version', 'reject_version', 'export_excel', 'export_pdf', 'delete_version'].includes(l.type));
+    // (Edits are logged when saved, so there is no separate "edits" view; older edit entries show under All.)
+    const editLogs = [];
+    const workflowLogs = allLogs.filter(l => ['import_workbook', 'save_version', 'discard_changes', 'approve_version', 'reject_version', 'export_excel', 'export_pdf', 'delete_version'].includes(l.type));
     const versionItems = [];
 
     if (dom.auditAllCountBadge) dom.auditAllCountBadge.textContent = String(allLogs.length);
@@ -2430,12 +2389,13 @@
         <div class="log-card">
           <div class="log-head">
             ${nested ? '' : `<span class="user-avatar log-avatar" aria-hidden="true">${escapeHtml(initialsOfActor(log.actor))}</span>`}
-            <p class="log-sentence">${nested ? '' : `<strong>${escapeHtml(log.actor || 'Someone')}</strong> · `}${escapeHtml(log.title || getAuditTypeLabel(log.type))}</p>
+            <p class="log-sentence">${nested ? '' : `<strong>${escapeHtml(log.actor || 'Someone')}</strong> · `}${escapeHtml(cleanLogTitle(log).text)}</p>
             <span class="log-type">${escapeHtml(getAuditTypeLabel(log.type))}</span>
           </div>
           ${log.details ? `<p class="log-details" title="${escapeHtml(log.details)}">${escapeHtml(log.details)}</p>` : ''}
           <div class="log-foot">
             ${nested ? '' : fileChip(log)}
+            ${log.type === 'save_version' && cleanLogTitle(log).status ? statusPill(cleanLogTitle(log).status) : ''}
             <span class="log-change">${getAuditDiffMarkup(log).includes('audit-no-action') ? '' : getAuditDiffMarkup(log)}</span>
             ${nested ? '' : `<span class="log-ago">${escapeHtml(formatRelativeTime(log.timestamp))}${role === 'admin' ? '' : ' · Export only'}</span>`}
             ${inspect ? `<button type="button" class="history-view-changes-btn view-audit-diff-btn" data-log-id="${escapeHtml(log.id)}">${inspect === 'changes' ? 'View changes' : 'View details'} ›</button>` : ''}
@@ -2781,7 +2741,8 @@
       current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: true
     })).join('') || '<p class="lsm-empty">—</p>';
     $('#lsmLists').innerHTML = files.map(version => item('list', version.id, version.name, {
-      meta: statusLabel(version.status), current: String(version.id) === String(active?.id)
+      // Like the header, only a status that needs attention is named; approved lists are the norm.
+      meta: ['approved', 'uploaded'].includes(version.status) ? '' : statusLabel(version.status), current: String(version.id) === String(active?.id)
     })).join('') || '<p class="lsm-empty">—</p>';
   }
   let switcherAnchor = null; // what opened the switcher (the title or the country/level chip)
@@ -4305,9 +4266,6 @@
     setPriceEditor(false);
 
     const scopeText = isAll ? 'all categories' : selectedCats.length === 1 ? selectedCats[0] : `${selectedCats.length} categories`;
-    logActivity('price_adjust', `Applied ${sign}${value}% to ${scopeText}`, `${sign}${value}% applied to ${affectedProducts.toLocaleString()} products (${selectedCats.join(', ')}). Calculated from the prices when the list was opened.`, {
-      percentage: value, applyAll: isAll, categories: selectedCats, category: selectedCats.length === 1 ? selectedCats[0] : '', adjustedProducts: affectedProducts
-    });
     toast(`Applied ${sign}${value}% to ${scopeText}. ${state.autoApprove ? 'Save to approve it and make it exportable.' : 'Save to submit for approval.'}`);
   }
 
@@ -5140,9 +5098,10 @@
     workspacePanel: 'files.php',
     filesPanel: 'files.php',
     historyPanel: 'audit_logs.php',
+    usersPanel: 'users.php',
     settingsPanel: 'config.php'
   };
-  const NAV_PARENT = { workspacePanel: 'filesPanel', listsPanel: 'filesPanel' }; // pages without a menu tab of their own light this one
+  const NAV_PARENT = { workspacePanel: 'filesPanel', listsPanel: 'filesPanel' }; // pages without a menu tab of their own belong under this one
   const urlListId = () => new URLSearchParams(location.search).get('list');
   function getInitialPanelId() {
     const panel = document.body.dataset.panel;
@@ -5177,7 +5136,9 @@
 
     document.documentElement.removeAttribute('data-initial-panel');
 
-    $$('.nav-item').forEach(item => item.classList.toggle('active', item === targetButton));
+    // The navbar lights only real pages. In the editor the open file's tab (under the bar) is the one
+    // highlighted, so "Files" never looks like the page you are on while a file is open.
+    $$('.nav-item').forEach(item => item.classList.toggle('active', item === targetButton && finalPanelId !== 'workspacePanel'));
     $$('.panel').forEach(panel => {
       const isTarget = panel.id === finalPanelId;
       panel.hidden = !isTarget;
@@ -5186,11 +5147,11 @@
     document.querySelector('.content')?.classList.toggle('history-active', ['historyPanel', 'listsPanel', 'filesPanel'].includes(finalPanelId));
 
     if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || 'library');
-    // Fetch the Users list in the background so that section opens already filled in.
-    if (finalPanelId === 'settingsPanel' && state.configTab !== 'users' && can('manageUsers') && !state.usersPreloaded) {
-      state.usersPreloaded = true;
-      loadUsers();
-    }
+    // Users: refreshed each time it opens (nothing is redrawn if nobody changed). Elsewhere, admins
+    // fetch it once in the background so the page opens already filled in.
+    if (finalPanelId === 'usersPanel') { state.usersPreloaded = true; loadUsers(); }
+    else if (can('manageUsers') && !state.usersPreloaded) { state.usersPreloaded = true; setTimeout(loadUsers, 1200); }
+    if (finalPanelId !== 'usersPanel') closePersonMenu();
     if (finalPanelId === 'historyPanel') renderHistory();
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
@@ -5206,6 +5167,16 @@
       else history.replaceState({ panel: finalPanelId }, '', url);
     }
     renderTabs();
+    // Leaving the editor: the open file's tab (now a chip with "Back to editor") glows once, so it is
+    // easy to find again.
+    if (state.booted && previousPanel === 'workspacePanel' && finalPanelId !== 'workspacePanel' && !reducedMotion()) {
+      const parked = $('#fileTabs .file-tab.is-current');
+      parked?.animate([
+        { boxShadow: '0 0 0 0 rgba(181, 32, 66, 0)' },
+        { boxShadow: '0 0 0 5px rgba(181, 32, 66, .16)', offset: 0.35 },
+        { boxShadow: '0 0 0 0 rgba(181, 32, 66, 0)' },
+      ], { duration: 1100, delay: 250, easing: 'ease-out', composite: 'add' });
+    }
 
     // Files ↔ editor: the editor unfolds out of the sheet it was opened from, and going back the
     // list's sheet "lands" on the board.
@@ -5696,7 +5667,6 @@
     state.categoryAdjustments = {};
     if (state.active) {
       markDraft();
-      logActivity('reset_prices', 'Reset price adjustments to 0%', previous.length ? `Cleared: ${previous.join(', ')}.` : 'All adjustments cleared.', { cleared: previous });
     }
     dom.percentage.value = 0;
     updateMetrics();
@@ -5981,6 +5951,8 @@
 
   function getAuditTypeIcon(type) {
     switch (type) {
+      case 'discard_changes': // a file with a cross: changes that were not saved
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg>`;
       case 'cell_edit':
         return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
       case 'row_add':
@@ -6103,6 +6075,22 @@
       state.unreadCount = Number(data.unreadCount || 0);
       renderNotifications();
     } catch { }
+  }
+
+  /**
+   * Edits are logged when they are saved (the save entry has every change), so unsaved work only shows
+   * up in the audit log if it is thrown away: one entry saying what was not saved.
+   */
+  function logDiscardedChanges(list) {
+    if (!list?.isDraft) return;
+    const edits = (list.pendingChanges || []).length;
+    const signedRate = value => `${Number(value) > 0 ? '+' : ''}${Number(value)}%`;
+    const adjustments = Object.entries(list.categoryAdjustments || {}).filter(([, value]) => Number(value)).map(([category, value]) => `${category} ${signedRate(value)}`);
+    if (!adjustments.length && Number(list.adjustment)) adjustments.push(`All categories ${signedRate(list.adjustment)}`);
+    const parts = [adjustments.length ? `price adjustments (${adjustments.join(', ')})` : '', edits ? `${edits} cell edit${edits === 1 ? '' : 's'}` : ''].filter(Boolean);
+    logActivity('discard_changes', `Discarded unsaved changes to '${list.name || 'a price list'}'`,
+      parts.length ? `Not saved: ${parts.join(' and ')}.` : 'The unsaved changes were not saved.',
+      { fileName: list.name || '', versionId: list.id || '', country: list.country || '', priceLevel: list.priceLevel || '', cellEdits: edits, adjustments });
   }
 
   async function logActivity(type, title, details = '', metadata = {}) {
@@ -6361,12 +6349,12 @@
   window.addEventListener('resize', () => placeConfigGlider(false));
   let lastPhotoTab = state.configTab === 'types' ? 'types' : 'library';
   function switchConfigTab(tab) {
-    if (!['library', 'types', 'lists', 'users'].includes(tab) || (tab === 'users' && !can('manageUsers'))) tab = 'library';
+    if (!['library', 'types', 'lists'].includes(tab)) tab = 'library';
     const previous = state.configTab;
     if (tab === 'library' || tab === 'types') lastPhotoTab = tab;
     try { sessionStorage.setItem(CONFIG_TAB_KEY, tab); } catch { }
     state.configTab = tab;
-    const section = tab === 'lists' || tab === 'users' ? tab : 'photos';
+    const section = tab === 'lists' ? tab : 'photos';
     $$('.config-section-btn').forEach(button => {
       const active = button.dataset.configSection === section;
       button.classList.toggle('is-active', active);
@@ -6382,23 +6370,21 @@
     $('#libraryCard').hidden = tab !== 'library';
     $('#typesCard').hidden = tab !== 'types';
     $('#listsCard').hidden = tab !== 'lists';
-    $('#usersCard').hidden = tab !== 'users';
-    $('#configTitle').textContent = { lists: 'Countries & price levels', users: 'Users' }[section] || 'Product photos';
+    $('#configTitle').textContent = { lists: 'Countries & price levels' }[section] || 'Product photos';
     $('#configSubtitle').textContent = {
       lists: 'The choices offered when uploading and saving price lists.',
-      users: 'Who can sign in, and what they can do.',
     }[section] || 'Organize category folders and choose photos for each product type.';
     // Changing section: its content glides in from the side of the section chosen.
-    const sectionOf = value => value === 'lists' || value === 'users' ? value : 'photos';
-    const order = ['photos', 'lists', 'users'];
+    const sectionOf = value => value === 'lists' ? value : 'photos';
+    const order = ['photos', 'lists'];
     if (previous && sectionOf(previous) !== section && !reducedMotion()) {
       const fromRight = order.indexOf(section) > order.indexOf(sectionOf(previous));
-      const parts = [section === 'photos' ? $('#photoTabBar') : null, $({ library: '#libraryCard', types: '#typesCard', lists: '#listsCard', users: '#usersCard' }[tab])].filter(Boolean);
+      const parts = [section === 'photos' ? $('#photoTabBar') : null, $({ library: '#libraryCard', types: '#typesCard', lists: '#listsCard' }[tab])].filter(Boolean);
       requestAnimationFrame(() => parts.forEach((el, index) => el.animate(
         [{ opacity: 0, transform: `translate3d(${fromRight ? 24 : -24}px, 0, 0)` }, { opacity: 1, offset: 0.35 }, { opacity: 1, transform: 'none' }],
         { duration: 560, delay: index * 50, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' })));
     }
-    if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else if (tab === 'users') loadUsers(); else renderListOptions();
+    if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else renderListOptions();
   }
   $$('.config-section-btn').forEach(button => button.addEventListener('click', () => {
     if (!button.classList.contains('is-active')) switchConfigTab(button.dataset.configSection === 'photos' ? lastPhotoTab : button.dataset.configSection);
@@ -6604,7 +6590,7 @@
     input.value = '';
     if (form === countryAddForm) { showCountryAddFlag(''); input.focus(); } // stays open to add another
   }));
-  // --- Config › Users (same flow as QRTS): look a person up by biometrics number in the master
+  // --- Users page (same flow as QRTS): look a person up by biometrics number in the master
   // list, choose a role, add. Change roles or turn access off in the list. You can't change your
   // own access, IT staff are automatic, and the last admin can't be removed. ---
   const ROLE_LABELS = { Admin: 'Admin', User: 'Export only' };
@@ -6627,102 +6613,226 @@
     userAccounts = list;
     renderUsers();
   }
-  // Everyone is an ID badge on a lanyard: role band (pink for Admin, slate for Export only), initials,
-  // department, biometrics number, a two-way role control and the access switch.
-  function userBadge(account) {
+  // Access lanes: everyone is a small card in the lane of their access (Admins, Export only, No
+  // access), so the board shows at a glance who can do what. Dragging a card to another lane changes
+  // it; the ⋯ menu on each card does the same from the keyboard or a touch screen.
+  const laneOf = account => (account.active ? account.role : 'off');
+  const LANE_LABELS = { Admin: 'Admins', User: 'Export only', off: 'No access' };
+  const GRIP_ICON = '<svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.4"/><circle cx="7" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="7" cy="13" r="1.4"/></svg>';
+  const LOCK_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  function personCard(account) {
     const self = account.username === state.user?.username;
-    const admin = account.role === 'Admin';
     const name = escapeHtml(account.name);
     const details = escapeHtml([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file');
-    return `<article class="user-badge ${admin ? 'is-admin' : 'is-export'} ${account.active ? '' : 'is-off'} ${self ? 'is-self' : ''}" data-id="${account.id}" data-key="user-${account.id}" aria-label="${name}">
-      <span class="badge-clip" aria-hidden="true"></span>
-      <div class="badge-band" aria-hidden="true"><span>LRN</span><span class="badge-band-role">${ROLE_LABELS[account.role] || escapeHtml(account.role)}</span></div>
-      ${self ? '<span class="badge-ribbon">You</span>' : ''}
-      <span class="user-avatar badge-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
-      <strong class="badge-name" title="${name}">${name}</strong>
-      <small class="badge-dept" title="${details}">${details}</small>
-      ${account.biometricsId ? `<span class="badge-bio">Bio ${escapeHtml(account.biometricsId)}</span>` : ''}
+    const seen = account.lastLogin ? `Seen ${escapeHtml(formatRelativeTime(account.lastLogin))}` : 'Never signed in';
+    return `<article class="person-card ${self ? 'is-self' : ''}" data-id="${account.id}" data-key="user-${account.id}" ${self ? '' : 'draggable="true"'} aria-label="${name}, ${LANE_LABELS[laneOf(account)]}">
+      ${self ? '' : `<span class="person-grip" aria-hidden="true">${GRIP_ICON}</span>`}
+      <span class="user-avatar person-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
+      <div class="person-info">
+        <strong class="person-name"><span title="${name}">${name}</span>${self ? '<span class="person-you">You</span>' : ''}</strong>
+        <small class="person-dept" title="${details}">${details}</small>
+        <small class="person-meta">${account.biometricsId ? `Bio ${escapeHtml(account.biometricsId)} · ` : ''}${seen}</small>
+      </div>
       ${self
-        ? '<p class="badge-locked">Your own access can’t be changed here.</p>'
-        : `<div class="badge-role" data-role="${escapeHtml(account.role)}" role="radiogroup" aria-label="Role for ${name}">${Object.entries(ROLE_LABELS).map(([value, label]) => `<button type="button" role="radio" aria-checked="${value === account.role}" data-set-role="${value}" ${account.active ? '' : 'disabled'}>${label}</button>`).join('')}</div>`}
-      <footer class="badge-foot">
-        <span class="user-last">${account.lastLogin ? `Seen ${escapeHtml(formatRelativeTime(account.lastLogin))}` : 'Never signed in'}</span>
-        ${self ? '' : `<button type="button" class="option-toggle user-access-toggle" role="switch" aria-checked="${account.active}" aria-label="${account.active ? 'Remove' : 'Restore'} access for ${name}" title="${account.active ? 'Can sign in. Click to remove access.' : 'No access. Click to restore.'}">${SWITCH_PARTS}</button>`}
-      </footer>
-      ${account.active ? '' : '<span class="badge-stamp" aria-hidden="true">Access removed</span>'}
+        ? `<span class="person-lock" title="Your own access can’t be changed here. Ask another admin.">${LOCK_ICON}</span>`
+        : `<button type="button" class="person-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Change access for ${name}" title="Change access"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>`}
     </article>`;
   }
   function renderUsers() {
-    const rows = $('#userRows');
-    if (!rows) return;
+    const board = $('#userBoard');
+    if (!board) return;
+    closePersonMenu();
     const active = userAccounts.filter(account => account.active).length;
-    $('#userListCount').textContent = `${active} with access${userAccounts.length > active ? ` · ${userAccounts.length - active} removed` : ''}`;
-    flipMove($('#userBadgeGrid'), () => { rows.innerHTML = userAccounts.map(userBadge).join(''); });
+    $('#userListCount').textContent = `${active} with access${userAccounts.length > active ? ` · ${userAccounts.length - active} without` : ''}`;
+    flipMove(board, () => {
+      $$('#userBoard .user-lane').forEach(lane => {
+        const people = userAccounts.filter(account => laneOf(account) === lane.dataset.lane);
+        lane.querySelector('[data-lane-cards]').innerHTML = people.map(personCard).join('');
+        lane.querySelector('[data-lane-count]').textContent = String(people.length);
+        lane.classList.toggle('is-empty', !people.length);
+      });
+    });
   }
-  async function updateUser(id, changes) {
+  /** Moves someone to a lane: the card glides there right away, then the server confirms (or it glides back). */
+  async function moveUser(id, lane) {
+    const account = userAccounts.find(item => item.id === id);
+    if (!account || account.username === state.user?.username || laneOf(account) === lane) return;
+    if (lane === 'off' && !(await confirmModal({ kicker: 'Remove access', title: `Remove ${account.name}'s access?`, text: 'They will no longer be able to sign in. Their saved work and history stay. You can give access back any time.', confirmLabel: 'Remove access' }))) return;
+    const changes = lane === 'off' ? { active: false } : { role: lane, active: true };
+    const before = userAccounts;
+    userAccounts = userAccounts.map(item => (item.id === id ? { ...item, ...changes } : item));
+    usersSignature = '';
+    renderUsers();
     try {
       const data = await api('users-update', { method: 'POST', body: JSON.stringify({ id, ...changes }) });
       setUsers(data.users || userAccounts);
       toast(data.message);
-    } catch (error) { toast(error.message); renderUsers(); }
-  }
-  $('#userRows')?.addEventListener('click', async event => {
-    // Role: the pill slides to the new side right away, then the change is saved.
-    const roleButton = event.target.closest('[data-set-role]');
-    if (roleButton) {
-      const control = roleButton.parentElement;
-      const badge = roleButton.closest('.user-badge');
-      const role = roleButton.dataset.setRole;
-      if (roleButton.disabled || control.dataset.role === role) return;
-      control.dataset.role = role;
-      control.querySelectorAll('[data-set-role]').forEach(button => button.setAttribute('aria-checked', String(button === roleButton)));
-      badge.classList.toggle('is-admin', role === 'Admin');
-      badge.classList.toggle('is-export', role !== 'Admin');
-      badge.querySelector('.badge-band-role').textContent = ROLE_LABELS[role];
-      return updateUser(Number(badge.dataset.id), { role });
+    } catch (error) {
+      userAccounts = before;
+      usersSignature = '';
+      renderUsers();
+      toast(error.message);
     }
-    const toggle = event.target.closest('.user-access-toggle');
-    if (!toggle) return;
-    const account = userAccounts.find(item => item.id === Number(toggle.closest('.user-badge').dataset.id));
-    if (!account) return;
-    if (account.active && !(await confirmModal({ kicker: 'Remove access', title: `Remove ${account.name}'s access?`, text: 'They will no longer be able to sign in. Their saved work and history stay. You can turn access back on any time.', confirmLabel: 'Remove access' }))) return;
-    await flipSwitch(toggle);
-    updateUser(account.id, { active: !account.active });
+  }
+
+  // Drag a card to another lane. The lanes it can go to light up; the one under the pointer says what a drop does.
+  const userBoard = $('#userBoard');
+  let draggingUserId = null;
+  function endUserDrag() {
+    draggingUserId = null;
+    userBoard?.classList.remove('is-dragging');
+    $$('#userBoard .is-dragging, #userBoard .is-over, #userBoard .is-source').forEach(el => el.classList.remove('is-dragging', 'is-over', 'is-source'));
+  }
+  userBoard?.addEventListener('dragstart', event => {
+    const card = event.target.closest?.('.person-card[draggable="true"]');
+    if (!card) return;
+    draggingUserId = Number(card.dataset.id);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', card.dataset.id);
+    closePersonMenu();
+    card.closest('.user-lane').classList.add('is-source');
+    requestAnimationFrame(() => { card.classList.add('is-dragging'); userBoard.classList.add('is-dragging'); });
   });
-  /** Waits for an animation, but never longer than `ms` (frames can pause in background tabs). */
-  const settle = (anim, ms) => Promise.race([anim.finished.catch(() => {}), new Promise(resolve => setTimeout(resolve, ms))]).then(() => { if (anim.playState === 'running') anim.finish(); });
-  /** Flips the blank "Add a user" badge over into the lookup form (and back); the other badges glide aside. */
-  async function setAddBadge(open) {
-    const badge = $('#userAddBadge');
-    if (!badge || badge.classList.contains('is-open') === open || badge.dataset.flipping) return;
-    const swap = () => {
-      badge.classList.toggle('is-open', open);
-      badge.querySelector('.badge-add-front').hidden = open;
-      badge.querySelector('.badge-add-back').hidden = !open;
-      if (!open) {
-        const result = $('#userLookupResult');
-        result.getAnimations().forEach(anim => anim.cancel());
-        result.hidden = true;
-        result.innerHTML = '';
-        $('#userLookupInput').value = '';
-        lookedUp = null;
-        lookupTicket++;
-      }
-    };
-    if (reducedMotion()) swap();
-    else {
-      badge.dataset.flipping = '1';
-      await settle(badge.animate([{ transform: 'perspective(900px) rotateY(0deg)' }, { transform: 'perspective(900px) rotateY(90deg)' }], { duration: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }), 300);
-      flipMove($('#userBadgeGrid'), swap);
-      badge.getAnimations().forEach(anim => anim.cancel());
-      await settle(badge.animate([{ transform: 'perspective(900px) rotateY(-90deg)' }, { transform: 'perspective(900px) rotateY(0deg)' }], { duration: 340, easing: FOLDER_EASE }), 500);
-      delete badge.dataset.flipping;
-    }
-    (open ? $('#userLookupInput') : $('#userAddOpen'))?.focus({ preventScroll: true });
+  userBoard?.addEventListener('dragover', event => {
+    if (draggingUserId === null) return;
+    const lane = event.target.closest('.user-lane');
+    $$('#userBoard .user-lane.is-over').forEach(other => { if (other !== lane) other.classList.remove('is-over'); });
+    if (!lane || lane.classList.contains('is-source')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    lane.classList.add('is-over');
+  });
+  userBoard?.addEventListener('dragleave', event => {
+    const lane = event.target.closest('.user-lane');
+    if (lane && !lane.contains(event.relatedTarget)) lane.classList.remove('is-over');
+  });
+  userBoard?.addEventListener('drop', event => {
+    const lane = event.target.closest('.user-lane');
+    const id = draggingUserId;
+    if (!lane || id === null || lane.classList.contains('is-source')) return;
+    event.preventDefault();
+    endUserDrag();
+    moveUser(id, lane.dataset.lane);
+  });
+  userBoard?.addEventListener('dragend', endUserDrag);
+
+  // The ⋯ menu: the other two lanes, worded for this person.
+  const personMenu = document.createElement('div');
+  personMenu.className = 'person-menu';
+  personMenu.setAttribute('role', 'menu');
+  personMenu.hidden = true;
+  document.body.append(personMenu);
+  let personMenuButton = null;
+  function closePersonMenu() {
+    if (personMenu.hidden) return;
+    personMenu.hidden = true;
+    personMenuButton?.setAttribute('aria-expanded', 'false');
+    personMenuButton?.closest('.person-card')?.classList.remove('has-menu');
+    personMenuButton = null;
   }
-  $('#userAddOpen')?.addEventListener('click', () => setAddBadge(true));
-  $('#userAddClose')?.addEventListener('click', () => setAddBadge(false));
-  $('#userAddBadge')?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); setAddBadge(false); } });
+  function openPersonMenu(button) {
+    const account = userAccounts.find(item => item.id === Number(button.closest('.person-card').dataset.id));
+    if (!account) return;
+    if (personMenuButton === button) return closePersonMenu();
+    closePersonMenu();
+    const lane = laneOf(account);
+    const first = account.name.split(/\s+/)[0];
+    const options = [
+      { lane: 'Admin', label: lane === 'off' ? 'Give admin access' : 'Make admin', hint: 'Upload, edit, approve, export and Config' },
+      { lane: 'User', label: lane === 'off' ? 'Give export access' : 'Make export only', hint: 'View and export approved price lists' },
+      { lane: 'off', label: 'Remove access', hint: `${first} can’t sign in; history stays` },
+    ].filter(option => option.lane !== lane);
+    personMenu.innerHTML = `<p class="person-menu-head">Move ${escapeHtml(first)} to…</p>${options.map(option => `<button type="button" role="menuitem" class="person-menu-item lane-${option.lane}" data-move="${option.lane}"><span class="lane-dot" aria-hidden="true"></span><span><strong>${escapeHtml(option.label)}</strong><small>${escapeHtml(option.hint)}</small></span></button>`).join('')}`;
+    personMenu.dataset.id = String(account.id);
+    personMenu.hidden = false;
+    const rect = button.getBoundingClientRect();
+    const width = personMenu.offsetWidth;
+    const below = rect.bottom + 6 + personMenu.offsetHeight < window.innerHeight - 8;
+    personMenu.style.left = `${Math.round(Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)))}px`;
+    personMenu.style.top = `${Math.round(below ? rect.bottom + 6 : rect.top - 6 - personMenu.offsetHeight)}px`;
+    personMenuButton = button;
+    button.setAttribute('aria-expanded', 'true');
+    button.closest('.person-card').classList.add('has-menu');
+    if (!reducedMotion()) personMenu.animate([{ opacity: 0, transform: `translateY(${below ? -4 : 4}px) scale(0.98)` }, { opacity: 1, transform: 'none' }], { duration: 180, easing: FOLDER_EASE });
+    personMenu.querySelector('.person-menu-item')?.focus({ preventScroll: true });
+  }
+  userBoard?.addEventListener('click', event => {
+    const button = event.target.closest('.person-menu-btn');
+    if (button) { event.stopPropagation(); openPersonMenu(button); }
+  });
+  personMenu.addEventListener('click', event => {
+    const item = event.target.closest('[data-move]');
+    if (!item) return;
+    const id = Number(personMenu.dataset.id);
+    const button = personMenuButton;
+    closePersonMenu();
+    button?.focus({ preventScroll: true });
+    moveUser(id, item.dataset.move);
+  });
+  personMenu.addEventListener('keydown', event => {
+    const items = [...personMenu.querySelectorAll('.person-menu-item')];
+    const index = items.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
+    if (event.key === 'Escape' || event.key === 'Tab') { const button = personMenuButton; closePersonMenu(); if (event.key === 'Escape') { event.preventDefault(); button?.focus({ preventScroll: true }); } }
+  });
+  document.addEventListener('click', event => { if (!personMenu.hidden && !personMenu.contains(event.target)) closePersonMenu(); });
+  userBoard?.addEventListener('scroll', closePersonMenu, { passive: true });
+  window.addEventListener('resize', closePersonMenu);
+
+  // "+ Add" at the foot of a lane opens the lookup inside that lane, so the role is already chosen.
+  let addRole = 'Admin';
+  function resetLookup() {
+    const result = $('#userLookupResult');
+    result.getAnimations().forEach(anim => anim.cancel());
+    result.hidden = true;
+    result.innerHTML = '';
+    $('#userLookupInput').value = '';
+    lookedUp = null;
+    lookupTicket++;
+    setAddButton('');
+  }
+  function openAddPanel(role) {
+    const panel = $('#userAddPanel');
+    const lane = $(`#userBoard .user-lane[data-lane="${role}"]`);
+    if (!panel || !lane) return;
+    if (!panel.hidden && addRole === role) return $('#userLookupInput').focus();
+    resetLookup();
+    addRole = role;
+    $('#userAddTitle').textContent = role === 'Admin' ? 'Add an admin' : 'Add an export user';
+    $$('#userBoard .lane-add').forEach(button => { button.hidden = button.dataset.addRole === role; });
+    lane.insertBefore(panel, lane.querySelector('.lane-add'));
+    panel.hidden = false;
+    if (!reducedMotion()) {
+      const height = panel.getBoundingClientRect().height;
+      const grow = panel.animate([{ height: '0px', opacity: 0, transform: 'translateY(-6px)' }, { height: `${height}px`, opacity: 1, transform: 'none' }], { duration: 380, easing: FOLDER_EASE });
+      panel.style.overflow = 'hidden';
+      grow.finished.catch(() => {}).finally(() => { panel.style.overflow = ''; });
+      setTimeout(() => { if (grow.playState === 'running') grow.finish(); }, 600);
+    }
+    $('#userLookupInput').focus({ preventScroll: true });
+    panel.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+  async function closeAddPanel() {
+    const panel = $('#userAddPanel');
+    if (!panel || panel.hidden) return;
+    if (!reducedMotion()) {
+      panel.style.overflow = 'hidden';
+      const fold = panel.animate([{ height: `${panel.getBoundingClientRect().height}px`, opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 260, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+      await Promise.race([fold.finished.catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))]);
+      fold.cancel();
+      panel.style.overflow = '';
+    }
+    panel.hidden = true;
+    resetLookup();
+    const button = $(`#userBoard .lane-add[data-add-role="${addRole}"]`);
+    $$('#userBoard .lane-add').forEach(item => { item.hidden = false; });
+    button?.focus({ preventScroll: true });
+  }
+  userBoard?.addEventListener('click', event => {
+    const add = event.target.closest('.lane-add');
+    if (add) openAddPanel(add.dataset.addRole);
+  });
+  $('#userAddPanel')?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); closeAddPanel(); } });
   /**
    * Swaps the lookup card's content with one motion: the card eases to its new height (growing out
    * of the form when it first appears) while the new lines rise in one after another.
@@ -6768,23 +6878,26 @@
     morphLookup(box => fillLookup(box, person, error));
   }
   function fillLookup(box, person, error) {
-    if (error) { box.innerHTML = `<p class="user-lookup-error">${escapeHtml(error)}</p>`; return; }
+    if (error) { box.innerHTML = `<p class="user-lookup-error">${escapeHtml(error)}</p>`; setAddButton(''); return; }
     const existing = person.account;
     const blocked = person.managedByIt ? 'IT department staff get admin access automatically when they sign in, so they aren’t added here.'
-      : existing?.active ? `${person.name} already has access as ${ROLE_LABELS[existing.role] || existing.role}. Change their role on their badge.` : '';
+      : existing?.active ? `${person.name} already has access as ${ROLE_LABELS[existing.role] || existing.role}. Drag their card to change it.` : '';
     const warnings = [!person.employed ? 'Not an active employee in the master list.' : '', !person.hasLogin ? 'No company login yet: they can sign in once IT creates it.' : ''].filter(Boolean);
     box.innerHTML = `<div class="user-found">
         <span class="user-avatar large" aria-hidden="true">${escapeHtml(initials(person.name))}</span>
         <div class="user-found-info"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml([person.position, person.department].filter(Boolean).join(' · ') || 'No position on file')}</small><small>Employee ${escapeHtml(person.employeeId)} · Bio ${escapeHtml(person.biometricsId)}</small></div>
       </div>
       ${warnings.map(text => `<p class="user-lookup-warning">${escapeHtml(text)}</p>`).join('')}
-      ${blocked ? `<p class="user-lookup-note">${escapeHtml(blocked)}</p>` : `<div class="user-add-actions">
-        <div class="user-role-choice" role="radiogroup" aria-label="Role">
-          <label><input type="radio" name="newUserRole" value="User" checked><span><strong>Export only</strong><small>View and export approved price lists</small></span></label>
-          <label><input type="radio" name="newUserRole" value="Admin"><span><strong>Admin</strong><small>Upload, edit, approve, export and Config</small></span></label>
-        </div>
-        <button type="button" id="userAddButton" class="button primary">${existing ? 'Restore access' : 'Add user'}</button>
-      </div>`}`;
+      ${blocked ? `<p class="user-lookup-note">${escapeHtml(blocked)}</p>` : ''}`;
+    setAddButton(blocked ? '' : `${existing ? 'Give access back' : 'Add'} as ${addRole === 'Admin' ? 'admin' : 'export only'}`);
+  }
+  /** The footer's add button: shown (with its label) once someone who can be added is found. */
+  function setAddButton(label) {
+    const button = $('#userAddButton');
+    if (!button) return;
+    button.hidden = !label;
+    button.disabled = false;
+    if (label) button.textContent = label;
   }
   $('#userLookupForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -6805,18 +6918,17 @@
     } catch { if (ticket === lookupTicket) renderLookup(null, 'Could not reach the server.'); }
     finally { if (ticket === lookupTicket) button.classList.remove('is-loading'); }
   });
-  $('#userLookupResult')?.addEventListener('click', async event => {
-    const button = event.target.closest('#userAddButton');
-    if (!button || !lookedUp) return;
+  $('#userAddCancel')?.addEventListener('click', closeAddPanel);
+  $('#userAddButton')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (!lookedUp) return;
     button.disabled = true;
     try {
-      const role = $('#userLookupResult input[name="newUserRole"]:checked')?.value || 'User';
+      const role = addRole; // the lane it was added from
       const data = await api('users-create', { method: 'POST', body: JSON.stringify({ biometricsId: lookedUp.biometricsId, role }) });
       setUsers(data.users || userAccounts);
       closeLookup();
-      setTimeout(() => setAddBadge(false), 260); // fold the badge back once the card has folded
-      $('#userLookupInput').value = '';
-      lookedUp = null;
+      setTimeout(closeAddPanel, 260); // fold the panel away once the card has folded
       toast(data.message);
     } catch (error) { toast(error.message); button.disabled = false; }
   });

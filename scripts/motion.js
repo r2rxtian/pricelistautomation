@@ -117,7 +117,12 @@
     let placed = false;
     const place = (withMotion = true) => {
       const active = nav.querySelector('.nav-item.active:not([hidden])');
-      if (!active) return;
+      // No page lit (an open file: its tab under the bar is the one highlighted), so the underline fades.
+      if (!active) {
+        if (window.gsap && placed && animate()) window.gsap.to(bar, { opacity: 0, duration: 0.25, ease: 'power2.out', overwrite: true });
+        else bar.style.opacity = '0';
+        return;
+      }
       const target = { x: active.offsetLeft, width: active.offsetWidth, opacity: 1 };
       if (!window.gsap) {
         Object.assign(bar.style, { transform: `translateX(${target.x}px)`, width: `${target.width}px`, opacity: '1' });

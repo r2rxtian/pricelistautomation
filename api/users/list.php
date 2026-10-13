@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-/** Everyone with access (active or not), for Config › Users. IT staff aren't listed: their access is automatic. */
+/** Everyone with access (active or not), for the Users page. IT staff aren't listed: their access is automatic. */
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../../rules/user_admin.php';
 

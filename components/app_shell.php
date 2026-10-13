@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * The signed-in app (top bar, the five pages and their dialogs). Rendered by the page files in
- * pages/ — files.php (Files, and the editor at files.php?list=…), audit_logs.php, config.php; prices.php and
+ * pages/ — files.php (Files, and the editor at files.php?list=…), audit_logs.php, users.php, config.php; prices.php and
  * approvals.php still work as old addresses — which set $page to the
  * page to open. Switching pages in the top bar happens in the browser (scripts/app.js) and updates
  * the address to that page's file, so a refresh or bookmark opens the same page.
@@ -16,6 +16,7 @@ const APP_PAGES = [
     'files' => ['panel' => 'filesPanel', 'title' => 'Files'],
     'approvals' => ['panel' => 'filesPanel', 'title' => 'Files'], // merged into Files; old links still work
     'audit_logs' => ['panel' => 'historyPanel', 'title' => 'Audit Logs'],
+    'users' => ['panel' => 'usersPanel', 'title' => 'Users'],
     'config' => ['panel' => 'settingsPanel', 'title' => 'Config'],
 ];
 $page = isset($page) && array_key_exists($page, APP_PAGES) ? $page : 'prices';
@@ -37,7 +38,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=174">
+    <link rel="stylesheet" href="../styles/app.css?v=180">
     <script>
     (function() {
         try {
@@ -78,8 +79,9 @@ $panel = APP_PAGES[$page]['panel'];
             <a class="brand" href="#" aria-label="PLA Price List Automation home"><?= pla_logo_lockup() ?></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
-            <button class="nav-item active" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
+            <button class="nav-item<?= empty($_GET['list']) ? ' active' : '' ?>" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
             <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
+            <button class="nav-item perm-manageUsers" data-panel="usersPanel" id="usersNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><strong>Users</strong></button>
             <button id="settingsNav" class="nav-item perm-manageImages" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
         </nav>
         <div class="topbar-right">
@@ -344,11 +346,6 @@ $panel = APP_PAGES[$page]['panel'];
                         <span>All Activity</span>
                         <span id="auditAllCountBadge" class="audit-tab-count">0</span>
                     </button>
-                    <button type="button" class="audit-tab-btn" data-audit-tab="edits" role="tab" aria-selected="false">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                        <span>Price & Cell Edits</span>
-                        <span id="auditEditsCountBadge" class="audit-tab-count">0</span>
-                    </button>
                     <button type="button" class="audit-tab-btn" data-audit-tab="workflow" role="tab" aria-selected="false">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         <span>Saves, Approvals &amp; Exports</span>
@@ -374,10 +371,8 @@ $panel = APP_PAGES[$page]['panel'];
                                 <select id="auditTypeSelect" aria-label="Filter by event type">
                                     <option value="">All Event Types</option>
                                     <option value="import_workbook">Uploads</option>
-                                    <option value="price_adjust">Price Adjustments</option>
-                                    <option value="cell_edit">Cell Edits</option>
-                                    <option value="reset_prices">Price Resets</option>
                                     <option value="save_version">Saves</option>
+                                    <option value="discard_changes">Discarded changes</option>
                                     <option value="approve_version">Approvals</option>
                                     <option value="reject_version">Rejections</option>
                                     <option value="export_excel">Excel Exports</option>
@@ -459,17 +454,19 @@ $panel = APP_PAGES[$page]['panel'];
                     </div>
                 </div>
 
-                <dialog id="historyChangesDialog" class="history-details-dialog">
-                    <form method="dialog" class="dialog-card history-changes-card">
-                        <div class="dialog-heading">
-                            <div>
-                                <p class="kicker" id="historyChangesKicker">AUDIT RECORD DETAILS</p>
-                                <h2 id="historyChangesTitle">Change details</h2>
+                <!-- One audit event, laid out like its logbook entry: who / what / when, the file, then the detail. -->
+                <dialog id="historyChangesDialog" class="history-details-dialog audit-entry-dialog" aria-labelledby="historyChangesTitle">
+                    <form method="dialog" class="dialog-card audit-entry-card">
+                        <header class="audit-entry-head">
+                            <span class="log-node" id="auditEntryNode" aria-hidden="true"></span>
+                            <div class="audit-entry-heading">
+                                <p class="audit-entry-kicker" id="historyChangesKicker">Event</p>
+                                <h2 id="historyChangesTitle">Event details</h2>
+                                <p id="historyChangesMeta" class="audit-entry-meta"></p>
                             </div>
                             <button value="cancel" class="icon-button" aria-label="Close">×</button>
-                        </div>
-                        <p id="historyChangesMeta" class="muted"></p>
-                        <div id="historyChangesContent" class="history-changes-content"></div>
+                        </header>
+                        <div id="historyChangesContent" class="audit-entry-body"></div>
                         <div class="dialog-actions" id="historyChangesActions">
                             <button value="cancel" class="button secondary">Close</button>
                         </div>
@@ -488,7 +485,6 @@ $panel = APP_PAGES[$page]['panel'];
                         <span class="config-sections-glider" aria-hidden="true"></span>
                         <button type="button" class="config-section-btn is-active" data-config-section="photos" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Product photos</span></button>
                         <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Countries &amp; price levels</span></button>
-                        <button type="button" class="config-section-btn perm-manageUsers" data-config-section="users" role="tab" aria-selected="false" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></button>
                     </div>
                 </div>
 
@@ -570,37 +566,62 @@ $panel = APP_PAGES[$page]['panel'];
                         <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a price level…" aria-label="New price level" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
                     </section>
                 </div>
-                <div class="users-card" id="usersCard" hidden>
-                    <header class="users-head">
-                        <div><h2 id="userListTitle">People with access</h2><p id="userListCount" class="option-list-sub"></p></div>
-                        <p class="users-legend"><span class="legend-dot is-admin"></span>Admin <span class="legend-dot is-export"></span>Export only</p>
-                    </header>
-                    <!-- Everyone is an ID badge; the first, blank badge flips open into "Add a user". -->
-                    <div class="badge-grid" id="userBadgeGrid" aria-labelledby="userListTitle">
-                        <section class="user-badge badge-add" id="userAddBadge" data-key="add" aria-labelledby="userAddTitle">
-                            <button type="button" class="badge-add-front" id="userAddOpen">
-                                <span class="badge-clip" aria-hidden="true"></span>
-                                <span class="badge-plus" aria-hidden="true">+</span>
-                                <strong>Add a user</strong>
-                                <small>Look someone up by their biometrics number</small>
-                            </button>
-                            <div class="badge-add-back" hidden>
-                                <div class="user-add-head">
-                                    <div><h2 id="userAddTitle">Add a user</h2><p>Name and department come from the company master list. They sign in with their biometrics number.</p></div>
-                                    <button type="button" class="option-icon badge-add-close" id="userAddClose" aria-label="Close add a user" title="Close">×</button>
-                                </div>
-                                <form id="userLookupForm" class="user-lookup">
-                                    <label class="user-lookup-field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userLookupInput" type="text" inputmode="numeric" placeholder="Biometrics number, e.g. 1652" autocomplete="off" aria-label="Biometrics number"></label>
-                                    <button type="submit" class="button secondary">Look up</button>
-                                </form>
-                                <div id="userLookupResult" class="user-lookup-result" aria-live="polite" hidden></div>
-                            </div>
-                        </section>
-                        <div id="userRows" class="badge-rows"></div>
-                    </div>
-                </div>
                 <input id="groupImageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
                 <input id="libraryFileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+            </section>
+
+            <!-- Users: who can sign in and what they can do, as access lanes (admins only). -->
+            <section id="usersPanel" class="panel management-page" hidden>
+                <div class="page-heading">
+                    <div class="heading-left">
+                        <p class="kicker">Users</p>
+                        <h1>Users</h1>
+                        <p class="muted">Who can sign in, and what they can do.</p>
+                    </div>
+                </div>
+                <div class="users-card" id="usersCard">
+                    <header class="users-head">
+                        <div><h2 id="userListTitle">People with access</h2><p id="userListCount" class="option-list-sub"></p></div>
+                        <p class="users-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Drag someone to another lane to change their access</p>
+                    </header>
+                    <!-- Access lanes: where a person sits is their access. Drag a card to another lane (or use its ⋯ menu). -->
+                    <div class="user-board" id="userBoard" aria-labelledby="userListTitle">
+                        <section class="user-lane" data-lane="Admin" aria-labelledby="laneAdminTitle">
+                            <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneAdminTitle">Admins</h3><span class="lane-count" data-lane-count></span><p>Upload, edit, approve, export and Config</p></header>
+                            <div class="lane-cards" data-lane-cards></div>
+                            <button type="button" class="lane-add" data-add-role="Admin"><span aria-hidden="true">+</span> Add an admin</button>
+                            <p class="lane-drop-hint" aria-hidden="true">Drop to make admin</p>
+                        </section>
+                        <section class="user-lane" data-lane="User" aria-labelledby="laneUserTitle">
+                            <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneUserTitle">Export only</h3><span class="lane-count" data-lane-count></span><p>View and export approved price lists</p></header>
+                            <div class="lane-cards" data-lane-cards></div>
+                            <button type="button" class="lane-add" data-add-role="User"><span aria-hidden="true">+</span> Add an export user</button>
+                            <p class="lane-drop-hint" aria-hidden="true">Drop for export only</p>
+                        </section>
+                        <section class="user-lane is-off-lane" data-lane="off" aria-labelledby="laneOffTitle">
+                            <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneOffTitle">No access</h3><span class="lane-count" data-lane-count></span><p>Can't sign in · their history stays</p></header>
+                            <div class="lane-cards" data-lane-cards></div>
+                            <p class="lane-empty">Drag someone here to pause their access.</p>
+                            <p class="lane-drop-hint" aria-hidden="true">Drop to remove access</p>
+                        </section>
+                        <!-- "Add a user": opens inside the lane it was asked from, so the role is already chosen. -->
+                        <div class="lane-add-panel" id="userAddPanel" hidden>
+                            <div class="user-add-head">
+                                <h4 id="userAddTitle">Add an admin</h4>
+                            </div>
+                            <form id="userLookupForm" class="user-lookup">
+                                <label class="user-lookup-field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userLookupInput" type="text" inputmode="numeric" placeholder="Biometrics number" autocomplete="off" aria-label="Biometrics number"></label>
+                                <button type="submit" class="button secondary">Look up</button>
+                            </form>
+                            <p class="lane-add-note">Name and department come from the company master list.</p>
+                            <div id="userLookupResult" class="user-lookup-result" aria-live="polite" hidden></div>
+                            <div class="lane-add-foot">
+                                <button type="button" class="button secondary" id="userAddCancel">Cancel</button>
+                                <button type="button" class="button primary" id="userAddButton" hidden>Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
@@ -908,9 +929,9 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=7"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=168"></script>
+<script src="../scripts/app.js?v=175"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=10"></script>
+<script src="../scripts/motion.js?v=11"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>
