@@ -1542,9 +1542,7 @@
       }
     }
     // The rows were just replaced: forget the old hover so the next mouse move draws it fresh.
-    hoveredColumn = -1;
-    hoveredHeader = null;
-    hoveredRow = null;
+    hoveredCell = null;
     applyChangeMarks(); // a change under review shows what it changed ("was 1.25")
     updateFormulaBar();
   }
@@ -1660,42 +1658,21 @@
     });
     return [letter, ...named];
   }
-  /** Column hover: tints the hovered column within its block, and lights that block's header for it. */
-  let hoveredColumn = -1;
-  let hoveredHeader = null;
-  function setColumnHover(position, tr = null) {
-    const block = position >= 0 && tr ? headerBlock(tr) : null;
-    const header = block?.header[0] || null;
-    // Same column as before and still drawn (a re-render or edit can wipe the tint): nothing to do.
-    const stillDrawn = !block || block.rows.some(row => row.querySelectorAll('.excel-cell')[position]?.classList.contains('col-hover'));
-    if (position === hoveredColumn && header === hoveredHeader && stillDrawn) return;
-    $$('#priceTable .col-hover').forEach(el => el.classList.remove('col-hover'));
-    hoveredColumn = position;
-    hoveredHeader = header;
-    if (!block) return;
-    block.rows.forEach(row => row.querySelectorAll('.excel-cell')[position]?.classList.add('col-hover'));
-    headerCells(block.header, position).forEach(th => th.classList.add('col-hover'));
+  /** Hover: only the cell under the pointer lights up (no row or column tint). */
+  let hoveredCell = null;
+  function setCellHover(td) {
+    if (td === hoveredCell && td?.classList.contains('is-cell-hover')) return;
+    hoveredCell?.classList.remove('is-cell-hover');
+    hoveredCell = td;
+    td?.classList.add('is-cell-hover');
   }
-  /** Row hover: the hovered row's number lights up, like the column's header does. */
-  let hoveredRow = null;
-  function setRowHover(tr) {
-    if (tr === hoveredRow) return;
-    hoveredRow?.querySelector('.col-row-num')?.classList.remove('is-guide-hover');
-    hoveredRow = tr;
-    tr?.querySelector('.col-row-num')?.classList.add('is-guide-hover');
-  }
-  dom.table?.addEventListener('mouseover', event => {
-    setRowHover(event.target.closest('tr.excel-data-row'));
-    const td = event.target.closest('.excel-cell');
-    if (!td) return setColumnHover(-1);
-    setColumnHover([...td.closest('tr').querySelectorAll('.excel-cell')].indexOf(td), td.closest('tr'));
-  });
-  const clearTableHover = () => { setColumnHover(-1); setRowHover(null); };
+  dom.table?.addEventListener('mouseover', event => setCellHover(event.target.closest('#priceTable tbody .excel-cell')));
+  const clearTableHover = () => setCellHover(null);
   dom.table?.addEventListener('mouseleave', clearTableHover);
   // Safety nets: the browser can miss the table's mouseleave (a popup opening over it, the window
   // losing focus, fast moves), so any pointer outside the table also clears the tint.
   document.addEventListener('pointerover', event => {
-    if (hoveredColumn !== -1 || hoveredRow) { if (!dom.table?.contains(event.target)) clearTableHover(); }
+    if (hoveredCell && !dom.table?.contains(event.target)) clearTableHover();
   }, { passive: true });
   window.addEventListener('blur', clearTableHover);
   document.addEventListener('mouseleave', clearTableHover);

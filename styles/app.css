@@ -11527,3 +11527,21 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 }
 [data-theme="dark"] .toast-bin { background: rgba(250, 187, 203, .14); color: #fabbcb; }
 [data-theme="dark"] .trash-ghost::after { background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .5) 0 14%, transparent 34%), conic-gradient(from 25deg, #4a4048, #2c262b, #5a4f57, #2a2429, #4d434b, #332c31, #574c54, #2e282d, #4a4048); }
+
+/* Price table hover: only the cell under the pointer is highlighted. No row or column tint. */
+#priceTable tbody tr.excel-data-row:hover,
+[data-theme="dark"] #priceTable tbody tr.excel-data-row:hover { background: inherit !important; }
+#priceTable tbody tr.excel-data-row:hover:nth-child(odd) { background: var(--surface-row) !important; }
+#priceTable tbody tr.excel-data-row:hover:nth-child(even) { background: var(--surface-row-alt) !important; }
+[data-theme="dark"] #priceTable tbody tr.excel-data-row:hover:nth-child(odd) { background: #000 !important; }
+[data-theme="dark"] #priceTable tbody tr.excel-data-row:hover:nth-child(even) { background: #050508 !important; }
+[data-theme="dark"] #priceTable tbody tr:hover td.col-row-num { background: inherit !important; color: #8c8d94 !important; }
+#priceTable tbody td.excel-cell.is-cell-hover:not(.is-active-cell):not(.is-editing) {
+  background-color: color-mix(in srgb, var(--pink) 12%, var(--surface)) !important;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--pink) 55%, transparent);
+  color: var(--text-heading);
+}
+[data-theme="dark"] #priceTable tbody td.excel-cell.is-cell-hover:not(.is-active-cell):not(.is-editing) {
+  background-color: #3a1f29 !important;
+  box-shadow: inset 0 0 0 1.5px #fabbcb;
+}
