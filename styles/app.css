@@ -11556,3 +11556,163 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 @media (max-width: 720px) { .users-head-tools, .users-search { width: 100%; } }
 [data-theme="dark"] .person-card mark { background: rgba(250, 187, 203, .25); color: #fff; }
 [data-theme="dark"] .users-search { background: #17181d; border-color: #2a2d34; }
+
+/* Audit Logs: soft focus edges. While scrolling, the entries passing under the top and bottom edges
+   blur and fade a little, so the eye rests on the middle. Each edge shows only when there's more to
+   scroll that way (scripts/app.js sets data-more on the frame). */
+#historyPanel .history-table-frame::before,
+#historyPanel .history-table-frame::after {
+  content: ""; position: sticky; z-index: 4; display: block; height: 64px; pointer-events: none;
+  opacity: 0; transition: opacity .35s ease;
+  -webkit-backdrop-filter: blur(3px) saturate(.85); backdrop-filter: blur(3px) saturate(.85);
+}
+#historyPanel .history-table-frame::before {
+  top: 0; margin-bottom: -64px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--surface-elevated, #fcf8f9) 70%, transparent), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 20%, transparent); mask-image: linear-gradient(to bottom, #000 20%, transparent);
+}
+#historyPanel .history-table-frame::after {
+  bottom: 0; margin-top: -64px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--surface-elevated, #fcf8f9) 70%, transparent), transparent);
+  -webkit-mask-image: linear-gradient(to top, #000 20%, transparent); mask-image: linear-gradient(to top, #000 20%, transparent);
+}
+#historyPanel .history-table-frame[data-scrolling][data-more~="up"]::before,
+#historyPanel .history-table-frame[data-scrolling][data-more~="down"]::after { opacity: 1; transition-duration: .2s; }
+[data-theme="dark"] #historyPanel .history-table-frame::before { background: linear-gradient(to bottom, rgba(17, 18, 22, .7), transparent); }
+[data-theme="dark"] #historyPanel .history-table-frame::after { background: linear-gradient(to top, rgba(17, 18, 22, .7), transparent); }
+@media (prefers-reduced-motion: reduce) { #historyPanel .history-table-frame::before, #historyPanel .history-table-frame::after { transition: none; } }
+
+/* ==========================================================================
+   Users as keycard racks. Each lane is a wall rack with a metal rail; each person is an access
+   keycard (printed role, chip, contactless mark, magnetic stripe with the biometrics number) in the
+   rack's colour. No access is a frosted locked sleeve. Moving a card "swipes" it: a light sweeps
+   across it and the rack's reader light blinks.
+   ========================================================================== */
+.user-lane { --card-a: #c0244a; --card-b: #6e0f2b; --card-ink: #fff; --reader: #22c55e; }
+.user-lane[data-lane="User"] { --card-a: #4b5f7a; --card-b: #1e293b; }
+.user-lane[data-lane="off"] { --card-a: #e7e3e5; --card-b: #cfc9cc; --card-ink: #55474d; --reader: #ef4444; }
+
+/* The rack: a brushed rail with two screws under the heading. */
+.user-lane .lane-head { position: relative; padding-bottom: 14px; }
+.user-lane .lane-head::after {
+  content: ""; position: absolute; right: 2px; bottom: 2px; left: 2px; height: 6px; border-radius: 3px;
+  background:
+    radial-gradient(circle at 10px 50%, rgba(0, 0, 0, .28) 0 1.6px, transparent 2.2px),
+    radial-gradient(circle at calc(100% - 10px) 50%, rgba(0, 0, 0, .28) 0 1.6px, transparent 2.2px),
+    linear-gradient(to bottom, #f4f1f2, #cfc7cb 55%, #e6e1e3);
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .18);
+}
+.user-lane .lane-dot { transition: background .2s ease, box-shadow .2s ease; }
+.user-lane.is-swiped .lane-dot { animation: reader-blink 1s ease; }
+@keyframes reader-blink { 0%, 100% { } 15%, 55% { background: var(--reader); box-shadow: 0 0 0 4px color-mix(in srgb, var(--reader) 25%, transparent), 0 0 10px var(--reader); } 35% { background: var(--lane); } }
+
+/* The keycard. */
+.person-card.keycard {
+  display: grid; grid-template-columns: 1fr; gap: 6px;
+  padding: 10px 12px 0; overflow: hidden; isolation: isolate;
+  border: 0; border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-a), var(--card-b));
+  color: var(--card-ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .12), 0 10px 18px -12px rgba(40, 10, 25, .6), inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+/* Printed security pattern + a sheen that sweeps across on hover and on a swipe. */
+.person-card.keycard::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .22) 48%, transparent 62%) -160% 0 / 220% 100% no-repeat,
+    repeating-radial-gradient(circle at 115% -30%, transparent 0 9px, rgba(255, 255, 255, .06) 9px 10px);
+  transition: background-position .8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.person-card.keycard:hover::before, .person-card.keycard.is-swiped::before { background-position: 160% 0, 0 0; }
+.person-card.keycard:hover, .person-card.keycard.has-menu { border-color: transparent; transform: translateY(-2px); box-shadow: 0 2px 3px rgba(0, 0, 0, .14), 0 16px 26px -14px rgba(40, 10, 25, .7), inset 0 1px 0 rgba(255, 255, 255, .2); }
+.person-card.keycard.is-swiped { animation: card-swipe .9s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes card-swipe { 0% { translate: -10px 0; } 30% { translate: 4px 0; } 100% { translate: 0 0; } }
+.person-card.keycard.is-self { grid-template-columns: 1fr; padding-left: 12px; }
+
+.kc-top { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.kc-brand { flex: 1; min-width: 0; overflow: hidden; font: 800 0.56rem/1 var(--sans); letter-spacing: .16em; text-transform: uppercase; opacity: .75; white-space: nowrap; text-overflow: ellipsis; }
+.kc-brand b { margin-left: 4px; font-weight: 800; opacity: 1; }
+.kc-wave { flex: none; opacity: .55; transform: rotate(0deg); }
+.keycard .person-menu-btn, .keycard .person-lock { flex: none; width: 26px; height: 26px; margin: -3px -6px -3px 0; color: inherit; opacity: .8; }
+.keycard .person-menu-btn:hover, .keycard .person-menu-btn:focus-visible, .keycard .person-menu-btn[aria-expanded="true"] { background: rgba(255, 255, 255, .18); color: inherit; opacity: 1; }
+
+.kc-main { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.kc-chip {
+  position: relative; width: 30px; height: 23px; border-radius: 5px;
+  background: linear-gradient(135deg, #f6dd9a, #d4a94a 45%, #f3d58a 70%, #c2963a);
+  box-shadow: inset 0 0 0 1px rgba(120, 80, 10, .35), 0 1px 1px rgba(0, 0, 0, .2);
+}
+.kc-chip::before { content: ""; position: absolute; inset: 5px 7px; border: 1px solid rgba(120, 80, 10, .45); border-radius: 3px; }
+.kc-chip::after { content: ""; position: absolute; top: 50%; right: 3px; left: 3px; height: 1px; background: rgba(120, 80, 10, .45); }
+.person-card.keycard.is-swiped .kc-chip { animation: chip-glow .9s ease; }
+@keyframes chip-glow { 30% { box-shadow: inset 0 0 0 1px rgba(120, 80, 10, .35), 0 0 0 3px rgba(255, 236, 170, .55), 0 0 14px rgba(255, 220, 120, .9); } }
+.keycard .person-avatar.user-avatar { width: 34px; height: 34px; background: rgba(255, 255, 255, .16); color: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3); font-size: 0.7rem; }
+.keycard .person-name { color: inherit; font-size: 0.86rem; letter-spacing: .01em; }
+.keycard .person-dept { color: inherit; opacity: .78; }
+.keycard .person-you { background: #fff; color: var(--card-b); }
+.keycard mark { background: rgba(255, 255, 255, .3); color: inherit; }
+
+/* The magnetic stripe, with the biometrics number and last sign-in printed on it. */
+.kc-stripe { margin: 4px -12px 0; padding: 6px 12px 7px; background: linear-gradient(to bottom, #1d1a1c, #0f0d0e); }
+.kc-stripe .person-meta { display: flex; justify-content: space-between; gap: 10px; color: rgba(255, 255, 255, .78); font: 600 0.62rem/1.2 ui-monospace, 'SFMono-Regular', Consolas, monospace; letter-spacing: .08em; }
+.kc-stripe .person-meta span { overflow: hidden; color: rgba(255, 255, 255, .55); letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
+
+/* No access: a frosted locked sleeve; cards inside are faded. */
+.user-lane.is-off-lane .lane-cards { position: relative; }
+.is-off-lane .person-card.keycard { filter: saturate(.4); opacity: .85; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); border-left-style: none; }
+.is-off-lane .person-card.keycard::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to bottom, rgba(255, 255, 255, .35), rgba(255, 255, 255, .12)); }
+.is-off-lane .kc-stripe { background: linear-gradient(to bottom, #6b6467, #554f52); }
+.user-lane .lane-empty { display: grid; justify-items: center; gap: 6px; }
+.user-lane .lane-empty svg { opacity: .5; }
+
+/* Issue a card: an empty card-shaped slot. */
+.user-lane .lane-add { min-height: 56px; border-radius: 12px; }
+
+[data-theme="dark"] .user-lane .lane-head::after { background: radial-gradient(circle at 10px 50%, rgba(0, 0, 0, .5) 0 1.6px, transparent 2.2px), radial-gradient(circle at calc(100% - 10px) 50%, rgba(0, 0, 0, .5) 0 1.6px, transparent 2.2px), linear-gradient(to bottom, #4a464a, #2c292c 55%, #3a363a); }
+[data-theme="dark"] .user-lane { --card-a: #a3264a; --card-b: #4a0d20; }
+[data-theme="dark"] .user-lane[data-lane="User"] { --card-a: #3d4c63; --card-b: #161e2b; }
+[data-theme="dark"] .user-lane[data-lane="off"] { --card-a: #3a3639; --card-b: #2a272a; --card-ink: #c9c3c6; }
+[data-theme="dark"] .is-off-lane .person-card.keycard::after { background: linear-gradient(to bottom, rgba(0, 0, 0, .25), rgba(0, 0, 0, .1)); }
+[data-theme="dark"] .person-card.keycard { background: linear-gradient(135deg, var(--card-a), var(--card-b)); border: 0; box-shadow: 0 1px 1px rgba(0, 0, 0, .4), 0 12px 20px -12px rgba(0, 0, 0, .9), inset 0 1px 0 rgba(255, 255, 255, .12); }
+[data-theme="dark"] .keycard .person-avatar.user-avatar { background: rgba(255, 255, 255, .12); color: inherit; }
+@media (prefers-reduced-motion: reduce) { .person-card.keycard::before { transition: none; } }
+
+/* Keycards, flat: tinted cards in the rack's colour, a simple chip outline and a thin ID strip
+   instead of metallic gradients, a gold chip and a magnetic stripe. */
+.user-lane .lane-head::after { display: none; }
+.user-lane .lane-head { padding-bottom: 4px; }
+.person-card.keycard,
+[data-theme="dark"] .person-card.keycard {
+  padding: 10px 12px 0;
+  border: 1px solid color-mix(in srgb, var(--lane) 22%, var(--line-soft));
+  background: color-mix(in srgb, var(--lane) 5%, var(--surface-card));
+  color: var(--text-heading);
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .05), 0 6px 14px -12px rgba(40, 20, 30, .4);
+}
+.person-card.keycard::before { background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--lane) 10%, transparent) 50%, transparent 65%) -160% 0 / 220% 100% no-repeat; }
+.person-card.keycard:hover::before, .person-card.keycard.is-swiped::before { background-position: 160% 0; }
+.person-card.keycard:hover, .person-card.keycard.has-menu,
+[data-theme="dark"] .person-card.keycard:hover { border-color: color-mix(in srgb, var(--lane) 40%, var(--line-soft)); box-shadow: 0 2px 4px rgba(40, 20, 30, .06), 0 12px 22px -14px rgba(40, 20, 30, .45); }
+.kc-brand { color: var(--lane); opacity: 1; }
+.kc-brand b { color: inherit; }
+.kc-wave { color: var(--lane); opacity: .45; }
+.keycard .person-menu-btn, .keycard .person-lock { color: var(--text-subtle); opacity: 1; }
+.keycard .person-menu-btn:hover, .keycard .person-menu-btn:focus-visible, .keycard .person-menu-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--lane) 12%, transparent); color: var(--lane); }
+.kc-chip { width: 26px; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--lane) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lane) 45%, transparent); }
+.kc-chip::before { inset: 5px 6px; border-color: color-mix(in srgb, var(--lane) 40%, transparent); }
+.kc-chip::after { background: color-mix(in srgb, var(--lane) 40%, transparent); }
+@keyframes chip-glow { 30% { box-shadow: inset 0 0 0 1.5px var(--lane), 0 0 0 4px color-mix(in srgb, var(--lane) 22%, transparent); } }
+.keycard .person-avatar.user-avatar, [data-theme="dark"] .keycard .person-avatar.user-avatar { background: color-mix(in srgb, var(--lane) 12%, var(--surface-card)); color: var(--lane); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lane) 22%, transparent); }
+.keycard .person-name { color: var(--text-heading); }
+.keycard .person-dept { color: var(--text-muted); opacity: 1; }
+.keycard .person-you { background: var(--pink); color: #fff; }
+.keycard mark { background: color-mix(in srgb, var(--pink) 18%, transparent); }
+.kc-stripe, .is-off-lane .kc-stripe { margin-top: 6px; padding: 6px 12px 7px; border-top: 1px dashed color-mix(in srgb, var(--lane) 25%, var(--line-soft)); background: none; box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--lane) 55%, transparent); }
+.kc-stripe .person-meta { color: var(--text-muted); }
+.kc-stripe .person-meta span { color: var(--text-subtle); }
+.is-off-lane .person-card.keycard { filter: none; opacity: .75; border-style: dashed; }
+.is-off-lane .person-card.keycard::after { display: none; }
+.user-lane[data-lane="off"] { --card-ink: inherit; }
+[data-theme="dark"] .person-card.keycard { background: color-mix(in srgb, var(--lane) 8%, #18191e); border-color: color-mix(in srgb, var(--lane) 28%, #2a2d34); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+[data-theme="dark"] .keycard .person-you { background: #fabbcb; color: #111216; }
+[data-theme="dark"] .keycard mark { background: rgba(250, 187, 203, .25); color: #fff; }

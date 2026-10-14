@@ -38,7 +38,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=203">
+    <link rel="stylesheet" href="../styles/app.css?v=207">
     <script>
     (function() {
         try {
@@ -579,7 +579,7 @@ $panel = APP_PAGES[$page]['panel'];
                         <div><h2 id="userListTitle">People with access</h2><p id="userListCount" class="option-list-sub"></p></div>
                         <div class="users-head-tools">
                             <label class="option-search users-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userSearch" type="search" placeholder="Search people, departments, bio no.…" autocomplete="off" aria-label="Search users"></label>
-                        <p class="users-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Drag someone to another lane to change their access</p>
+                        <p class="users-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Drag a card to another rack to change access</p>
                         </div>
                     </header>
                     <!-- Access lanes: where a person sits is their access. Drag a card to another lane (or use its ⋯ menu). -->
@@ -587,25 +587,25 @@ $panel = APP_PAGES[$page]['panel'];
                         <section class="user-lane" data-lane="Admin" aria-labelledby="laneAdminTitle">
                             <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneAdminTitle">Admins</h3><span class="lane-count" data-lane-count></span><p>Upload, edit, approve, export and Config</p></header>
                             <div class="lane-cards" data-lane-cards></div>
-                            <button type="button" class="lane-add" data-add-role="Admin"><span aria-hidden="true">+</span> Add an admin</button>
+                            <button type="button" class="lane-add" data-add-role="Admin"><span aria-hidden="true">+</span> Issue an admin card</button>
                             <p class="lane-drop-hint" aria-hidden="true">Drop to make admin</p>
                         </section>
                         <section class="user-lane" data-lane="User" aria-labelledby="laneUserTitle">
                             <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneUserTitle">Export only</h3><span class="lane-count" data-lane-count></span><p>View and export approved price lists</p></header>
                             <div class="lane-cards" data-lane-cards></div>
-                            <button type="button" class="lane-add" data-add-role="User"><span aria-hidden="true">+</span> Add an export user</button>
+                            <button type="button" class="lane-add" data-add-role="User"><span aria-hidden="true">+</span> Issue an export card</button>
                             <p class="lane-drop-hint" aria-hidden="true">Drop for export only</p>
                         </section>
                         <section class="user-lane is-off-lane" data-lane="off" aria-labelledby="laneOffTitle">
                             <header class="lane-head"><span class="lane-dot" aria-hidden="true"></span><h3 id="laneOffTitle">No access</h3><span class="lane-count" data-lane-count></span><p>Can't sign in · their history stays</p></header>
                             <div class="lane-cards" data-lane-cards></div>
-                            <p class="lane-empty">Drag someone here to pause their access.</p>
+                            <p class="lane-empty"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Slide a card in here to pause it.</p>
                             <p class="lane-drop-hint" aria-hidden="true">Drop to remove access</p>
                         </section>
                         <!-- "Add a user": opens inside the lane it was asked from, so the role is already chosen. -->
                         <div class="lane-add-panel" id="userAddPanel" hidden>
                             <div class="user-add-head">
-                                <h4 id="userAddTitle">Add an admin</h4>
+                                <h4 id="userAddTitle">Issue an admin card</h4>
                             </div>
                             <form id="userLookupForm" class="user-lookup">
                                 <label class="user-lookup-field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userLookupInput" type="text" inputmode="numeric" placeholder="Biometrics number" autocomplete="off" aria-label="Biometrics number"></label>
@@ -927,7 +927,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=9"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=190"></script>
+<script src="../scripts/app.js?v=194"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

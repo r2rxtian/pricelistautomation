@@ -5631,6 +5631,28 @@
       button.disabled = false;
     }
   });
+  // Audit Logs' soft focus edges: tell the frame whether there's more to scroll up and/or down.
+  const auditFrame = $('#historyPanel .history-table-frame');
+  function markAuditEdges() {
+    if (!auditFrame) return;
+    const more = [];
+    if (auditFrame.scrollTop > 4) more.push('up');
+    if (auditFrame.scrollTop + auditFrame.clientHeight < auditFrame.scrollHeight - 4) more.push('down');
+    auditFrame.dataset.more = more.join(' ');
+  }
+  // The edges only show while scrolling, and fade away shortly after it stops.
+  let auditScrollIdle = 0;
+  auditFrame?.addEventListener('scroll', () => {
+    markAuditEdges();
+    auditFrame.dataset.scrolling = '1';
+    clearTimeout(auditScrollIdle);
+    auditScrollIdle = setTimeout(() => { delete auditFrame.dataset.scrolling; }, 450);
+  }, { passive: true });
+  if (auditFrame && typeof ResizeObserver === 'function') {
+    const watch = new ResizeObserver(markAuditEdges);
+    watch.observe(auditFrame);
+    if ($('#historyTableBody')) watch.observe($('#historyTableBody'));
+  }
   const searchHistory = searchAfterPause(() => flipMove(dom.historyTableBody, () => renderHistory()));
   dom.historySearchInput?.addEventListener('input', () => {
     state.historySearch = dom.historySearchInput.value;
@@ -6755,7 +6777,6 @@
   // it; the ⋯ menu on each card does the same from the keyboard or a touch screen.
   const laneOf = account => (account.active ? account.role : 'off');
   const LANE_LABELS = { Admin: 'Admins', User: 'Export only', off: 'No access' };
-  const GRIP_ICON = '<svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.4"/><circle cx="7" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="7" cy="13" r="1.4"/></svg>';
   const LOCK_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
   // Search: name, position, department, biometrics no., employee ID or username; matches are marked.
   let userQuery = '';
@@ -6772,17 +6793,27 @@
     const name = escapeHtml(account.name);
     const details = escapeHtml([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file');
     const seen = account.lastLogin ? `Seen ${escapeHtml(formatRelativeTime(account.lastLogin))}` : 'Never signed in';
-    return `<article class="person-card ${self ? 'is-self' : ''}" data-id="${account.id}" data-key="user-${account.id}" ${self ? '' : 'draggable="true"'} aria-label="${name}, ${LANE_LABELS[laneOf(account)]}">
-      ${self ? '' : `<span class="person-grip" aria-hidden="true">${GRIP_ICON}</span>`}
-      <span class="user-avatar person-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
-      <div class="person-info">
-        <strong class="person-name"><span title="${name}">${markMatches(account.name)}</span>${self ? '<span class="person-you">You</span>' : ''}</strong>
-        <small class="person-dept" title="${details}">${markMatches([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file')}</small>
-        <small class="person-meta">${account.biometricsId ? `Bio ${markMatches(String(account.biometricsId))} · ` : ''}${seen}</small>
+    // An access keycard: printed role on top, the chip and the holder, the magnetic stripe with the
+    // biometrics number. Its colour is the lane (rack) it sits in.
+    const lane = laneOf(account);
+    const printed = { Admin: 'Admin access', User: 'Export only', off: 'Access paused' }[lane];
+    return `<article class="person-card keycard ${self ? 'is-self' : ''}" data-id="${account.id}" data-key="user-${account.id}" ${self ? '' : 'draggable="true"'} aria-label="${name}, ${LANE_LABELS[lane]}">
+      <div class="kc-top">
+        <span class="kc-brand">LRN <b>${printed}</b></span>
+        <svg class="kc-wave" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8.5 7.5a6 6 0 0 1 0 9"/><path d="M12 5a9.5 9.5 0 0 1 0 14"/><path d="M15.5 2.5a13 13 0 0 1 0 19"/></svg>
+        ${self
+          ? `<span class="person-lock" title="Your own access can’t be changed here. Ask another admin.">${LOCK_ICON}</span>`
+          : `<button type="button" class="person-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Change access for ${name}" title="Change access"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>`}
       </div>
-      ${self
-        ? `<span class="person-lock" title="Your own access can’t be changed here. Ask another admin.">${LOCK_ICON}</span>`
-        : `<button type="button" class="person-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Change access for ${name}" title="Change access"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>`}
+      <div class="kc-main">
+        <span class="kc-chip" aria-hidden="true"></span>
+        <span class="user-avatar person-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
+        <div class="person-info">
+          <strong class="person-name"><span title="${name}">${markMatches(account.name)}</span>${self ? '<span class="person-you">You</span>' : ''}</strong>
+          <small class="person-dept" title="${details}">${markMatches([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file')}</small>
+        </div>
+      </div>
+      <div class="kc-stripe"><small class="person-meta">${account.biometricsId ? `BIO ${markMatches(String(account.biometricsId))}` : 'NO BIO'}<span>${seen}</span></small></div>
     </article>`;
   }
   function renderUsers() {
@@ -6808,6 +6839,13 @@
     });
   }
   /** Moves someone to a lane: the card glides there right away, then the server confirms (or it glides back). */
+  /** A card that just moved racks: a light sweeps across it and the rack's reader blinks. */
+  function swipeCard(id, lane) {
+    if (reducedMotion()) return;
+    const card = $(`#userBoard [data-key="user-${id}"]`);
+    const rack = $(`#userBoard .user-lane[data-lane="${lane}"]`);
+    [card, rack].forEach(el => { if (!el) return; el.classList.remove('is-swiped'); void el.offsetWidth; el.classList.add('is-swiped'); setTimeout(() => el.classList.remove('is-swiped'), 1100); });
+  }
   async function moveUser(id, lane) {
     const account = userAccounts.find(item => item.id === id);
     if (!account || account.username === state.user?.username || laneOf(account) === lane) return;
@@ -6817,6 +6855,7 @@
     userAccounts = userAccounts.map(item => (item.id === id ? { ...item, ...changes } : item));
     usersSignature = '';
     renderUsers();
+    swipeCard(id, lane);
     try {
       const data = await api('users-update', { method: 'POST', body: JSON.stringify({ id, ...changes }) });
       setUsers(data.users || userAccounts);
@@ -6958,7 +6997,7 @@
     if (!panel.hidden && addRole === role) return $('#userLookupInput').focus();
     resetLookup();
     addRole = role;
-    $('#userAddTitle').textContent = role === 'Admin' ? 'Add an admin' : 'Add an export user';
+    $('#userAddTitle').textContent = role === 'Admin' ? 'Issue an admin card' : 'Issue an export card';
     $$('#userBoard .lane-add').forEach(button => { button.hidden = button.dataset.addRole === role; });
     lane.insertBefore(panel, lane.querySelector('.lane-add'));
     panel.hidden = false;
