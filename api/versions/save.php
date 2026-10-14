@@ -55,7 +55,7 @@ if ($isUpload) {
         $data['categoryAdjustments'] = [];
         $data['changes'] = [];
     } catch (WorkbookTemplateException $error) {
-        json_response(['ok' => false, 'message' => $error->getMessage()], 422);
+        json_response(['ok' => false, 'message' => $error->getMessage(), 'problems' => $error->problems], 422);
     }
 } else {
     // The edit route must not act as an alternate create/import endpoint.

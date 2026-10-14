@@ -475,6 +475,16 @@ function database_move_library_photo(string $id, string $category): ?array
     return null;
 }
 
+function database_rename_library_photo(string $id, string $name): ?array
+{
+    foreach (database_list_library() as $photo) {
+        if ($photo['id'] !== $id) continue;
+        database_connection()->prepare('UPDATE dbo.PLA_ACD_PhotoLibrary SET photo_name = ? WHERE photo_id = ?')->execute([$name, $id]);
+        return array_replace($photo, ['name' => $name]);
+    }
+    return null;
+}
+
 // ---------------------------------------------------------------------------
 // Search keywords
 // ---------------------------------------------------------------------------

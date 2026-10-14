@@ -280,6 +280,20 @@ function repo_move_library_photo(string $id, string $category): ?array
     });
 }
 
+/** Renames a library photo (its display name only; the file and assignments stay). */
+function repo_rename_library_photo(string $id, string $name): ?array
+{
+    if (database_enabled()) return database_rename_library_photo($id, $name);
+    return json_mutate(function (array &$store) use ($id, $name) {
+        foreach ($store['photoLibrary'] as &$photo) {
+            if (($photo['id'] ?? '') !== $id) continue;
+            $photo['name'] = $name;
+            return $photo;
+        }
+        return null;
+    });
+}
+
 /** @return array|null The removed record. */
 function repo_delete_library_photo(string $id): ?array
 {

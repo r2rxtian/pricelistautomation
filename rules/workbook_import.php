@@ -8,7 +8,18 @@ function price_list_template(): array
     return $template ??= json_decode(file_get_contents(__DIR__ . '/price_list_template.json'), true, 512, JSON_THROW_ON_ERROR);
 }
 
-final class WorkbookTemplateException extends RuntimeException {}
+/**
+ * A workbook that doesn't follow the template. The message is the headline; `problems` lists every
+ * issue found (unknown sheets, a missing Instructions sheet, the first error in each category
+ * sheet), so one upload shows everything that needs fixing instead of only the first thing.
+ */
+final class WorkbookTemplateException extends RuntimeException
+{
+    public function __construct(string $message, public readonly array $problems = [])
+    {
+        parent::__construct($message);
+    }
+}
 
 /**
  * Bounded, values-only OOXML reader for the two approved layouts. It does not execute
@@ -211,12 +222,13 @@ final class OfficialPriceWorkbook
         }
         $document = $this->xml('xl/workbook.xml');
         $xpath = $this->xpath($document);
-        $categories = array_column($template['categories'], null, 'name');
         $products = [];
         $seenCodes = [];
         $seenSheets = [];
         $usedParts = [];
-        $hasInstructions = false;
+        // 1. Which sheets are there? (Broken or unsafe sheet entries still stop the check at once.)
+        $sheets = [];
+        $hidden = [];
         foreach ($xpath->query('/m:workbook/m:sheets/m:sheet') as $sheet) {
             $name = $sheet->getAttribute('name');
             $id = $sheet->getAttributeNS(self::DOC_REL_NS, 'id');
@@ -224,23 +236,116 @@ final class OfficialPriceWorkbook
                 || !preg_match('~^xl/worksheets/sheet[0-9]+\.xml$~D', $relations[$id]['target']) || isset($usedParts[$relations[$id]['target']])) {
                 $this->fail('Workbook contains duplicate or invalid worksheets.');
             }
-            if ($sheet->getAttribute('state') !== '' && $sheet->getAttribute('state') !== 'visible') $this->fail("{$name}: hidden worksheets are not accepted.");
+            if ($sheet->getAttribute('state') !== '' && $sheet->getAttribute('state') !== 'visible') $hidden[] = $name;
             $seenSheets[$name] = true;
             $usedParts[$relations[$id]['target']] = true;
-            if ($name === $template['instructionsSheet']) {
-                $this->validateSheet($name, $relations[$id]['target'], $template['instructions'], [], [], $products, $seenCodes, $country, $priceLevel);
-                $hasInstructions = true;
-            } elseif (isset($categories[$name])) {
-                $layout = $template['layouts'][$categories[$name]['layout']];
-                $this->validateSheet($name, $relations[$id]['target'], $layout['headerRows'], $layout['merges'], $layout['columns'], $products, $seenCodes, $country, $priceLevel);
-            } else $this->fail("{$name}: worksheet is not part of the official template. Use the original category sheet names.");
+            $sheets[] = ['name' => $name, 'part' => $relations[$id]['target']];
         }
         foreach (array_keys($this->parts) as $part) {
             if (str_starts_with($part, 'xl/worksheets/') && !isset($usedParts[$part])) $this->fail('Workbook contains an unregistered worksheet.');
         }
-        if (!$hasInstructions) $this->fail('Missing Instructions sheet and template version. Download the current official template.');
-        if (!$products) $this->fail('The workbook contains no products. Fill at least one category worksheet.');
+        // 2. Each sheet is recognised by its header rows, not its name: any sheet whose headers match an
+        //    approved layout is a category (the sheet name becomes the category), so new categories can
+        //    be added by copying a category sheet and renaming it.
+        $names = array_column($sheets, 'name');
+        $instructions = $template['instructionsSheet'];
+        $hasInstructions = in_array($instructions, $names, true);
+        $quote = fn(array $list) => implode(', ', array_map(fn($name) => '"' . $name . '"', $list));
+        $layoutLabel = ['standard' => 'product', 'presentation' => 'presentation stand'];
+        $startsWith = fn(string $key) => implode(' · ', array_slice(array_filter($template['layouts'][$key]['headerRows'][0], fn($cell) => $cell !== ''), 0, 3)) . '…';
+        $detected = [];   // sheet name => layout key
+        $unrecognised = []; // sheet name => what's wrong with its headers
+        foreach ($sheets as $sheet) {
+            if ($sheet['name'] === $instructions || in_array($sheet['name'], $hidden, true)) continue;
+            $match = $this->detectLayout($sheet['part'], $template['layouts']);
+            if (isset($match['layout'])) $detected[$sheet['name']] = $match['layout'];
+            else $unrecognised[$sheet['name']] = $match;
+        }
+
+        // 3. Nothing looks like the template at all: say that plainly, about headers (not names).
+        if (!$detected && !$hasInstructions) {
+            $this->fail('This workbook doesn\'t follow the price list template.', [
+                'None of its sheets (' . $quote($names) . ') have the template\'s column headers.',
+                'Each product sheet needs the template headers in its first rows: ' . $startsWith('standard') . ' for products, or ' . $startsWith('presentation') . ' for presentation stands. The sheet name becomes the category, so you can add your own.',
+                'Download the official template from this window and copy your products into it.',
+            ]);
+        }
+
+        // 4. Partly matching: collect every problem instead of stopping at the first.
+        $problems = [];
+        foreach ($unrecognised as $name => $match) {
+            if ($match['close'] ?? null) {
+                // Most headers are right: point at the exact cell that differs.
+                [$row, $column, $expected, $actual] = $match['close'];
+                $problems[] = "\"{$name}\"!" . $this->letter($column) . $row . ': expected ' . ($expected === '' ? 'an empty header cell' : "\"{$expected}\"") . ($actual !== '' ? ", found \"{$actual}\"" : '') . '. The headers must match the template exactly (' . $layoutLabel[$match['closest']] . ' layout).';
+            } else {
+                $problems[] = "\"{$name}\" doesn't have the template's column headers. Remove the sheet, or give it the template headers to make it a category.";
+            }
+        }
+        if ($hidden) $problems[] = 'Hidden sheets are not accepted: ' . $quote($hidden) . '. Unhide or delete them.';
+        if (!$hasInstructions) $problems[] = "The \"{$instructions}\" sheet (with the template version) is missing. Start from the current official template.";
+        foreach ($sheets as $sheet) {
+            $name = $sheet['name'];
+            if ($name !== $instructions && !isset($detected[$name])) continue;
+            try {
+                if ($name === $instructions) {
+                    $this->validateSheet($name, $sheet['part'], $template['instructions'], [], [], $products, $seenCodes, $country, $priceLevel);
+                } else {
+                    $layout = $template['layouts'][$detected[$name]];
+                    $this->validateSheet($name, $sheet['part'], $layout['headerRows'], $layout['merges'], $layout['columns'], $products, $seenCodes, $country, $priceLevel);
+                }
+            } catch (WorkbookTemplateException $error) {
+                if (str_starts_with($error->getMessage(), 'Workbook ')) throw $error; // whole-file limits (size, cells, XML) stop at once
+                $problems[] = $error->getMessage(); // the first problem in this sheet; the other sheets are still checked
+            }
+        }
+        if (!$problems && !$products) $problems[] = 'The workbook contains no products. Fill at least one category sheet.';
+        if ($problems) {
+            $this->fail(count($problems) === 1 ? $problems[0] : count($problems) . ' things need fixing in this workbook:', count($problems) === 1 ? [] : $problems);
+        }
         return ['headers' => $template['normalizedHeaders'], 'rows' => $products, 'priceColumns' => [8, 9], 'templateVersion' => $template['version']];
+    }
+
+    /** The values in a sheet's first rows (where the headers are), without the full checks. */
+    private function headerCells(string $part, int $rows): array
+    {
+        $xpath = $this->xpath($this->xml($part));
+        $cells = [];
+        foreach ($xpath->query('/m:worksheet/m:sheetData/m:row') as $row) {
+            $rowNumber = (int) $row->getAttribute('r');
+            if ($rowNumber > $rows) break;
+            foreach ($xpath->query('./m:c', $row) as $cell) {
+                [$cellRow, $column] = $this->coordinate($cell->getAttribute('r'));
+                if ($cellRow <= $rows && $column < 40) $cells[$cellRow][$column] = $this->value($xpath, $cell, 'sheet');
+            }
+        }
+        return $cells;
+    }
+
+    /**
+     * Which approved layout a sheet's header rows match: ['layout' => key]. Otherwise the closest
+     * layout and, when most of its headers are right, the first cell that differs (['close' => …]).
+     */
+    private function detectLayout(string $part, array $layouts): array
+    {
+        $depth = max(array_map(fn($layout) => count($layout['headerRows']), $layouts));
+        $cells = $this->headerCells($part, $depth);
+        $best = ['matched' => -1];
+        foreach ($layouts as $key => $layout) {
+            $matched = 0; $total = 0; $first = null;
+            foreach ($layout['headerRows'] as $rowIndex => $headerRow) {
+                foreach ($headerRow as $column => $expected) {
+                    $actual = $cells[$rowIndex + 1][$column] ?? '';
+                    if ($expected !== '') $total++;
+                    if ($actual === $expected) { if ($expected !== '') $matched++; }
+                    elseif ($first === null) $first = [$rowIndex + 1, $column, $expected, is_string($actual) ? $actual : (string) $actual];
+                }
+            }
+            if ($first === null) return ['layout' => $key];
+            if ($matched > $best['matched']) $best = ['matched' => $matched, 'total' => $total, 'first' => $first, 'layout' => $key];
+        }
+        // "Close" = at least half of the named headers are right: then it's meant to be a category sheet.
+        return ['layout' => null, 'closest' => $best['layout'], 'close' => $best['matched'] * 2 >= $best['total'] ? $best['first'] : null];
     }
 
     private function validateSheet(string $name, string $part, array $headers, array $expectedMerges, array $columns, array &$products, array &$seenCodes, string $country, string $priceLevel): void
@@ -366,9 +471,9 @@ final class OfficialPriceWorkbook
         return $letter;
     }
 
-    private function fail(string $message): never
+    private function fail(string $message, array $problems = []): never
     {
-        throw new WorkbookTemplateException($message);
+        throw new WorkbookTemplateException($message, $problems);
     }
 }
 

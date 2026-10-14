@@ -317,4 +317,176 @@
       dialog.close(event.submitter?.value ?? '');
     });
   }
+
+  // --- The logo: "Fresh prices, baked daily." slides out on hover while PLA rises like dough (CSS).
+  // Hover it five times in a row and the mark does one full spin: "Okay, okay, you found it. 🥐"
+  // Once per page load, so it never gets in the way. ---
+  const brand = document.querySelector('.topbar .brand');
+  const quip = brand?.querySelector('.brand-quip');
+  if (brand && quip) {
+    const QUIP = quip.textContent;
+    let hovers = 0;
+    let lastLeave = 0;
+    let found = false;
+    brand.addEventListener('mouseenter', () => {
+      if (found) return;
+      hovers = Date.now() - lastLeave < 1500 ? hovers + 1 : 1; // only quick hovers in a row count
+      if (hovers < 5) return;
+      found = true;
+      quip.textContent = 'Okay, okay, you found it. 🥐';
+      brand.classList.add('is-found');
+      const mark = brand.querySelector('.pla-mark');
+      if (mark && animate()) mark.animate([{ transform: 'rotate(0deg) scale(1)' }, { transform: 'rotate(-200deg) scale(1.12)', offset: 0.55 }, { transform: 'rotate(-360deg) scale(1)' }], { duration: 900, easing: IOS_EASE });
+    });
+    brand.addEventListener('mouseleave', () => {
+      lastLeave = Date.now();
+      if (!brand.classList.contains('is-found')) return;
+      setTimeout(() => { brand.classList.remove('is-found'); quip.textContent = QUIP; }, 350); // back to the usual line once it has faded
+    });
+  }
+
+  // --- Little pastries: tiny croissants and waffle cones (with a pink scoop) float down the top bar,
+  // swaying as they go, and specks of sugar twinkle here and there. The pointer is a whisk: pastries
+  // near it get stirred into a little swirl around it, then drift on. One canvas behind the bar's contents; it pauses while the
+  // tab is hidden and stays off with reduced motion. ---
+  const topbar = document.querySelector('.topbar');
+  if (topbar && typeof HTMLCanvasElement !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'flour-dust';
+    canvas.setAttribute('aria-hidden', 'true');
+    topbar.prepend(canvas);
+    const ctx = canvas.getContext('2d');
+    let width = 0, height = 0, ratio = 1, frame = 0, running = false;
+    const pointer = { x: -999, y: -999, active: false };
+    const bits = [];
+    const PASTRIES = 9, SUGAR = 6;
+    // Each pastry is drawn once into a small sprite (per theme, at screen resolution), then stamped.
+    const SPRITE_SCALE = 3;
+    function makeSprite(w, h, paint) {
+      const sprite = document.createElement('canvas');
+      sprite.width = w * SPRITE_SCALE; sprite.height = h * SPRITE_SCALE;
+      const c = sprite.getContext('2d');
+      c.scale(SPRITE_SCALE, SPRITE_SCALE);
+      paint(c);
+      return { canvas: sprite, w, h };
+    }
+    // A croissant: five golden layers in a crescent, darker between the layers.
+    const croissant = () => makeSprite(20, 13, c => {
+      const layers = [[3.2, 8.6, 2.6, 2.0, -0.7], [6.4, 6.4, 3.4, 2.9, -0.35], [10, 5.6, 4.2, 3.6, 0], [13.6, 6.4, 3.4, 2.9, 0.35], [16.8, 8.6, 2.6, 2.0, 0.7]];
+      layers.forEach(([x, y, rx, ry, rot], i) => {
+        const g = c.createLinearGradient(x, y - ry, x, y + ry);
+        g.addColorStop(0, i === 2 ? '#f6c879' : '#f0bd6c');
+        g.addColorStop(1, '#c47a2c');
+        c.fillStyle = g;
+        c.strokeStyle = 'rgba(122, 64, 18, .55)';
+        c.lineWidth = 0.6;
+        c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); c.fill(); c.stroke();
+      });
+      c.fillStyle = 'rgba(255, 244, 214, .7)'; // the glaze shine on top
+      c.beginPath(); c.ellipse(9.2, 3.6, 2.2, 0.8, -0.15, 0, Math.PI * 2); c.fill();
+    });
+    // A waffle cone with a scoop: a crosshatched cone under a pink scoop with a little shine.
+    const cone = scoop => makeSprite(12, 18, c => {
+      c.fillStyle = '#e3ae67';
+      c.beginPath(); c.moveTo(1.6, 7.4); c.lineTo(10.4, 7.4); c.lineTo(6, 17.2); c.closePath(); c.fill();
+      c.save(); c.clip();
+      c.strokeStyle = 'rgba(150, 92, 34, .7)'; c.lineWidth = 0.55;
+      for (let i = -12; i < 14; i += 2.4) { c.beginPath(); c.moveTo(i, 7); c.lineTo(i + 10, 18); c.stroke(); c.beginPath(); c.moveTo(i + 10, 7); c.lineTo(i, 18); c.stroke(); }
+      c.restore();
+      c.fillStyle = scoop;
+      c.beginPath(); c.arc(6, 5.6, 4.6, Math.PI * 0.95, Math.PI * 2.05); c.lineTo(10.6, 7.6);
+      for (let x = 10.6; x > 1.4; x -= 2.3) c.quadraticCurveTo(x - 1.15, 9.2, x - 2.3, 7.6); // the drippy rim
+      c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255, 255, 255, .6)';
+      c.beginPath(); c.ellipse(4.3, 3.6, 1.4, 0.8, -0.5, 0, Math.PI * 2); c.fill();
+    });
+    const SPRITES = {
+      light: { croissant: croissant(), cone: cone('#f29bb6') },
+      dark: { croissant: croissant(), cone: cone('#fabbcb') },
+    };
+    const rand = (min, max) => min + Math.random() * (max - min);
+    const seed = (bit, kind, top = false) => Object.assign(bit, {
+      kind, x: rand(0, width), y: top ? rand(-22, -12) : rand(0, height),
+      scale: rand(0.85, 1.15), angle: rand(-0.4, 0.4), spin: 0, sway: rand(0.25, 0.45),
+      fall: kind === 'sugar' ? rand(0.01, 0.04) : rand(0.1, 0.2), drift: rand(0.05, 0.16),
+      size: rand(1.6, 2.8), phase: rand(0, Math.PI * 2), vx: 0, vy: 0,
+    });
+    function resize() {
+      const box = topbar.getBoundingClientRect();
+      ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = box.width; height = box.height;
+      canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (!bits.length) {
+        for (let i = 0; i < PASTRIES; i++) bits.push(seed({}, i % 2 ? 'cone' : 'croissant'));
+        for (let i = 0; i < SUGAR; i++) bits.push(seed({}, 'sugar'));
+      }
+      bits.forEach(bit => { if (bit.x > width + 10) bit.x = rand(0, width); });
+    }
+    function pastry(bit, time, dark) {
+      // A gentle pendulum sway while falling, plus any spin from the whisk; it turns a little in depth too.
+      const sprite = SPRITES[dark ? 'dark' : 'light'][bit.kind];
+      const rotation = bit.angle + Math.sin(time / 1400 + bit.phase) * bit.sway;
+      const depth = 0.8 + Math.abs(Math.cos(time / 2200 + bit.phase)) * 0.2;
+      ctx.save();
+      ctx.translate(bit.x, bit.y);
+      ctx.rotate(rotation);
+      ctx.scale(bit.scale * depth, bit.scale);
+      ctx.globalAlpha = dark ? 0.92 : 0.95;
+      ctx.drawImage(sprite.canvas, -sprite.w / 2, -sprite.h / 2, sprite.w, sprite.h);
+      ctx.restore();
+    }
+    function sugar(bit, time, dark) {
+      // A four-point glint that swells and fades.
+      const glint = Math.max(0, Math.sin(time / 900 + bit.phase));
+      if (glint < 0.05) return;
+      const s = bit.size * (0.6 + glint * 0.9);
+      ctx.save();
+      ctx.translate(bit.x, bit.y);
+      ctx.rotate(Math.PI / 4 * glint);
+      ctx.globalAlpha = glint * (dark ? 0.85 : 0.7);
+      ctx.fillStyle = dark ? '#fff1f4' : '#d9839d';
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 2); ctx.quadraticCurveTo(0, 0, s * 2, 0); ctx.quadraticCurveTo(0, 0, 0, s * 2);
+      ctx.quadraticCurveTo(0, 0, -s * 2, 0); ctx.quadraticCurveTo(0, 0, 0, -s * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    function draw(time) {
+      ctx.clearRect(0, 0, width, height);
+      const dark = root.dataset.theme === 'dark';
+      bits.forEach(bit => {
+        if (bit.kind !== 'sugar' && pointer.active) {
+          // A light stir: pastries right by the pointer drift a little around it, nothing more.
+          const dx = bit.x - pointer.x, dy = bit.y - pointer.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 55 && dist > 0.5) {
+            const strength = (1 - dist / 55);
+            bit.vx += (-dy / dist) * strength * 0.1 + (dx / dist) * strength * 0.04;
+            bit.vy += (dx / dist) * strength * 0.1 + (dy / dist) * strength * 0.04;
+            bit.spin += strength * 0.0012;
+          }
+        }
+        bit.vx *= 0.88; bit.vy *= 0.88; // settles quickly
+        bit.spin = Math.min(0.02, bit.spin * 0.9); // at most a slight turn, then back to swaying
+        bit.x += bit.drift + bit.vx;
+        bit.y += bit.fall + bit.vy;
+        bit.angle += bit.spin;
+        if (bit.kind !== 'sugar') bit.angle = Math.atan2(Math.sin(bit.angle), Math.cos(bit.angle)) * 0.985; // turns back upright
+        if (bit.y > height + 14) seed(bit, bit.kind, true);
+        if (bit.y < -14) bit.y = height + 8;
+        if (bit.x > width + 10) bit.x = -10; else if (bit.x < -12) bit.x = width + 8;
+        if (bit.kind === 'sugar') sugar(bit, time, dark); else pastry(bit, time, dark);
+      });
+      frame = requestAnimationFrame(draw);
+    }
+    const start = () => { if (running || !animate() || document.hidden) return; running = true; resize(); frame = requestAnimationFrame(draw); };
+    const stop = () => { running = false; cancelAnimationFrame(frame); ctx.clearRect(0, 0, width, height); };
+    topbar.addEventListener('pointermove', event => { const box = topbar.getBoundingClientRect(); pointer.x = event.clientX - box.left; pointer.y = event.clientY - box.top; pointer.active = true; });
+    topbar.addEventListener('pointerleave', () => { pointer.active = false; });
+    document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+    reducedMotion.addEventListener?.('change', () => (animate() ? start() : stop()));
+    new ResizeObserver(() => running && resize()).observe(topbar);
+    start();
+  }
 })();

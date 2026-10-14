@@ -84,13 +84,14 @@
         const x = box.left + box.width / 2;
         const y = box.top + box.height / 2;
         const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        // The circle itself is a CSS animation on the new snapshot (styles/app.css), so it applies from
+        // the very first frame. Started from script after the transition is ready, the new theme could
+        // show in full for a frame first, which looked like a blink.
+        root.style.setProperty('--vt-x', `${x}px`);
+        root.style.setProperty('--vt-y', `${y}px`);
+        root.style.setProperty('--vt-r', `${Math.ceil(radius)}px`);
         const transition = running = document.startViewTransition(swap);
-        transition.ready.then(() => {
-          root.animate(
-            { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-            { duration: 650, easing: 'cubic-bezier(.65, 0, .25, 1)', pseudoElement: '::view-transition-new(root)' }
-          );
-        }).catch(() => { });
+        transition.ready.catch(() => { });
         transition.finished.finally(() => { if (running === transition) running = null; });
       }
       // Spin the new icon in (restarts if clicked again mid-animation).

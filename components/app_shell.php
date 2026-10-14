@@ -38,7 +38,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=188">
+    <link rel="stylesheet" href="../styles/app.css?v=195">
     <script>
     (function() {
         try {
@@ -76,7 +76,7 @@ $panel = APP_PAGES[$page]['panel'];
     <div id="appLoading" class="app-loading" role="status"><div class="loader-orbit"><span class="orbit-ring ring-1"></span><span class="orbit-ring ring-2"></span><span class="orbit-core"></span></div><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <div class="topbar-left">
-            <a class="brand" href="#" aria-label="PLA Price List Automation home"><?= pla_logo_lockup() ?></a>
+            <a class="brand" href="files.php" aria-label="PLA Price List Automation: go to Files"><?= pla_logo_lockup() ?><span class="brand-quip" aria-hidden="true">Fresh prices, baked daily.</span></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
             <button class="nav-item<?= empty($_GET['list']) ? ' active' : '' ?>" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
@@ -727,7 +727,7 @@ $panel = APP_PAGES[$page]['panel'];
                     <span>Nothing from that workbook is saved. The error explains what to fix; product-row errors include the sheet and cell.</span>
                 </div>
                 <div class="template-guide-notes">
-                    <p><strong>Approved categories:</strong> <span id="templateCategoryNames"></span>. Don’t add other sheets. Macros, hyperlinks, external links and hidden sheets are not accepted.</p>
+                    <p><strong>Categories:</strong> each product sheet is a category, named after the sheet. The template comes with <span id="templateCategoryNames"></span>. To add a category, copy a sheet and rename it, keeping its headers exactly as they are. Sheets without the template headers (cover pages, notes) aren’t accepted, nor are macros, hyperlinks, external links and hidden sheets.</p>
                 </div>
             </div>
         </section>
@@ -922,11 +922,11 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/xlsx.full.min.js"></script>
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="../scripts/theme.js?v=7"></script>
+<script src="../scripts/theme.js?v=8"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=177"></script>
+<script src="../scripts/app.js?v=185"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=11"></script>
+<script src="../scripts/motion.js?v=19"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>

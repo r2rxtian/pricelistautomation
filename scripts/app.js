@@ -179,12 +179,12 @@
   // Each action is its own endpoint under api/ (paths are relative to the page files in pages/).
   const API_ROUTES = {
     'state': 'app/state',
-    'open': 'versions/open', 'save': 'versions/save', 'approve': 'versions/approve', 'reject': 'versions/reject',
+    'open': 'versions/open', 'save': 'versions/save', 'check-workbook': 'versions/check', 'approve': 'versions/approve', 'reject': 'versions/reject',
     'export': 'versions/export', 'delete-version': 'versions/delete',
     'audit-logs': 'audit/list', 'log-activity': 'audit/log_activity',
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
-    'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move',
+    'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
     'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save',
     'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
@@ -199,7 +199,11 @@
       throw new Error('Please sign in again.');
     }
     const data = await response.json().catch(() => ({ ok: false, message: 'Invalid server response.' }));
-    if (!response.ok || !data.ok) throw new Error(data.message || 'Request failed.');
+    if (!response.ok || !data.ok) {
+      const error = new Error(data.message || 'Request failed.');
+      if (Array.isArray(data.problems)) error.problems = data.problems; // e.g. every issue in a rejected workbook
+      throw error;
+    }
     return data;
   }
   /** Stored file paths (storage/…) are relative to the project root; this page lives in pages/. */
@@ -1297,7 +1301,7 @@
       const custom = imageOverride(group.category, group.groupName);
       const name = escapeHtml(group.groupName);
       const chooseData = `data-category="${escapeHtml(group.category)}" data-group="${name}"`;
-      return `<article class="plate-card ${custom?.imagePath ? 'has-photo' : 'is-empty'}">
+      return `<article class="plate-card ${custom?.imagePath ? 'has-photo' : 'is-empty'}" data-key="type-${escapeHtml(group.category)}|${name}">
         <button type="button" class="plate choose-group-image" ${chooseData} aria-label="${custom ? 'Change' : 'Choose'} photo for ${name}" title="${custom ? 'Change photo' : 'Choose a photo from the library'}">
           ${custom?.imagePath ? `<img src="${escapeHtml(mediaUrl(custom.imagePath))}" alt="" loading="lazy">` : '<span class="plate-empty" aria-hidden="true"><span>+</span>Choose photo</span>'}
         </button>
@@ -1361,7 +1365,7 @@
       const photoCell = isFirstInGroup
         ? `<td class="group-photo-cell" rowspan="${groupLength}"><div class="group-photo-wrap">${groupVisual(category, groupName, groupItems)}</div></td>`
         : '';
-      return `<tr class="excel-data-row" data-row="${actualIndex}" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
+      return `<tr class="excel-data-row" data-row="${actualIndex}" data-key="row-${actualIndex}" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
         <td class="col-row-num">${visibleIndex + 1}</td>
         ${photoCell}
         <td class="excel-cell code-cell" data-row="${actualIndex}" data-col="1" tabindex="0">${valueMarkup(row, 1)}</td>
@@ -1383,7 +1387,7 @@
       const photoCell = isFirstInGroup
         ? `<td class="group-photo-cell" rowspan="${groupLength}"><div class="group-photo-wrap">${groupVisual(category, groupName, groupItems)}</div></td>`
         : '';
-      return `<tr class="excel-data-row presentation-row" data-row="${actualIndex}" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
+      return `<tr class="excel-data-row presentation-row" data-row="${actualIndex}" data-key="row-${actualIndex}" style="--row-delay:${Math.min(visibleIndex, 8) * 18}ms">
         <td class="col-row-num">${visibleIndex + 1}</td>
         ${photoCell}
         <td class="excel-cell code-cell" data-row="${actualIndex}" data-col="1" tabindex="0">${valueMarkup(row, 1)}</td>
@@ -2379,7 +2383,7 @@
     const entryMarkup = (log, { nested = false } = {}) => {
       const inspect = auditInspectKind(log.type);
       const role = String(log.role || 'user').toLowerCase();
-      return `<li class="log-entry audit-event-row type-${escapeHtml(log.type || 'info')} ${inspect ? 'is-inspectable' : ''} ${nested ? 'is-nested' : ''}" ${inspect ? `data-log-id="${escapeHtml(log.id)}"` : ''}>
+      return `<li class="log-entry audit-event-row type-${escapeHtml(log.type || 'info')} ${inspect ? 'is-inspectable' : ''} ${nested ? 'is-nested' : ''}" ${nested ? '' : `data-key="log-${escapeHtml(log.id)}"`} ${inspect ? `data-log-id="${escapeHtml(log.id)}"` : ''}>
         <time class="log-time" datetime="${escapeHtml(log.timestamp || '')}" title="${escapeHtml(displayDate(log.timestamp))}">${escapeHtml(timeOf(log.timestamp))}</time>
         <span class="log-node" aria-hidden="true">${getAuditTypeIcon(log.type)}</span>
         <div class="log-card">
@@ -2413,7 +2417,7 @@
         return `<span class="log-step">${escapeHtml(getAuditTypeLabel(log.type))}</span>`;
       };
       const span = timeOf(first.timestamp) === timeOf(last.timestamp) ? timeOf(last.timestamp) : `${timeOf(first.timestamp)}–${timeOf(last.timestamp)}`;
-      return `<li class="log-entry log-session">
+      return `<li class="log-entry log-session" data-key="session-${escapeHtml(last.id)}">
         <time class="log-time" title="${escapeHtml(displayDate(last.timestamp))}">${escapeHtml(timeOf(last.timestamp))}</time>
         <span class="log-node is-session" aria-hidden="true">${logs.length}</span>
         <div class="log-card">
@@ -2435,7 +2439,7 @@
     let previousDay = '';
     dom.historyTableBody.innerHTML = pageEntries.map(entry => {
       const day = auditDayLabel(entry.logs[0].timestamp);
-      const header = day !== previousDay ? `${previousDay ? '</ol></section>' : ''}<section class="log-day"><h3 class="log-day-head"><span>${escapeHtml(day)}</span><small>${dayCounts.get(day)} event${dayCounts.get(day) === 1 ? '' : 's'}</small></h3><ol class="log-list">` : '';
+      const header = day !== previousDay ? `${previousDay ? '</ol></section>' : ''}<section class="log-day"><h3 class="log-day-head" data-key="day-${escapeHtml(day)}"><span>${escapeHtml(day)}</span><small>${dayCounts.get(day)} event${dayCounts.get(day) === 1 ? '' : 's'}</small></h3><ol class="log-list">` : '';
       previousDay = day;
       return header + (entry.logs.length > 1 ? sessionMarkup(entry.logs) : entryMarkup(entry.logs[0]));
     }).join('') + (pageEntries.length ? '</ol></section>' : '');
@@ -2680,7 +2684,8 @@
     const opener = event.target.closest('.row-primary[data-action="open"]');
     if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip') || opener).getBoundingClientRect();
   }, true);
-  $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; renderFiles(); });
+  const searchFiles = searchAfterPause(() => renderFiles());
+  $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; searchFiles(); });
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
   $('#filesUploadBtn')?.addEventListener('click', () => openUploadModal());
@@ -3038,7 +3043,9 @@
     excel.forEach(file => {
       if (stagedFiles.some(item => item.file.name === file.name && item.file.size === file.size)) return;
       if (stagedFiles.length >= MAX_BULK_FILES) { overLimit++; return; }
-      stagedFiles.push({ file, name: file.name.replace(/\.xlsx$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '' });
+      const item = { file, name: file.name.replace(/\.xlsx$/i, ''), country: '', priceLevel: guessPriceLevel(file.name), status: '', message: '', check: 'checking', problems: [] };
+      stagedFiles.push(item);
+      checkStagedFile(item);
     });
     if (overLimit) toast(`Up to ${MAX_BULK_FILES} files per batch. ${overLimit} file${overLimit === 1 ? ' was' : 's were'} not added.`);
     const before = $$('#stagedFilesList .staged-row').length;
@@ -3092,6 +3099,27 @@
       { duration: 440, delay: 90 + index * 60, easing: ease, fill: 'backwards' }
     ));
   }
+  /**
+   * Checks an attached workbook against the template straight away (nothing is saved), so a wrong
+   * file is explained before anyone picks a country or price level. The upload checks it again.
+   */
+  async function checkStagedFile(item) {
+    const body = new FormData();
+    body.append('workbook', item.file);
+    try {
+      const data = await api('check-workbook', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body });
+      const categories = (data.categories || []).length;
+      item.check = 'ok';
+      item.summary = `${Number(data.productCount || 0).toLocaleString()} product${data.productCount === 1 ? '' : 's'} · ${categories} categor${categories === 1 ? 'y' : 'ies'}`;
+      item.problems = [];
+    } catch (error) {
+      item.check = 'bad';
+      item.message = error.message || 'This workbook could not be checked.';
+      item.problems = error.problems || [];
+    }
+    if (!stagedFiles.includes(item)) return; // removed while it was being checked
+    morphUploadWindow(renderStagedFiles);
+  }
   function renderStagedFiles() {
     const panel = $('#stagedFilesPanel');
     const list = $('#stagedFilesList');
@@ -3099,15 +3127,22 @@
     panel.hidden = !stagedFiles.length;
     // The batch counts as finished only once the import loop is over (not when the first file completes).
     const finished = !bulkImporting && stagedFiles.some(item => item.status === 'saved' || item.status === 'failed');
-    const failed = stagedFiles.filter(item => item.status === 'failed');
+    const failed = stagedFiles.filter(item => item.status === 'failed' || item.check === 'bad');
+    const checking = stagedFiles.some(item => item.check === 'checking');
+    const ready = stagedFiles.filter(item => item.check === 'ok' && !item.status);
     const attr = value => escapeHtml(value).replace(/"/g, '&quot;');
     list.innerHTML = stagedFiles.map((item, index) => {
-      const locked = bulkImporting || finished;
+      const rejected = item.check === 'bad' && !item.status;
+      const locked = bulkImporting || finished || rejected || item.check === 'checking';
       const statusMarkup = item.status
         ? `<span class="staged-status status-${item.status}" title="${attr(item.message)}">${{ working: '…', saved: '✓', failed: '✕' }[item.status] || ''}</span>`
         : `<button type="button" class="icon-button staged-remove" data-index="${index}" aria-label="Remove ${attr(item.file.name)}" title="Remove">×</button>`;
-      return `<div class="staged-row ${item.status ? `is-${item.status}` : ''}" role="row" data-index="${index}">
-        <span class="staged-file" role="cell" title="${attr(item.file.name)}"><strong>${escapeHtml(item.file.name)}</strong><small>${formatBytes(item.file.size)}${item.message ? ` · ${item.status === 'failed' ? 'Upload failed' : escapeHtml(item.message)}` : ''}</small></span>
+      const note = item.status ? (item.message ? ` · ${item.status === 'failed' ? 'Upload failed' : escapeHtml(item.message)}` : '')
+        : item.check === 'checking' ? ' · <span class="staged-checking">Checking the workbook…</span>'
+        : rejected ? ' · Not accepted, see below'
+        : item.summary ? ` · ✓ ${escapeHtml(item.summary)}` : '';
+      return `<div class="staged-row ${item.status ? `is-${item.status}` : rejected ? 'is-failed' : item.check === 'ok' ? 'is-checked' : 'is-checking'}" role="row" data-index="${index}">
+        <span class="staged-file" role="cell" title="${attr(item.file.name)}"><strong>${escapeHtml(item.file.name)}</strong><small>${formatBytes(item.file.size)}${note}</small></span>
         <span role="cell"><input type="text" maxlength="160" data-field="name" value="${attr(item.name)}" aria-label="Price list name" ${locked ? 'disabled' : ''}></span>
         <span role="cell"><select data-field="country" aria-label="Country" ${locked ? 'disabled' : ''}>${countryOptionsHtml(item.country, 'Select country…')}</select></span>
         <span role="cell"><select data-field="priceLevel" aria-label="Price level" ${locked ? 'disabled' : ''}>${priceLevelOptionsHtml(item.priceLevel)}</select></span>
@@ -3119,24 +3154,30 @@
     dom.uploadModal?.setAttribute('aria-busy', String(bulkImporting));
     const button = dom.submitUploadBtn;
     if (button) {
-      button.disabled = !count || bulkImporting;
-      button.textContent = finished ? 'Close' : bulkImporting ? 'Uploading…' : count > 1 ? `Upload ${count} files` : 'Upload & open';
+      button.disabled = finished ? false : (!ready.length || checking || bulkImporting);
+      button.textContent = finished ? 'Close' : bulkImporting ? 'Uploading…' : checking && !ready.length ? 'Checking…' : count > 1 ? `Upload ${ready.length} file${ready.length === 1 ? '' : 's'}` : 'Upload & open';
     }
     $('.staged-apply-all')?.toggleAttribute('hidden', count < 2 || finished);
     const hint = $('#stagedFilesHint');
     if (hint) {
       hint.textContent = finished
         ? `${stagedFiles.filter(item => item.status === 'saved').length} of ${count} saved. Correct rejected files and select them again.`
-        : count > 1
-          ? 'Each workbook becomes a separate price list.'
-          : 'Choose the country and price level for this workbook.';
+        : checking
+          ? 'Checking the workbook against the official template…'
+          : !ready.length
+            ? (count > 1 ? 'None of these workbooks can be uploaded. Remove them and choose corrected files.' : 'This workbook can\'t be uploaded. Remove it and choose the corrected file.')
+            : failed.length
+              ? `${failed.length} workbook${failed.length === 1 ? ' is' : 's are'} not accepted and will be skipped. Choose the country and price level for the rest.`
+              : count > 1
+                ? 'Each workbook becomes a separate price list.'
+                : 'Choose the country and price level for this workbook.';
     }
     if (dom.cancelUploadBtn) dom.cancelUploadBtn.hidden = finished;
     if (dom.modalDropZone) dom.modalDropZone.hidden = finished && !failed.length;
     const errors = $('#uploadValidationErrors');
     if (errors) {
       errors.hidden = !failed.length;
-      errors.innerHTML = failed.length ? `<strong>${failed.length === 1 ? 'Workbook not accepted' : `${failed.length} workbooks not accepted`}</strong><ul>${failed.map(item => `<li><strong>${escapeHtml(item.file.name)}</strong>: ${escapeHtml(item.message)}</li>`).join('')}</ul><p>Correct the file and select it again. Validation failures save no products.</p>` : '';
+      errors.innerHTML = failed.length ? `<strong>${failed.length === 1 ? 'Workbook not accepted' : `${failed.length} workbooks not accepted`}</strong><ul>${failed.map(item => `<li><strong>${escapeHtml(item.file.name)}</strong>: ${escapeHtml(item.message)}${(item.problems || []).length ? `<ol class="upload-problems">${item.problems.map(problem => `<li>${escapeHtml(problem)}</li>`).join('')}</ol>` : ''}</li>`).join('')}</ul><p>${finished ? 'Correct the file and select it again. Validation failures save no products.' : 'Nothing has been uploaded. Correct the file, then remove it here and choose it again.'}</p>` : '';
     }
     if (dom.dropZonePrompt) {
       const full = count >= MAX_BULK_FILES;
@@ -3164,6 +3205,7 @@
     $$('#stagedFilesList [data-field]').forEach(input => input.classList.remove('is-invalid'));
     const seen = new Map();
     for (const [index, item] of stagedFiles.entries()) {
+      if (item.check !== 'ok') continue; // rejected files are skipped
       for (const field of ['name', 'country', 'priceLevel']) {
         if (!String(item[field] || '').trim()) {
           const input = $(`#stagedFilesList .staged-row[data-index="${index}"] [data-field="${field}"]`);
@@ -3187,6 +3229,7 @@
     bulkImporting = true;
     renderStagedFiles();
     for (const item of stagedFiles) {
+      if (item.check !== 'ok') continue; // rejected when attached: not uploaded
       item.status = 'working'; item.message = 'Reading…';
       renderStagedFiles();
       try {
@@ -3198,6 +3241,7 @@
       } catch (error) {
         item.status = 'failed';
         item.message = error.message || 'Could not import this file.';
+        item.problems = error.problems || [];
       }
       renderStagedFiles();
     }
@@ -3205,6 +3249,7 @@
     renderStagedFiles();
     await refreshState();
     const saved = stagedFiles.filter(item => item.status === 'saved').length;
+    const tried = stagedFiles.filter(item => item.status).length;
     if (saved === stagedFiles.length) {
       // Everything saved: close the window and show the new lists, no extra click needed.
       closeUploadModal();
@@ -3212,7 +3257,7 @@
       toast(`${saved} file${saved === 1 ? '' : 's'} uploaded.`);
       return;
     }
-    toast(`${saved} of ${stagedFiles.length} files uploaded. Check the files marked ✕.`);
+    toast(`${saved} of ${tried} files uploaded${tried < stagedFiles.length ? ` (${stagedFiles.length - tried} skipped, not the template)` : ''}. Check the files marked ✕.`);
   }
 
   async function openUploadModal() {
@@ -4325,7 +4370,13 @@
       dom.percentage.focus();
     });
   });
-  dom.search.addEventListener('input', () => { state.search = dom.search.value; renderTable(); });
+  // Rows that still match glide into place; the table's own row entrance doesn't replay for a search.
+  const searchTable = searchAfterPause(() => {
+    suppressRowEnter = true;
+    flipMove(dom.table, () => renderTable(), { exits: false });
+    suppressRowEnter = false;
+  });
+  dom.search.addEventListener('input', () => { state.search = dom.search.value; searchTable(); });
   dom.category.addEventListener('change', () => {
     state.category = dom.category.value;
     state.categoryChosen = true;
@@ -5184,6 +5235,18 @@
     }
     openOriginRect = null;
   }
+  // The logo is "home": Files, the page everything starts from. Like the Files button, an open file
+  // stays in its tab with any unsaved changes. Already on Files, it brings the board back to the top.
+  // A real link underneath, so Ctrl/middle-click still opens Files in a new tab.
+  $('.topbar .brand')?.addEventListener('click', event => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (!$('#filesPanel')?.hidden) {
+      $('#filesPanel .history-table-frame')?.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+      return;
+    }
+    switchPanel('filesPanel', true);
+  });
   /** The editor opens out of the sheet you clicked: its outline grows from that sheet to the full page. */
   function unfoldEditor(rect) {
     const panel = $('#workspacePanel');
@@ -5420,9 +5483,10 @@
     state.imageCategory = dom.imageCategoryFilter.value;
     renderImageSettings();
   });
+  const searchTypes = searchAfterPause(() => flipMove(dom.imageSettingsList, () => renderImageSettings()));
   dom.imageSearchInput?.addEventListener('input', () => {
     state.imageSearch = dom.imageSearchInput.value;
-    renderImageSettings();
+    searchTypes();
   });
   dom.imageSettingsList?.addEventListener('click', event => {
     const chooseButton = event.target.closest('.choose-group-image');
@@ -5514,10 +5578,11 @@
       button.disabled = false;
     }
   });
+  const searchHistory = searchAfterPause(() => flipMove(dom.historyTableBody, () => renderHistory()));
   dom.historySearchInput?.addEventListener('input', () => {
     state.historySearch = dom.historySearchInput.value;
     state.historyPage = 1;
-    renderHistory();
+    searchHistory();
   });
   dom.historyAdjustmentSelect?.addEventListener('change', () => {
     state.historyAdjustment = dom.historyAdjustmentSelect.value;
@@ -5876,7 +5941,8 @@
   });
   dom.submitUploadBtn?.addEventListener('click', async () => {
     if (!stagedFiles.length || bulkImporting) return;
-    if (stagedFiles.every(item => item.status === 'saved' || item.status === 'failed')) {
+    if (stagedFiles.some(item => item.check === 'checking')) return;
+    if (stagedFiles.every(item => item.status === 'saved' || item.status === 'failed' || (item.check === 'bad' && stagedFiles.some(other => other.status)))) {
       const hasSaved = stagedFiles.some(item => item.status === 'saved');
       closeUploadModal();
       if (hasSaved) switchPanel('filesPanel', true);
@@ -5884,6 +5950,7 @@
     }
     const problem = validateStagedFiles();
     if (problem) return toast(problem);
+    if (!stagedFiles.some(item => item.check === 'ok')) return;
     if (stagedFiles.length === 1) {
       const [item] = stagedFiles;
       bulkImporting = true;
@@ -5895,7 +5962,7 @@
         closeUploadModal();
       } catch (err) {
         bulkImporting = false;
-        item.status = 'failed'; item.message = err.message || 'Failed to process Excel workbook.';
+        item.status = 'failed'; item.message = err.message || 'Failed to process Excel workbook.'; item.problems = err.problems || [];
         renderStagedFiles();
       }
       return;
@@ -6267,10 +6334,12 @@
   }
   function photoCardMarkup(photo, { selected = false, current = false, deletable = false } = {}) {
     const usage = photoUsage(photo.id).length;
-    return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-photo-id="${photoAttr(photo.id)}" ${deletable ? 'role="group"' : `role="option" tabindex="0" aria-selected="${selected}"`} aria-label="${photoAttr(photo.name)}" title="${photoAttr(photo.name)}">
+    return `<div class="library-card ${selected ? 'is-selected' : ''} ${current ? 'is-current' : ''}" data-key="photo-${photoAttr(photo.id)}" data-photo-id="${photoAttr(photo.id)}" ${deletable ? 'role="group"' : `role="option" tabindex="0" aria-selected="${selected}"`} aria-label="${photoAttr(photo.name)}" title="${photoAttr(photo.name)}">
       <div class="library-thumb"><img src="${photoAttr(mediaUrl(photo.imagePath))}" alt="${photoAttr(photo.name)}" loading="lazy"></div>
       <div class="library-meta">
-        <strong>${escapeHtml(photo.name)}</strong>
+        ${deletable
+          ? `<div class="library-name-row"><strong class="library-name" data-photo-id="${photoAttr(photo.id)}" title="Click to rename">${escapeHtml(photo.name)}</strong><button type="button" class="library-rename" data-photo-id="${photoAttr(photo.id)}" aria-label="Rename ${photoAttr(photo.name)}" title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button></div>`
+          : `<strong>${escapeHtml(photo.name)}</strong>`}
         <small>${current ? 'Current photo' : usage ? `Used by ${usage} product type${usage === 1 ? '' : 's'}` : 'Not used yet'}</small>
         ${deletable ? `<label class="library-photo-folder-control"><span>Folder</span><select class="library-photo-folder" data-photo-id="${photoAttr(photo.id)}" aria-label="Move ${photoAttr(photo.name)} to folder">${folderOptions(photo.category || '')}</select></label>` : `<small class="library-photo-category">${escapeHtml(folderLabel(photo.category || ''))}</small>`}
       </div>
@@ -6305,7 +6374,7 @@
     $('#libraryEmpty').hidden = visible.length > 0 || !searching;
     if (!visible.length && searching) $('#libraryEmpty').innerHTML = '<h2>No matching photos</h2><p>Try another name or browse a different folder.</p>';
     grid.hidden = !visible.length && searching;
-    const uploadPrint = searching ? '' : `<button type="button" class="library-upload-print"><span class="library-upload-plus" aria-hidden="true">+</span><strong>Upload photos</strong><small>${state.libraryFolder === null ? 'JPG, PNG or WebP · up to 6 MB' : `Into ${escapeHtml(folderLabel(state.libraryFolder))}`}</small></button>`;
+    const uploadPrint = searching ? '' : `<button type="button" class="library-upload-print" data-key="upload"><span class="library-upload-plus" aria-hidden="true">+</span><strong>Upload photos</strong><small>${state.libraryFolder === null ? 'JPG, PNG or WebP · up to 6 MB' : `Into ${escapeHtml(folderLabel(state.libraryFolder))}`}</small></button>`;
     grid.innerHTML = uploadPrint + visible.map(photo => photoCardMarkup(photo, { deletable: true })).join('');
   }
   /** Moves the Config section highlight (Photo library / Product type photos / Countries & price levels) under the active one. */
@@ -6365,21 +6434,70 @@
     button.setAttribute('aria-checked', String(button.getAttribute('aria-checked') !== 'true'));
     return new Promise(resolve => setTimeout(resolve, reducedMotion() ? 0 : 320));
   }
+  /** Search: results update once you pause typing, not on every letter. */
+  function searchAfterPause(run, wait = 140) {
+    let timer = 0;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => run(...args), wait); };
+  }
   /**
-   * Re-renders a container, then glides every [data-key] item that moved to its new place (FLIP)
-   * and pops in the new ones, so reordering, filtering or switching something off never jumps.
+   * Re-renders a container as if its items were filtered in place (FLIP): items that stay glide to
+   * their new spot without blinking, items that leave fade and shrink away where they were, and
+   * items that arrive fade in gently. Items are the outermost [data-key] elements. Movement uses the
+   * separate translate/scale properties, so an item's own transform (like a photo's tilt) is kept.
    */
-  function flipMove(container, render) {
+  function flipMove(container, render, { exits = true } = {}) {
+    if (!container) return render();
+    const items = () => [...container.querySelectorAll('[data-key]')].filter(el => {
+      const outer = el.parentElement?.closest('[data-key]');
+      return !outer || !container.contains(outer);
+    });
     const before = new Map();
-    container.querySelectorAll('[data-key]').forEach(el => before.set(el.dataset.key, el.getBoundingClientRect()));
+    items().forEach(el => before.set(el.dataset.key, { el, box: el.getBoundingClientRect(), tilt: getComputedStyle(el).getPropertyValue('--tilt') }));
     render();
     if (!before.size || reducedMotion()) return;
-    container.querySelectorAll('[data-key]').forEach(el => {
-      const old = before.get(el.dataset.key);
-      if (!old) { el.animate([{ opacity: 0, transform: 'scale(0.9)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: FOLDER_EASE }); return; }
+    const view = container.getBoundingClientRect();
+    const stays = new Set();
+    let arriving = 0;
+    items().forEach(el => {
+      const key = el.dataset.key;
+      stays.add(key);
+      const old = before.get(key);
+      if (!old) {
+        el.animate([{ opacity: 0, scale: '0.96' }, { opacity: 1, scale: '1' }], { duration: 300, delay: 90 + Math.min(arriving++, 8) * 20, easing: FOLDER_EASE, fill: 'backwards' });
+        return;
+      }
       const now = el.getBoundingClientRect();
-      const dx = old.left - now.left, dy = old.top - now.top;
-      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 480, easing: FOLDER_EASE });
+      const dx = old.box.left - now.left, dy = old.box.top - now.top;
+      // A tilted card (photo prints) eases into the tilt of its new spot instead of snapping.
+      const turn = (parseFloat(old.tilt) || 0) - (parseFloat(getComputedStyle(el).getPropertyValue('--tilt')) || 0);
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5 || Math.abs(turn) > 0.05) {
+        el.animate([{ translate: `${dx}px ${dy}px`, rotate: `${turn}deg` }, { translate: '0px 0px', rotate: '0deg' }], { duration: 440, easing: FOLDER_EASE });
+      }
+    });
+    if (!exits) return;
+    // Leaving items: a copy stays where it was for a moment and fades away.
+    if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    const host = container.getBoundingClientRect();
+    before.forEach(({ el, box, tilt }, key) => {
+      if (stays.has(key) || box.bottom < view.top || box.top > view.bottom || !box.height) return;
+      const ghost = el.cloneNode(true);
+      ghost.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('data-key');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.inert = true;
+      Object.assign(ghost.style, {
+        position: 'absolute', margin: '0', pointerEvents: 'none', zIndex: '0', boxSizing: 'border-box',
+        left: `${box.left - host.left - container.clientLeft + container.scrollLeft}px`,
+        top: `${box.top - host.top - container.clientTop + container.scrollTop}px`,
+        width: `${box.width}px`, height: `${box.height}px`,
+      });
+      if (tilt) ghost.style.setProperty('--tilt', tilt);
+      container.append(ghost);
+      const out = ghost.animate([{ opacity: 1, scale: '1' }, { opacity: 0, scale: '0.94' }], { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+      const remove = () => ghost.remove();
+      out.finished.then(remove, remove);
+      setTimeout(remove, 400);
     });
   }
   // Countries are floating tiles, each tinted with its own color (from the name).
@@ -6897,9 +7015,10 @@
     } catch (error) { toast(error.message); button.disabled = false; }
   });
 
+  const searchOptions = searchAfterPause(() => renderListOptions());
   $$('#listsCard [data-option-search]').forEach(input => input.addEventListener('input', () => {
     optionSearch[input.closest('.option-list').dataset.optionType] = input.value;
-    renderListOptions();
+    searchOptions();
   }));
 
   // --- Search keywords, inline in the price table: each product-group row shows its shortcuts as
@@ -6963,7 +7082,8 @@
     input.addEventListener('blur', () => finish(true));
     ['click', 'dblclick', 'mousedown'].forEach(type => input.addEventListener(type, event => event.stopPropagation()));
   }
-  $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; renderLibrary(); });
+  const searchLibrary = searchAfterPause(() => flipMove($('#libraryGrid'), () => renderLibrary()));
+  $('#librarySearchInput')?.addEventListener('input', event => { state.librarySearch = event.target.value; searchLibrary(); });
   $('#libraryFolders')?.addEventListener('click', event => {
     const button = event.target.closest('[data-library-folder]');
     if (!button) return;
@@ -7012,6 +7132,50 @@
       renderLibrary();
       toast(data.message);
     } catch (error) { renderLibrary(); toast(error.message); }
+  });
+
+  // Renaming a photo in place: the name becomes a text box. Enter or clicking away saves, Esc cancels.
+  function startPhotoRename(id) {
+    const photo = (state.photoLibrary || []).find(item => item.id === id);
+    const name = $(`#libraryGrid .library-name[data-photo-id="${CSS.escape(id)}"]`);
+    if (!photo || !name || name.closest('.library-name-row').classList.contains('is-editing')) return;
+    const row = name.closest('.library-name-row');
+    row.classList.add('is-editing');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'library-name-input';
+    input.maxLength = 200;
+    input.value = photo.name;
+    input.setAttribute('aria-label', 'Photo name');
+    name.replaceWith(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = async save => {
+      if (done) return;
+      done = true;
+      const next = input.value.trim();
+      if (!save || !next || next === photo.name) { if (save && !next) toast('A photo needs a name.'); return renderLibrary(); }
+      input.disabled = true;
+      try {
+        const data = await api('library-rename', { method: 'POST', body: JSON.stringify({ id, name: next }) });
+        state.photoLibrary = state.photoLibrary.map(item => (item.id === data.photo.id ? data.photo : item));
+        toast(data.message);
+      } catch (error) { toast(error.message); }
+      renderLibrary();
+    };
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+  $('#libraryGrid')?.addEventListener('click', event => {
+    const trigger = event.target.closest('.library-rename, .library-name');
+    if (!trigger) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startPhotoRename(trigger.dataset.photoId);
   });
 
   /** Uploads several files to the library; resolves with the newly added photos. */
