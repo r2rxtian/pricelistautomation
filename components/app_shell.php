@@ -46,7 +46,7 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=207">
+    <link rel="stylesheet" href="../styles/app.css?v=209">
     <script>
     (function() {
         try {
@@ -96,6 +96,9 @@ if ($required !== null && !user_can($user, $required)) {
             <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
                 <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 <svg class="theme-icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+            <button id="guideBtn" class="help-btn" type="button" aria-haspopup="dialog" aria-controls="guideDialog" aria-label="How to use PLA" title="How to use PLA">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/></svg>
             </button>
             <div class="notifications-wrapper">
                 <button id="notificationBtn" class="notification-bell-btn" type="button" aria-expanded="false" aria-controls="notificationsDropdown" aria-label="Notifications" title="Notifications">
@@ -928,6 +931,18 @@ if ($required !== null && !user_can($user, $required)) {
 </div>
 <div id="codeSuggest" class="list-switcher-menu code-suggest" role="listbox" aria-label="LRN codes" hidden></div>
 <div id="rowMenu" class="row-menu" role="menu" hidden></div>
+<!-- How to use PLA: the screen-recorded guide (assets/videos/pla-guide.mp4), opened from the ? in the top bar. -->
+<dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideTitle">
+    <div class="dialog-card guide-card">
+        <header class="guide-head">
+            <div><p class="guide-kicker">Guide</p><h2 id="guideTitle">How to use PLA</h2><p class="guide-sub">A walkthrough of the whole system: uploading price lists, editing prices, approvals, exports and settings.</p></div>
+            <button type="button" class="icon-button guide-close" id="guideClose" aria-label="Close guide">×</button>
+        </header>
+        <div class="guide-player">
+            <video id="guideVideo" controls playsinline preload="none" data-src="../assets/videos/pla-guide.mp4"></video>
+        </div>
+    </div>
+</dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => csrfToken()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="../assets/vendor/xlsx.full.min.js"></script>
@@ -935,7 +950,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=9"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=195"></script>
+<script src="../scripts/app.js?v=196"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

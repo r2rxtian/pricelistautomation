@@ -6051,6 +6051,21 @@
     await importStagedFiles();
   });
 
+  // --- How to use PLA: the ? in the top bar opens the guide video. It loads on first open, picks
+  // up where you left off, and pauses when the window closes. ---
+  const guideDialog = $('#guideDialog');
+  const guideVideo = $('#guideVideo');
+  $('#guideBtn')?.addEventListener('click', () => {
+    if (!guideDialog || !guideVideo) return;
+    if (!guideVideo.src) { guideVideo.src = guideVideo.dataset.src; guideVideo.preload = 'auto'; }
+    toggleNotifications(false);
+    guideDialog.showModal();
+    guideVideo.play().catch(() => { }); // autoplay can be refused; the controls are there
+  });
+  $('#guideClose')?.addEventListener('click', () => guideDialog.close());
+  guideDialog?.addEventListener('click', event => { if (event.target === guideDialog) guideDialog.close(); }); // click outside
+  guideDialog?.addEventListener('close', () => guideVideo?.pause());
+
   // --- Audit Logs & Notification System ---
   function formatRelativeTime(isoString) {
     if (!isoString) return 'Just now';

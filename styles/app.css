@@ -11716,3 +11716,29 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 [data-theme="dark"] .person-card.keycard { background: color-mix(in srgb, var(--lane) 8%, #18191e); border-color: color-mix(in srgb, var(--lane) 28%, #2a2d34); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 [data-theme="dark"] .keycard .person-you { background: #fabbcb; color: #111216; }
 [data-theme="dark"] .keycard mark { background: rgba(250, 187, 203, .25); color: #fff; }
+
+/* The ? in the top bar (same look as the dark-mode toggle) and the guide window. */
+.help-btn {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border: 1px solid var(--line-panel); border-radius: 8px; background: var(--surface-card); color: var(--text-heading);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .04); cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.help-btn:hover, .help-btn:focus-visible { background: var(--pink-subtle); border-color: var(--pink); color: var(--pink); outline: none; }
+.help-btn:active { transform: scale(.95); }
+.help-btn svg { transition: transform .4s cubic-bezier(.34, 1.56, .64, 1); }
+.help-btn:hover svg { transform: rotate(-12deg); }
+[data-theme="dark"] .help-btn { background: #1b1d22; border-color: #2a2d35; color: #fabbcb; }
+[data-theme="dark"] .help-btn:hover { background: #2a161e; border-color: #fabbcb; box-shadow: 0 0 12px var(--pink-glow); }
+
+dialog.guide-dialog { width: min(1040px, calc(100vw - 32px)); }
+.guide-card { display: grid; gap: 14px; padding: 20px 22px 22px; }
+.guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.guide-kicker { margin: 0 0 2px !important; color: var(--pink) !important; font-size: .66rem !important; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.guide-head h2 { margin: 0; color: var(--text-heading); font: 700 1.35rem/1.2 var(--display); }
+.guide-sub { margin: 4px 0 0 !important; font-size: .82rem; }
+.guide-close { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.guide-close:hover { background: var(--pink-subtle); color: var(--pink); }
+.guide-player { overflow: hidden; border-radius: 12px; background: #0b0b0d; box-shadow: inset 0 0 0 1px var(--line-soft); }
+.guide-player video { display: block; width: 100%; max-height: calc(100vh - 220px); aspect-ratio: 1912 / 948; background: #0b0b0d; } /* the recording's own shape, so no black bars */
+@media (max-width: 1100px) { .help-btn { width: 34px; height: 34px; } }
