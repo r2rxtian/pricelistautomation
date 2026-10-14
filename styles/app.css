@@ -11742,3 +11742,19 @@ dialog.guide-dialog { width: min(1040px, calc(100vw - 32px)); }
 .guide-player { overflow: hidden; border-radius: 12px; background: #0b0b0d; box-shadow: inset 0 0 0 1px var(--line-soft); }
 .guide-player video { display: block; width: 100%; max-height: calc(100vh - 220px); aspect-ratio: 1912 / 948; background: #0b0b0d; } /* the recording's own shape, so no black bars */
 @media (max-width: 1100px) { .help-btn { width: 34px; height: 34px; } }
+
+
+
+/* Lamp pull (scripts/theme.js): a little bead chain under the theme toggle. It slides down on hover
+   and gets a tug when clicked; when the light goes out, a faint warm afterglow lingers at the lamp. */
+.theme-toggle-btn { overflow: visible; }
+.lamp-chain { position: absolute; top: calc(100% - 2px); left: 50%; z-index: 3; display: grid; justify-items: center; pointer-events: none; transform-origin: 50% 0; translate: -50% 0; scale: 1 0; opacity: 0; transition: scale .35s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease; }
+.theme-toggle-btn:hover .lamp-chain, .theme-toggle-btn:focus-visible .lamp-chain, .lamp-chain.is-tugged { scale: 1 1; opacity: 1; }
+.lamp-beads { width: 3px; height: 13px; background: radial-gradient(circle, color-mix(in srgb, var(--text-subtle) 85%, transparent) 1.1px, transparent 1.4px) 0 0 / 3px 3.2px repeat-y; }
+.lamp-knob { width: 7px; height: 9px; margin-top: -1px; border-radius: 3px 3px 4px 4px; background: linear-gradient(to bottom, #f0c37a, #c98f3a); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.lamp-chain.is-tugged { animation: lamp-tug .75s cubic-bezier(.3, 0, .2, 1); }
+@keyframes lamp-tug { 0% { translate: -50% 0; } 22% { translate: -50% 9px; } 46% { translate: -50% -2px; } 66% { translate: -50% 2px; } 100% { translate: -50% 0; } }
+.lamp-afterglow { position: fixed; z-index: 2147483000; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgba(255, 196, 120, .28), rgba(255, 170, 90, .1) 40%, transparent 70%); animation: lamp-afterglow 1.2s ease-out both; }
+@keyframes lamp-afterglow { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.4); } }
+[data-theme="dark"] .lamp-beads { background-image: radial-gradient(circle, rgba(250, 187, 203, .7) 1.1px, transparent 1.4px); }
+@media (prefers-reduced-motion: reduce) { .lamp-chain, .lamp-chain.is-tugged { animation: none; transition: none; } .lamp-afterglow { display: none; } }

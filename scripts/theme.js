@@ -62,6 +62,36 @@
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyTheme(saved || (prefersDark ? 'dark' : 'light'));
 
+  // Lamp pull: a little bead chain hangs under each theme toggle (it slides down on hover) and
+  // gets a tug on click; then the light goes out into the toggle (dark) or flickers on (light).
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+    if (btn.querySelector('.lamp-chain')) return;
+    const chain = document.createElement('span');
+    chain.className = 'lamp-chain';
+    chain.setAttribute('aria-hidden', 'true');
+    chain.innerHTML = '<i class="lamp-beads"></i><i class="lamp-knob"></i>';
+    btn.append(chain);
+  });
+  function tugChain(btn) {
+    const chain = btn.querySelector('.lamp-chain');
+    if (!chain) return;
+    chain.classList.remove('is-tugged');
+    void chain.offsetWidth;
+    chain.classList.add('is-tugged');
+    clearTimeout(chain.tugTimer);
+    chain.tugTimer = setTimeout(() => chain.classList.remove('is-tugged'), 900);
+  }
+  /** After the light goes out, a faint warm glow lingers at the lamp for a moment. */
+  function afterglow(x, y) {
+    const glow = document.createElement('div');
+    glow.className = 'lamp-afterglow';
+    glow.setAttribute('aria-hidden', 'true');
+    glow.style.left = `${Math.round(x)}px`;
+    glow.style.top = `${Math.round(y)}px`;
+    document.body.append(glow);
+    setTimeout(() => glow.remove(), 1300);
+  }
+
   let running = null;
   document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -76,8 +106,10 @@
       };
       root.classList.add('theme-busy');
       try { localStorage.setItem(KEY, next); } catch { }
-      // The new theme spreads out in a circle from this button over the old one (View Transitions;
-      // see the ::view-transition rules in styles/app.css). Without support, or with reduced motion, it's instant.
+      // Lamp pull: the chain is tugged; going dark, the pool of light shrinks back into the lamp (the
+      // toggle) and leaves a faint warm afterglow; going light, the lamp flickers and the light spreads
+      // out from it. (View Transitions; without support, or with reduced motion, the switch is instant.)
+      tugChain(btn);
       const smooth = typeof document.startViewTransition === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (!smooth) { swap(); requestAnimationFrame(() => requestAnimationFrame(settle)); }
       else {
@@ -85,19 +117,30 @@
         const box = btn.getBoundingClientRect();
         const x = box.left + box.width / 2;
         const y = box.top + box.height / 2;
-        const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-        // The circle is a CSS animation on the new snapshot, so it applies from the very first frame
-        // (started from script once the transition is ready, the new theme could show in full for a
-        // frame first: a blink). Its keyframes are written with this click's exact pixels, not CSS
-        // variables, so no browser can fall back to showing the whole new theme at once.
-        let reveal = document.getElementById('pla-theme-reveal');
-        if (!reveal) { reveal = document.createElement('style'); reveal.id = 'pla-theme-reveal'; document.head.append(reveal); }
-        const at = `at ${Math.round(x)}px ${Math.round(y)}px`;
-        reveal.textContent = `@keyframes pla-theme-reveal-now { from { clip-path: circle(0px ${at}); } to { clip-path: circle(${Math.ceil(radius)}px ${at}); } }
-          ::view-transition-new(root) { animation: pla-theme-reveal-now 650ms cubic-bezier(.65, 0, .25, 1) both; }`;
+        // Big enough for the pool of light to cover the farthest corner, soft edge included.
+        const reach = Math.ceil(Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)) * 2 * 1.55);
+        const at = size => `mask-size: ${size}px ${size}px; mask-position: ${Math.round(x - size / 2)}px ${Math.round(y - size / 2)}px; -webkit-mask-size: ${size}px ${size}px; -webkit-mask-position: ${Math.round(x - size / 2)}px ${Math.round(y - size / 2)}px;`;
+        const pool = 'radial-gradient(circle closest-side, #000 62%, rgba(0, 0, 0, .55) 80%, transparent 100%)';
+        const masked = `-webkit-mask-image: ${pool}; mask-image: ${pool}; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;`;
+        // Written out in full (no CSS variables) so the first frame is already right: no flash.
+        let lamp = document.getElementById('pla-theme-reveal');
+        if (!lamp) { lamp = document.createElement('style'); lamp.id = 'pla-theme-reveal'; document.head.append(lamp); }
+        lamp.textContent = next === 'dark'
+          ? `@keyframes pla-lamp-off { 0%, 8% { ${at(reach)} } 100% { ${at(0)} } }
+            ::view-transition-new(root) { animation: none; z-index: 1; }
+            ::view-transition-old(root) { animation: pla-lamp-off 700ms cubic-bezier(.45, 0, .7, .45) both; z-index: 2; ${masked} }`
+          : `@keyframes pla-lamp-on {
+              0% { ${at(70)} opacity: 0; } 7% { ${at(150)} opacity: .9; } 12% { ${at(150)} opacity: .15; }
+              19% { ${at(190)} opacity: 1; } 24% { ${at(190)} opacity: .45; } 30% { ${at(220)} opacity: 1; }
+              100% { ${at(reach)} opacity: 1; } }
+            ::view-transition-old(root) { animation: none; z-index: 1; }
+            ::view-transition-new(root) { animation: pla-lamp-on 900ms cubic-bezier(.3, 0, .2, 1) both; z-index: 2; ${masked} }`;
         const transition = running = document.startViewTransition(swap);
         transition.ready.catch(() => { });
-        transition.finished.catch(() => { }).finally(() => { if (running === transition) { running = null; settle(); } });
+        transition.finished.catch(() => { }).finally(() => {
+          if (running === transition) { running = null; settle(); }
+          if (next === 'dark') afterglow(x, y);
+        });
       }
       // Spin the new icon in (restarts if clicked again mid-animation).
       btn.classList.remove('is-switching');
