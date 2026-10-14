@@ -11370,3 +11370,46 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 @media (hover: none) { .library-rename { opacity: .7; } }
 .library-name-input::selection { background: color-mix(in srgb, var(--pink) 28%, transparent); color: inherit; }
 [data-theme="dark"] .library-name-input::selection { background: rgba(250, 187, 203, .35); }
+
+/* ==========================================================================
+   Files: each price list is a printed receipt. Level and menu on top, the name, details on dotted
+   leader lines, then the status stamp and "Open" above a torn zig-zag edge. The whole receipt opens
+   the list. (The drop shadow on .file-sheet follows the torn edge.)
+   ========================================================================== */
+.file-sheet.is-receipt { --paper: #fffdfb; --ink: #3a2a30; --ink-soft: #8a7a80; --rule: #e7dade; cursor: pointer; padding-bottom: 7px; }
+.file-sheet.is-receipt .sheet-paper { gap: 0; padding: 12px 14px 10px; border-radius: 6px 6px 0 0; background: var(--paper); clip-path: none; }
+.file-sheet.is-receipt .sheet-paper::after {
+  content: ""; top: 100%; right: 0; left: 0; width: auto; height: 7px; box-shadow: none; border-radius: 0;
+  background:
+    linear-gradient(135deg, var(--paper) 50%, transparent 50%) 0 0 / 10px 7px repeat-x,
+    linear-gradient(225deg, var(--paper) 50%, transparent 50%) 0 0 / 10px 7px repeat-x;
+}
+.file-sheet.is-receipt.is-open .sheet-paper { box-shadow: inset 0 2px 0 0 var(--pink); }
+.file-sheet.is-receipt .sheet-top { display: flex; align-items: center; gap: 8px; padding-right: 0; }
+.file-sheet.is-receipt .sheet-level { flex: 1 1 auto; color: var(--ink-soft); font-size: 0.66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.sheet-open-tag { flex: none; padding: 2px 7px; border-radius: 999px; background: var(--pink-subtle); color: var(--pink); font-size: 0.6rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.file-sheet.is-receipt .kebab-btn { flex: none; width: 26px; height: 26px; margin: -4px -6px -4px 0; }
+.file-sheet.is-receipt .sheet-name { margin: 8px 0 0; color: var(--ink); font: 600 1rem/1.3 var(--display); }
+.sheet-lines { display: grid; gap: 4px; margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed var(--rule); }
+.sheet-line { display: flex; align-items: baseline; min-width: 0; }
+.sheet-line dt { display: flex; flex: 1 1 auto; align-items: baseline; min-width: 26px; color: var(--ink-soft); font-size: 0.68rem; }
+.sheet-line dt::after { content: ""; flex: 1; min-width: 12px; margin: 0 6px; border-bottom: 1.5px dotted color-mix(in srgb, var(--ink-soft) 45%, transparent); transform: translateY(-3px); }
+.sheet-line dd { flex: 0 1 auto; min-width: 0; max-width: 72%; margin: 0; overflow: hidden; color: var(--ink); font: 600 0.72rem/1.4 ui-monospace, 'SFMono-Regular', Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-line dd > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.sheet-line .sheet-history { height: 20px; padding: 0 7px; font: 700 0.68rem ui-monospace, 'SFMono-Regular', Consolas, monospace; }
+.file-sheet.is-receipt .sheet-unsaved, .file-sheet.is-receipt .sheet-waiting, .file-sheet.is-receipt .sheet-rejected { margin-top: 8px; }
+.sheet-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.file-sheet.is-receipt .sheet-stamp { font-size: 0.56rem; }
+.sheet-open {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; min-height: 26px; padding: 0 2px 0 8px;
+  border: 0 !important; border-radius: 6px; background: transparent !important; box-shadow: none !important;
+  color: var(--pink) !important; font: 700 0.76rem var(--sans); cursor: pointer;
+}
+.sheet-open span { display: inline-block; font-size: 1rem; line-height: 1; transition: transform .3s cubic-bezier(0.22, 1, 0.36, 1); }
+.file-sheet.is-receipt:hover .sheet-open span, .sheet-open:focus-visible span { transform: translateX(3px); }
+.sheet-open:focus-visible { outline: 2px solid color-mix(in srgb, var(--pink) 50%, transparent); outline-offset: 1px; }
+
+[data-theme="dark"] .file-sheet.is-receipt { --paper: #1b1c21; --ink: #ececf0; --ink-soft: #8b8b94; --rule: #2c2f37; }
+[data-theme="dark"] .file-sheet.is-receipt.is-open .sheet-paper { box-shadow: inset 0 2px 0 0 #fabbcb; }
+[data-theme="dark"] .sheet-open-tag { background: #2a161e; color: #fabbcb; }
+[data-theme="dark"] .sheet-open { color: #fabbcb !important; }

@@ -2580,22 +2580,29 @@
       const last = latestChange(listKey(version));
       const rejected = last?.status === 'rejected' ? last : null;
       const stamp = waiting ? ['is-pending', 'Pending', 'A price change is waiting for approval (see the tray above)'] : updated ? ['is-updated', 'Updated', detail] : ['is-uploaded', 'Uploaded', detail];
-      return `<article class="file-sheet ${updated ? 'is-updated' : 'is-uploaded'} ${waiting ? 'is-pending' : ''} ${isOpen ? 'is-open' : ''}" role="listitem" data-key="${escapeHtml(listKey(version))}" aria-label="${name}, ${escapeHtml(version.priceLevel || '')}">
+      // A receipt: level and menu on top, the name, details on dotted leader lines, then the status
+      // stamp and "Open" above a torn edge. The whole receipt opens the list.
+      const line = (label, value, extra = '') => `<div class="sheet-line${extra}"><dt>${label}</dt><dd>${value}</dd></div>`;
+      return `<article class="file-sheet is-receipt ${updated ? 'is-updated' : 'is-uploaded'} ${waiting ? 'is-pending' : ''} ${isOpen ? 'is-open' : ''}" role="listitem" data-key="${escapeHtml(listKey(version))}" aria-label="${name}, ${escapeHtml(version.priceLevel || '')}">
         <div class="sheet-paper">
-          ${isOpen ? '<span class="sheet-ribbon" title="Open in the editor"></span>' : ''}
           <div class="sheet-top">
             <span class="sheet-level" title="Price level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>
-            <span class="sheet-stamp ${stamp[0]}" title="${escapeHtml(stamp[2])}">${stamp[1]}</span>
+            ${isOpen ? '<span class="sheet-open-tag" title="This list is open in the editor">In editor</span>' : ''}
+            <button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
           </div>
           <strong class="sheet-name" title="${name}">${name}</strong>
-          <small class="sheet-meta" title="${escapeHtml(`${detail} · uploaded by ${version.savedBy || 'unknown'}`)}">${products.toLocaleString()} product${products === 1 ? '' : 's'} · ${updated ? 'changed' : 'uploaded'} ${escapeHtml(formatRelativeTime(changedAt))} · ${escapeHtml(version.savedBy || 'Unknown')}</small>
+          <dl class="sheet-lines" title="${escapeHtml(detail)}">
+            ${line('Products', products.toLocaleString())}
+            ${line(updated ? 'Changed' : 'Uploaded', escapeHtml(formatRelativeTime(changedAt)))}
+            ${line('By', `<span title="${escapeHtml(version.savedBy || 'Unknown')}">${escapeHtml(version.savedBy || 'Unknown')}</span>`)}
+            ${versions > 1 ? line('Versions', `<button type="button" class="version-history-link sheet-history" data-id="${cid}" title="See all ${versions} versions">${versions}<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg></button>`) : ''}
+          </dl>
           ${isOpen && state.active?.isDraft ? '<small class="sheet-unsaved">Unsaved changes in the editor</small>' : ''}
           ${waiting ? '<small class="sheet-waiting">Change waiting for approval</small>' : ''}
           ${rejected ? `<small class="sheet-rejected" title="${escapeHtml(rejected.rejectionRemarks || 'No remarks')}">Last change rejected${rejected.rejectedBy ? ` by ${escapeHtml(rejected.rejectedBy)}` : ''}</small>` : ''}
-          <div class="sheet-actions">
-            <button type="button" class="row-primary" data-action="open" data-id="${cid}">${isOpen ? 'Go to editor' : 'Open'}</button>
-            ${versions > 1 ? `<button type="button" class="version-history-link sheet-history" data-id="${cid}" title="See all ${versions} versions"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/></svg>${versions}</button>` : ''}
-            <button type="button" class="kebab-btn" data-id="${cid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>
+          <div class="sheet-foot">
+            <span class="sheet-stamp ${stamp[0]}" title="${escapeHtml(stamp[2])}">${stamp[1]}</span>
+            <button type="button" class="row-primary sheet-open" data-action="open" data-id="${cid}">${isOpen ? 'Back to editor' : 'Open'}<span aria-hidden="true">›</span></button>
           </div>
         </div>
       </article>`;
@@ -2684,6 +2691,11 @@
     const opener = event.target.closest('.row-primary[data-action="open"]');
     if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip') || opener).getBoundingClientRect();
   }, true);
+  $('#filesTable')?.addEventListener('click', event => {
+    const receipt = event.target.closest('.file-sheet');
+    if (!receipt || event.target.closest('button, a, input, select, [role="menu"]')) return;
+    receipt.querySelector('.sheet-open')?.click();
+  });
   const searchFiles = searchAfterPause(() => renderFiles());
   $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; searchFiles(); });
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
