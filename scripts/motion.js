@@ -453,6 +453,7 @@
       ctx.restore();
     }
     function draw(time) {
+      if (root.classList.contains('theme-busy')) { frame = requestAnimationFrame(draw); return; } // held still during a theme switch
       ctx.clearRect(0, 0, width, height);
       const dark = root.dataset.theme === 'dark';
       bits.forEach(bit => {

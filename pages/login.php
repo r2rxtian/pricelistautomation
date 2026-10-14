@@ -102,7 +102,7 @@ try {
         <div class="capability"><span>04</span><strong>Export</strong><small>Excel or PDF</small></div>
     </aside>
 </main>
-<script src="../scripts/theme.js?v=8"></script>
+<script src="../scripts/theme.js?v=9"></script>
 <script src="../scripts/login.js?v=5"></script>
 </body>
 </html>

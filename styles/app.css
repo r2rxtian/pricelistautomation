@@ -11545,3 +11545,14 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
   background-color: #3a1f29 !important;
   box-shadow: inset 0 0 0 1.5px #fabbcb;
 }
+
+/* Users: search beside the title; matches are marked on the cards. */
+.users-head { flex-wrap: wrap; }
+.users-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.users-search { width: 280px; height: 36px; background: var(--surface-card); }
+.person-card mark { padding: 0 1px; border-radius: 3px; background: color-mix(in srgb, var(--pink) 18%, transparent); color: inherit; }
+.lane-nomatch { margin: 0; padding: 14px 10px; color: var(--text-subtle); font-size: 0.74rem; font-style: italic; text-align: center; }
+.user-board.is-searching .lane-add { display: none; }
+@media (max-width: 720px) { .users-head-tools, .users-search { width: 100%; } }
+[data-theme="dark"] .person-card mark { background: rgba(250, 187, 203, .25); color: #fff; }
+[data-theme="dark"] .users-search { background: #17181d; border-color: #2a2d34; }

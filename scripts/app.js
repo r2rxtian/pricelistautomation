@@ -3305,7 +3305,9 @@
       toast(`${saved} file${saved === 1 ? '' : 's'} uploaded.`);
       return;
     }
-    toast(`${saved} of ${tried} files uploaded${tried < stagedFiles.length ? ` (${stagedFiles.length - tried} skipped, not the template)` : ''}. Check the files marked ✕.`);
+    const skipped = stagedFiles.length - tried;
+    const failedNow = tried - saved;
+    toast([`${saved} file${saved === 1 ? '' : 's'} uploaded`, failedNow ? `${failedNow} failed` : '', skipped ? `${skipped} skipped (not the template)` : ''].filter(Boolean).join(' · ') + '.');
   }
 
   async function openUploadModal() {
@@ -6755,6 +6757,16 @@
   const LANE_LABELS = { Admin: 'Admins', User: 'Export only', off: 'No access' };
   const GRIP_ICON = '<svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="3" r="1.4"/><circle cx="7" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="7" cy="13" r="1.4"/></svg>';
   const LOCK_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  // Search: name, position, department, biometrics no., employee ID or username; matches are marked.
+  let userQuery = '';
+  const userWords = () => userQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const userHaystack = account => [account.name, account.position, account.department, account.biometricsId, account.employeeId, account.username].filter(Boolean).join(' ').toLowerCase();
+  const userMatches = account => userWords().every(word => userHaystack(account).includes(word));
+  function markMatches(text) {
+    const safe = escapeHtml(text);
+    const words = userWords().map(word => escapeHtml(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return words.length ? safe.replace(new RegExp(`(${words.join('|')})`, 'gi'), '<mark>$1</mark>') : safe;
+  }
   function personCard(account) {
     const self = account.username === state.user?.username;
     const name = escapeHtml(account.name);
@@ -6764,9 +6776,9 @@
       ${self ? '' : `<span class="person-grip" aria-hidden="true">${GRIP_ICON}</span>`}
       <span class="user-avatar person-avatar" aria-hidden="true">${escapeHtml(initials(account.name))}</span>
       <div class="person-info">
-        <strong class="person-name"><span title="${name}">${name}</span>${self ? '<span class="person-you">You</span>' : ''}</strong>
-        <small class="person-dept" title="${details}">${details}</small>
-        <small class="person-meta">${account.biometricsId ? `Bio ${escapeHtml(account.biometricsId)} · ` : ''}${seen}</small>
+        <strong class="person-name"><span title="${name}">${markMatches(account.name)}</span>${self ? '<span class="person-you">You</span>' : ''}</strong>
+        <small class="person-dept" title="${details}">${markMatches([account.position, account.department].filter(Boolean).join(' · ') || 'No department on file')}</small>
+        <small class="person-meta">${account.biometricsId ? `Bio ${markMatches(String(account.biometricsId))} · ` : ''}${seen}</small>
       </div>
       ${self
         ? `<span class="person-lock" title="Your own access can’t be changed here. Ask another admin.">${LOCK_ICON}</span>`
@@ -6778,13 +6790,20 @@
     if (!board) return;
     closePersonMenu();
     const active = userAccounts.filter(account => account.active).length;
-    $('#userListCount').textContent = `${active} with access${userAccounts.length > active ? ` · ${userAccounts.length - active} without` : ''}`;
+    const searching = userWords().length > 0;
+    const found = searching ? userAccounts.filter(userMatches).length : 0;
+    $('#userListCount').textContent = searching
+      ? `${found} of ${userAccounts.length} match “${userQuery.trim()}”`
+      : `${active} with access${userAccounts.length > active ? ` · ${userAccounts.length - active} without` : ''}`;
+    board.classList.toggle('is-searching', searching);
     flipMove(board, () => {
       $$('#userBoard .user-lane').forEach(lane => {
-        const people = userAccounts.filter(account => laneOf(account) === lane.dataset.lane);
-        lane.querySelector('[data-lane-cards]').innerHTML = people.map(personCard).join('');
-        lane.querySelector('[data-lane-count]').textContent = String(people.length);
-        lane.classList.toggle('is-empty', !people.length);
+        const everyone = userAccounts.filter(account => laneOf(account) === lane.dataset.lane);
+        const people = searching ? everyone.filter(userMatches) : everyone;
+        lane.querySelector('[data-lane-cards]').innerHTML = people.map(personCard).join('')
+          || (searching && everyone.length ? '<p class="lane-nomatch">No one here matches</p>' : '');
+        lane.querySelector('[data-lane-count]').textContent = searching ? `${people.length}/${everyone.length}` : String(everyone.length);
+        lane.classList.toggle('is-empty', !everyone.length);
       });
     });
   }
@@ -6809,6 +6828,12 @@
       toast(error.message);
     }
   }
+
+  const searchUsers = searchAfterPause(() => renderUsers());
+  $('#userSearch')?.addEventListener('input', event => { userQuery = event.target.value; searchUsers(); });
+  $('#userSearch')?.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && event.target.value) { event.preventDefault(); event.target.value = ''; userQuery = ''; renderUsers(); }
+  });
 
   // Drag a card to another lane. The lanes it can go to light up; the one under the pointer says what a drop does.
   const userBoard = $('#userBoard');

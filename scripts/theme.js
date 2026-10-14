@@ -67,32 +67,37 @@
     btn.addEventListener('click', () => {
       const root = document.documentElement;
       const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      // Element transitions stay paused for the whole switch (until the reveal ends), so nothing on
+      // the page changes underneath it. Decorative animations (the top bar's pastries) pause too.
+      const settle = () => { root.classList.remove('theme-switching'); root.classList.remove('theme-busy'); };
       const swap = () => {
-        // Pause every element transition for the switch so the page changes in one step underneath.
         root.classList.add('theme-switching');
         applyTheme(next);
-        requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
       };
+      root.classList.add('theme-busy');
       try { localStorage.setItem(KEY, next); } catch { }
       // The new theme spreads out in a circle from this button over the old one (View Transitions;
       // see the ::view-transition rules in styles/app.css). Without support, or with reduced motion, it's instant.
       const smooth = typeof document.startViewTransition === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!smooth) swap();
+      if (!smooth) { swap(); requestAnimationFrame(() => requestAnimationFrame(settle)); }
       else {
         running?.skipTransition(); // a quick second click finishes the first switch at once
         const box = btn.getBoundingClientRect();
         const x = box.left + box.width / 2;
         const y = box.top + box.height / 2;
         const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-        // The circle itself is a CSS animation on the new snapshot (styles/app.css), so it applies from
-        // the very first frame. Started from script after the transition is ready, the new theme could
-        // show in full for a frame first, which looked like a blink.
-        root.style.setProperty('--vt-x', `${x}px`);
-        root.style.setProperty('--vt-y', `${y}px`);
-        root.style.setProperty('--vt-r', `${Math.ceil(radius)}px`);
+        // The circle is a CSS animation on the new snapshot, so it applies from the very first frame
+        // (started from script once the transition is ready, the new theme could show in full for a
+        // frame first: a blink). Its keyframes are written with this click's exact pixels, not CSS
+        // variables, so no browser can fall back to showing the whole new theme at once.
+        let reveal = document.getElementById('pla-theme-reveal');
+        if (!reveal) { reveal = document.createElement('style'); reveal.id = 'pla-theme-reveal'; document.head.append(reveal); }
+        const at = `at ${Math.round(x)}px ${Math.round(y)}px`;
+        reveal.textContent = `@keyframes pla-theme-reveal-now { from { clip-path: circle(0px ${at}); } to { clip-path: circle(${Math.ceil(radius)}px ${at}); } }
+          ::view-transition-new(root) { animation: pla-theme-reveal-now 650ms cubic-bezier(.65, 0, .25, 1) both; }`;
         const transition = running = document.startViewTransition(swap);
         transition.ready.catch(() => { });
-        transition.finished.finally(() => { if (running === transition) running = null; });
+        transition.finished.catch(() => { }).finally(() => { if (running === transition) { running = null; settle(); } });
       }
       // Spin the new icon in (restarts if clicked again mid-animation).
       btn.classList.remove('is-switching');

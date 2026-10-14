@@ -38,7 +38,7 @@ $panel = APP_PAGES[$page]['panel'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=202">
+    <link rel="stylesheet" href="../styles/app.css?v=203">
     <script>
     (function() {
         try {
@@ -577,7 +577,10 @@ $panel = APP_PAGES[$page]['panel'];
                 <div class="users-card" id="usersCard">
                     <header class="users-head">
                         <div><h2 id="userListTitle">People with access</h2><p id="userListCount" class="option-list-sub"></p></div>
+                        <div class="users-head-tools">
+                            <label class="option-search users-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input id="userSearch" type="search" placeholder="Search people, departments, bio no.…" autocomplete="off" aria-label="Search users"></label>
                         <p class="users-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Drag someone to another lane to change their access</p>
+                        </div>
                     </header>
                     <!-- Access lanes: where a person sits is their access. Drag a card to another lane (or use its ⋯ menu). -->
                     <div class="user-board" id="userBoard" aria-labelledby="userListTitle">
@@ -922,11 +925,11 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/xlsx.full.min.js"></script>
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="../scripts/theme.js?v=8"></script>
+<script src="../scripts/theme.js?v=9"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=188"></script>
+<script src="../scripts/app.js?v=190"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=19"></script>
+<script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>
