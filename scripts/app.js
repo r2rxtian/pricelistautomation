@@ -211,7 +211,66 @@
     const value = String(path || '');
     return !value || /^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(value) ? value : `../${value}`;
   }
-  function toast(message) { dom.toast.textContent = message; dom.toast.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => dom.toast.classList.remove('show'), 2600); }
+  function toast(message) { dom.toast.classList.remove('is-trash'); dom.toast.textContent = message; dom.toast.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => dom.toast.classList.remove('show'), 2600); }
+  // --- Deleting: the thing crumples into a paper ball and is tossed into a little bin in the toast,
+  // whose lid flips open to catch it and snaps shut. Quick, never in the way, off with reduced motion.
+  /** Takes a picture of an element about to be deleted (call before it is re-rendered away). */
+  function snapForTrash(el) {
+    if (!el?.isConnected || reducedMotion()) return null;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height || rect.bottom < 0 || rect.top > innerHeight) return null;
+    const node = el.cloneNode(true);
+    node.removeAttribute('id');
+    node.querySelectorAll('[id]').forEach(child => child.removeAttribute('id'));
+    return { node, rect, radius: getComputedStyle(el).borderRadius };
+  }
+  const BIN_ICON = '<span class="toast-bin" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g class="bin-lid"><line x1="3" y1="6" x2="21" y2="6"/><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/></g><path d="M19 6l-1 13.5A2 2 0 0 1 16 21.5H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></span>';
+  /** A toast with a bin; when given a snap (from snapForTrash), the item is tossed into it. */
+  function trashToast(message, snap = null) {
+    toast(message);
+    dom.toast.insertAdjacentHTML('afterbegin', BIN_ICON);
+    dom.toast.classList.add('is-trash');
+    if (reducedMotion()) return;
+    const bin = dom.toast.querySelector('.toast-bin');
+    const lid = bin.querySelector('.bin-lid');
+    const flick = (el, frames, options) => { try { return el.animate(frames, options); } catch { return null; } };
+    if (!snap) { // nothing to throw: the lid just flips
+      flick(lid, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(-32deg) translateY(-1px)', offset: 0.4 }, { transform: 'rotate(0deg)' }], { duration: 520, delay: 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
+      return;
+    }
+    // Where the bin will be once the toast has settled (offsets ignore its entrance transform).
+    const toX = dom.toast.offsetLeft + bin.offsetLeft + bin.offsetWidth / 2;
+    const toY = dom.toast.offsetTop + bin.offsetTop + bin.offsetHeight / 2 - 2;
+    const { node, rect } = snap;
+    const ghost = document.createElement('div');
+    ghost.className = 'trash-ghost';
+    Object.assign(ghost.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, borderRadius: snap.radius || '10px' });
+    Object.assign(node.style, { margin: '0', width: '100%', height: '100%', transform: 'none', translate: 'none', rotate: 'none', scale: 'none', animation: 'none', pointerEvents: 'none' });
+    ghost.append(node);
+    document.body.append(ghost);
+    const ball = 22;
+    const sx = ball / rect.width, sy = ball / rect.height;
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const dx = toX - cx, dy = toY - cy;
+    const lift = Math.min(160, Math.max(70, Math.abs(dx) * 0.25)); // a little arc over to the bin
+    const at = (x, y, scaleX, scaleY, turn) => `translate(${x}px, ${y}px) scale(${scaleX}, ${scaleY}) rotate(${turn}deg)`;
+    const flight = flick(ghost, [
+      { transform: at(0, 0, 1, 1, 0), borderRadius: snap.radius || '10px', offset: 0 },
+      { transform: at(0, -6, 1.02, 1.02, -2), offset: 0.1, easing: 'cubic-bezier(0.5, 0, 0.75, 0)' },
+      { transform: at(0, 0, sx, sy, -40), borderRadius: '50%', offset: 0.34, easing: 'cubic-bezier(0.33, 0, 0.67, 0.4)' },
+      { transform: at(dx * 0.55, Math.min(0, dy) * 0.55 - lift, sx, sy, 160), borderRadius: '50%', offset: 0.7, easing: 'cubic-bezier(0.33, 0.6, 0.67, 1)' },
+      { transform: at(dx, dy, sx * 0.55, sy * 0.55, 320), borderRadius: '50%', opacity: 1, offset: 0.97 },
+      { transform: at(dx, dy + 4, sx * 0.4, sy * 0.4, 330), borderRadius: '50%', opacity: 0, offset: 1 },
+    ], { duration: 900, fill: 'forwards' });
+    // The crumple: a paper-ball texture fades in as it shrinks.
+    flick(ghost, [{ opacity: 0 }, { opacity: 0, offset: 0.12 }, { opacity: 1, offset: 0.34 }, { opacity: 1 }], { duration: 900, fill: 'forwards', pseudoElement: '::after' });
+    // The lid opens as the ball comes over and snaps shut when it lands; the bin gives a tiny jolt.
+    flick(lid, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(-38deg) translateY(-1px)', offset: 0.3 }, { transform: 'rotate(-38deg) translateY(-1px)', offset: 0.72 }, { transform: 'rotate(4deg)', offset: 0.86 }, { transform: 'rotate(0deg)' }], { duration: 640, delay: 430, easing: 'ease-out' });
+    flick(bin, [{ transform: 'none' }, { transform: 'translateY(1.5px) rotate(-7deg)', offset: 0.35 }, { transform: 'rotate(5deg)', offset: 0.65 }, { transform: 'none' }], { duration: 380, delay: 880, easing: 'ease-out' });
+    const done = () => ghost.remove();
+    flight ? flight.finished.then(done, done) : done();
+    setTimeout(done, 1400);
+  }
   function escapeHtml(value) { const node = document.createElement('div'); node.textContent = String(value ?? ''); return node.innerHTML; }
   function displayDate(value) { if (!value) return 'Not saved'; return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
   function getCategoryAdjustment(category) {
@@ -5477,12 +5536,14 @@
     button.disabled = true;
     try {
       const deletedId = state.pendingDelete;
+      const sheet = $(`#filesTable [data-id="${CSS.escape(String(deletedId))}"]`)?.closest('.file-sheet, .approval-slip');
       const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: deletedId }) });
+      const snap = snapForTrash(sheet);
       state.pendingDelete = null;
       dom.deleteDialog.close();
       if (String(state.active?.id) === String(deletedId) && !state.active.isDraft) loadActive(null);
       await refreshState();
-      toast(data.message);
+      trashToast(data.message, snap);
     } catch (error) {
       toast(error.message);
     } finally {
@@ -5577,13 +5638,14 @@
         method: 'POST',
         body: JSON.stringify({ key: state.pendingImageDelete.key })
       });
+      const snap = snapForTrash($(`#imageSettingsList .delete-group-image[data-key="${CSS.escape(state.pendingImageDelete.key)}"]`)?.closest('.plate-card')?.querySelector('.plate'));
       state.productImages = state.productImages.filter(image => image.key !== state.pendingImageDelete.key);
       state.pendingImageDelete = null;
       clearPdfImageCache();
       dom.deleteImageDialog.close();
       renderImageSettings();
       renderTable();
-      toast(data.message);
+      trashToast(data.message, snap);
     } catch (error) {
       toast(error.message);
     } finally {
@@ -5734,7 +5796,8 @@
       event.stopPropagation();
       const box = keywordRemove.closest('.group-keywords');
       const keep = groupKeywords(box.dataset.category, box.dataset.group).filter(keyword => keyword !== keywordRemove.dataset.keyword);
-      saveGroupKeywords(box.dataset.category, box.dataset.group, keep).then(() => toast(`Removed "${keywordRemove.dataset.keyword}" from ${box.dataset.group}.`)).catch(error => toast(error.message));
+      const chipSnap = snapForTrash(keywordRemove.closest('.gk-chip'));
+      saveGroupKeywords(box.dataset.category, box.dataset.group, keep).then(() => trashToast(`Removed "${keywordRemove.dataset.keyword}" from ${box.dataset.group}.`, chipSnap)).catch(error => toast(error.message));
       return;
     }
     const chooseButton = event.target.closest('.choose-group-image');
@@ -6586,7 +6649,7 @@
       if (optionEditing?.startsWith(`${type}|`)) requestAnimationFrame(() => { const input = rows.querySelector('.is-editing input:not([disabled])'); input?.focus(); input?.select(); });
     });
   }
-  async function saveListOptions(type, items, message) {
+  async function saveListOptions(type, items, message, trash) {
     // Countries have no on/off any more: every country in the list is offered.
     const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active }) => ({ name, description, active: type === 'countries' ? true : active })) }) });
     state.listOptions = { ...state.listOptions, [type]: data.items };
@@ -6594,13 +6657,13 @@
     if (type === 'priceLevels') state.priceLevelInfo = data.items.map(({ name, description }) => ({ name, description }));
     optionEditing = null;
     renderListOptions();
-    toast(message || data.message);
+    if (trash !== undefined) trashToast(message || data.message, trash); else toast(message || data.message);
   }
-  async function changeListOptions(section, change, message) {
+  async function changeListOptions(section, change, message, trash) {
     const type = section.dataset.optionType;
     const items = (state.listOptions[type] || []).map(item => ({ ...item }));
     if (change(items) === false) return;
-    try { await saveListOptions(type, items, message); } catch (error) { toast(error.message); renderListOptions(); }
+    try { await saveListOptions(type, items, message, trash); } catch (error) { toast(error.message); renderListOptions(); }
   }
   $('#listsCard')?.addEventListener('click', event => {
     const button = event.target.closest('[data-option-action]');
@@ -6614,7 +6677,8 @@
     if (action === 'cancel') { optionEditing = null; return renderListOptions(); }
     if (action === 'toggle') return flipSwitch(button).then(() => changeListOptions(section, items => { items[index].active = !items[index].active; }, `${item.name} ${item.active ? 'switched off for new price lists' : 'offered again'}.`));
     if (action === 'remove') {
-      const remove = () => changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`);
+      const snap = snapForTrash(button.closest('.option-row'));
+      const remove = () => changeListOptions(section, items => { items.splice(index, 1); }, `${item.name} removed.`, snap);
       const chip = button.closest('.country-card');
       if (!chip || reducedMotion()) return remove();
       chip.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.6)' }], { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
@@ -7268,12 +7332,13 @@
     if (!ok) return;
     try {
       const data = await api('library-delete', { method: 'POST', body: JSON.stringify({ id: photo.id }) });
+      const snap = snapForTrash(deleteButton.closest('.library-card'));
       state.photoLibrary = state.photoLibrary.filter(item => item.id !== photo.id);
       state.productImages = state.productImages.filter(image => image.libraryId !== photo.id);
       clearPdfImageCache();
       renderLibrary(); renderImageSettings();
       if (state.active) renderTable();
-      toast(data.message);
+      trashToast(data.message, snap);
     } catch (error) {
       toast(error.message);
     }

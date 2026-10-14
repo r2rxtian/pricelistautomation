@@ -11430,3 +11430,100 @@ html[data-initial-panel="usersPanel"] #usersPanel { display: flex !important; }
 .plate-card .plate-category { margin-top: 12px; }
 [data-theme="dark"] .plate-card .plate { background: #141519; box-shadow: inset 0 0 0 1px #2a2d34; }
 [data-theme="dark"] .plate-card:hover .plate { box-shadow: inset 0 0 0 1px rgba(250, 187, 203, .3); }
+
+/* ==========================================================================
+   Tablets, iPads and small laptops (and MacBooks at default scaling).
+   ========================================================================== */
+
+/* Navbar: labels never wrap onto two lines. Space runs out in this order: the IT credit (already
+   at 1320px), then your name (the role badge stays), then the nav labels (icons stay; the page
+   you're on keeps its label), then the logo's tagline. */
+.top-nav .nav-item, .top-nav .nav-item strong { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .topbar { column-gap: 14px; }
+  .top-nav { gap: 6px; }
+  .top-nav .nav-item { padding: 0 10px; }
+  .topbar-right { gap: 8px; }
+}
+@media (max-width: 1100px) {
+  .user-menu #userName { display: none; }
+}
+@media (max-width: 920px) {
+  .top-nav .nav-item:not(.active) strong { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .top-nav .nav-item:not(.active) { padding: 0 12px; }
+  .brand .pla-tagline { display: none; }
+}
+
+/* A narrow layout used to stack these toolbars as columns while their parts kept a horizontal
+   size hint, which became a height (a 240px-tall search box). They wrap as rows instead:
+   search on its own line, the filters side by side. */
+@media (max-width: 1100px) {
+  .history-tools { align-items: center; }
+  .history-tools .history-filter-group { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .history-tools .history-search-control { flex: 1 1 100%; min-height: 0; }
+  .history-tools .history-select-control { flex: 1 1 160px; min-width: 0; }
+  .history-tools .history-select-control select { width: 100%; min-width: 0; }
+}
+
+/* Editor heading: the country › price level chip and Export / Save share one row. */
+#workspacePanel > .page-heading { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; row-gap: 10px; }
+#workspacePanel > .page-heading > .heading-left { flex: 1 1 auto; min-height: 0; }
+#workspacePanel > .page-heading > .heading-actions { flex: 0 0 auto; width: auto; }
+
+/* The price table keeps readable columns and scrolls sideways inside its frame, instead of
+   squeezing until codes and descriptions overlap. */
+@media (max-width: 1240px) {
+  #priceTable { min-width: 1160px; }
+}
+
+/* Audit Logs: the logbook still carried a table-era minimum width (1,080–1,180px). */
+#historyTable.audit-logbook { min-width: 0; }
+
+/* Photo library header: wraps as rows (folder title, then search, count and upload). */
+.library-content-heading { flex-direction: row; }
+.library-content-heading .library-folder-heading { min-height: 0; }
+.library-content-heading .library-search { min-height: 0; }
+@media (max-width: 900px) {
+  .library-content-heading .library-search { flex: 1 1 100%; }
+  .library-content-heading .library-upload-controls { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .library-content-heading .library-upload-destination { flex: 1 1 200px; }
+  .library-content-heading .library-upload-destination select { flex: 1; width: 100%; }
+}
+
+/* Users: stacked lanes (narrow screens) size to their content, so they never overlap. */
+@media (max-width: 980px) {
+  .user-board { grid-auto-rows: max-content; grid-template-rows: none; align-content: start; }
+  .user-lane { min-height: auto; }
+}
+/* Editor toolbar on tablets: filters take the first row (search, categories, LRN code), the
+   Edit / Reset buttons the second, instead of squeezing the search box to a sliver. The formula
+   bar's keyboard hints step aside so the cell input keeps its room. */
+@media (max-width: 960px) {
+  .data-panel.full-table > .table-tools { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+  .data-panel .table-tools .filter-group.filter-group-wide { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+  .filter-group-wide .search { flex: 1 1 100%; max-width: none; }
+  .filter-group-wide .category-picker { flex: 1 1 200px; }
+  .filter-group-wide .code-filter { flex: 1 1 160px; }
+  .data-panel.full-table > .table-tools > .actions { justify-content: flex-end; }
+  .excel-formula-bar .formula-hint-badge { display: none; }
+}
+@media (max-width: 960px) {
+  .data-panel.full-table > .table-tools { flex-wrap: wrap; }
+  .data-panel.full-table > .table-tools > .filter-group-wide { flex: 1 1 100%; }
+  .data-panel.full-table > .table-tools > .actions { flex: 1 1 100%; }
+}
+
+/* Deleting: the item crumples into a paper ball and lands in the toast's bin (scripts/app.js). */
+.toast-bin { display: grid; flex: none; place-items: center; width: 26px; height: 26px; margin: -4px 2px -4px -4px; border-radius: 8px; background: var(--pink-subtle); color: var(--pink); transform-origin: 50% 100%; }
+.toast-bin .bin-lid { transform-box: fill-box; transform-origin: 8% 100%; }
+.trash-ghost { position: fixed; z-index: 2000; overflow: hidden; pointer-events: none; box-shadow: 0 10px 24px -12px rgba(40, 20, 30, .5); transform-origin: 50% 50%; will-change: transform; }
+.trash-ghost > * { box-sizing: border-box; }
+/* The paper-ball look: soft creases over the shrinking item. */
+.trash-ghost::after {
+  content: ""; position: absolute; inset: 0; opacity: 0; border-radius: inherit;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .95) 0 14%, transparent 34%),
+    conic-gradient(from 25deg, #f7f1f3, #d8ccd1, #fbf8f9, #cbbfc5, #f3ecef, #ddd2d7, #f9f4f6, #d3c7cc, #f7f1f3);
+}
+[data-theme="dark"] .toast-bin { background: rgba(250, 187, 203, .14); color: #fabbcb; }
+[data-theme="dark"] .trash-ghost::after { background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .5) 0 14%, transparent 34%), conic-gradient(from 25deg, #4a4048, #2c262b, #5a4f57, #2a2429, #4d434b, #332c31, #574c54, #2e282d, #4a4048); }
