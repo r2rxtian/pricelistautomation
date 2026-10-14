@@ -2568,6 +2568,11 @@
       const key = listKey(version);
       if (!latest.has(key) || (version.revision || 0) > (latest.get(key).revision || 0)) latest.set(key, version);
     });
+    // Export-only users only receive live lists, so a list whose upload was replaced by an approved
+    // change has no upload here: its live version stands in as the file.
+    (state.versions || []).filter(version => ['approved', 'uploaded'].includes(version.status)).forEach(version => {
+      if (!latest.has(listKey(version))) latest.set(listKey(version), version);
+    });
     const files = [...latest.values()];
     filesView.country = fillSelect($('#filesCountryFilter'), uniqueValues(files.map(v => v.country)), 'All countries', filesView.country);
     filesView.level = fillSelect($('#filesLevelFilter'), uniqueValues(files.map(v => v.priceLevel)), 'All price levels', filesView.level);
@@ -2604,7 +2609,7 @@
     });
     const sheet = version => {
       const current = liveRevisionOf(version) || version;
-      const updated = current.id !== version.id;
+      const updated = current.id !== version.id || current.source !== 'upload';
       const waiting = (state.versions || []).some(other => other.status === 'pending' && listKey(other) === listKey(version));
       const cid = escapeHtml(current.id);
       const name = escapeHtml(version.name);

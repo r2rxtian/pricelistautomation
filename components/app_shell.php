@@ -15,9 +15,10 @@ const APP_PAGES = [
     'prices' => ['panel' => 'workspacePanel', 'title' => 'Prices'],
     'files' => ['panel' => 'filesPanel', 'title' => 'Files'],
     'approvals' => ['panel' => 'filesPanel', 'title' => 'Files'], // merged into Files; old links still work
-    'audit_logs' => ['panel' => 'historyPanel', 'title' => 'Audit Logs'],
-    'users' => ['panel' => 'usersPanel', 'title' => 'Users'],
-    'config' => ['panel' => 'settingsPanel', 'title' => 'Config'],
+    // 'permission': opening the page without it shows 403 · No access (pages/403.php).
+    'audit_logs' => ['panel' => 'historyPanel', 'title' => 'Audit Logs', 'permission' => 'viewAudit'],
+    'users' => ['panel' => 'usersPanel', 'title' => 'Users', 'permission' => 'manageUsers'],
+    'config' => ['panel' => 'settingsPanel', 'title' => 'Config', 'permission' => 'manageImages'],
 ];
 $page = isset($page) && array_key_exists($page, APP_PAGES) ? $page : 'prices';
 
@@ -26,6 +27,13 @@ header('Pragma: no-cache');
 // Signed-out visitors go to login.php.
 $user = requireLogin();
 $panel = APP_PAGES[$page]['panel'];
+// A page your role doesn't include is refused (a real 403), not quietly swapped for Files.
+$required = APP_PAGES[$page]['permission'] ?? null;
+if ($required !== null && !user_can($user, $required)) {
+    $deniedPage = APP_PAGES[$page]['title'];
+    require __DIR__ . '/../pages/403.php';
+    exit;
+}
 ?>
 <!doctype html>
 <html lang="en"<?= $panel !== 'workspacePanel' ? ' data-initial-panel="' . $panel . '"' : '' ?>>
@@ -927,7 +935,7 @@ $panel = APP_PAGES[$page]['panel'];
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=9"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=194"></script>
+<script src="../scripts/app.js?v=195"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

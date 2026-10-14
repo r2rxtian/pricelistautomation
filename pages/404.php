@@ -17,7 +17,8 @@ $base = '/pricelistautomation/';
     <link rel="stylesheet" href="<?= $base ?>styles/app.css?v=127">
     <script>try { if (localStorage.getItem('pla_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}</script>
     <style>
-        .not-found { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; padding: 24px; background: var(--surface-page, #fffafb); }
+        .not-found { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; padding: 24px; background: var(--bg); }
+        .not-found .button { text-decoration: none; }
         .not-found .pla-lockup { margin-bottom: 18px; }
         .not-found strong { font-size: 3rem; color: var(--pink); }
         .not-found p { color: var(--text-muted); margin: 0 0 8px; }
