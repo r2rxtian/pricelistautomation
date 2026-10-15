@@ -21,7 +21,7 @@ GO
 -- ============================================================
 -- Roles (2 rows)
 -- ============================================================
-MERGE dbo.PLA_ACD_Roles AS target
+MERGE dbo.PLA_Roles AS target
 USING (VALUES
     ('Admin', 'Upload, update, save, approve and export price lists.'),
     ('User',  'Export approved price lists only.')
@@ -34,10 +34,10 @@ GO
 -- ============================================================
 -- Selected initial users
 -- ============================================================
-DECLARE @adminRoleId TINYINT = (SELECT id FROM dbo.PLA_ACD_Roles WHERE name = 'Admin');
-DECLARE @userRoleId TINYINT = (SELECT id FROM dbo.PLA_ACD_Roles WHERE name = 'User');
+DECLARE @adminRoleId TINYINT = (SELECT id FROM dbo.PLA_Roles WHERE name = 'Admin');
+DECLARE @userRoleId TINYINT = (SELECT id FROM dbo.PLA_Roles WHERE name = 'User');
 
-MERGE dbo.PLA_ACD_Users AS target
+MERGE dbo.PLA_Users AS target
 USING (
     SELECT employee_id, username, CASE WHEN role_key = 'admin' THEN @adminRoleId ELSE @userRoleId END AS role_id
     FROM (VALUES

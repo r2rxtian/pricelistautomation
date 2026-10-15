@@ -18,22 +18,22 @@ date_default_timezone_set('Asia/Manila');
 // Tables
 // ---------------------------------------------------------------------------
 
-// This app's own tables (dbo.PLA_ACD_*, see sql/schema.sql).
-const T_ROLES = 'dbo.PLA_ACD_Roles';
-const T_USERS = 'dbo.PLA_ACD_Users';
+// This app's own tables (dbo.PLA_*, see sql/schema.sql).
+const T_ROLES = 'dbo.PLA_Roles';
+const T_USERS = 'dbo.PLA_Users';
 
 // The company-wide HR master list this app does NOT own (same LRNPH_OJT database, maintained by
-// another system). PLA_ACD_Users.employee_id matches its EmployeeID column; its BiometricsID column
+// another system). PLA_Users.employee_id matches its EmployeeID column; its BiometricsID column
 // is the bridge from dbo.lrnph_users (see below). It is the single source of truth for names.
 const T_MASTER_LIST = 'dbo.lrn_master_list';
 
 // The company-wide login table this app does NOT own (shared by the internal apps). Its username
 // column holds the person's biometrics number (= lrn_master_list.BiometricsID) and its password the
-// company password hash. auth/login_handler.php bridges lrnph_users → lrn_master_list → PLA_ACD_Users.
+// company password hash. auth/login_handler.php bridges lrnph_users → lrn_master_list → PLA_Users.
 const T_LRNPH_USERS = 'dbo.lrnph_users';
 
 // Employees in this HR department get effective Admin access automatically at sign-in (same rule as
-// QRTS), so IT can support the system. Their rows are provisioned in PLA_ACD_Users with the User role;
+// QRTS), so IT can support the system. Their rows are provisioned in PLA_Users with the User role;
 // they are never approvers. Set to '' to turn this off.
 const IT_ADMIN_DEPARTMENT = 'Information Technology Department - LRN';
 
@@ -59,7 +59,7 @@ const LOGIN_LOCKOUT_MINUTES = 15;
 // Approval routing (Requirements.xlsx › "Process for Uploading | Update")
 //   Chelsea  → approved by Ms. Gen & Meg (Margaret)
 //   Margaret → approved by Ms. Gen & Chelsea
-// Keys and values are PLA_ACD_Users.username.
+// Keys and values are PLA_Users.username.
 // ---------------------------------------------------------------------------
 
 const APPROVERS = [

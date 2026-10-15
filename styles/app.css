@@ -11758,3 +11758,206 @@ dialog.guide-dialog { width: min(1040px, calc(100vw - 32px)); }
 @keyframes lamp-afterglow { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.4); } }
 [data-theme="dark"] .lamp-beads { background-image: radial-gradient(circle, rgba(250, 187, 203, .7) 1.1px, transparent 1.4px); }
 @media (prefers-reduced-motion: reduce) { .lamp-chain, .lamp-chain.is-tugged { animation: none; transition: none; } .lamp-afterglow { display: none; } }
+
+/* ==========================================================================
+   The price list (Files): one card on the same paper as the receipts; its countries and price levels
+   are views inside it ("Prices for" in the file header).
+   ========================================================================== */
+.ml-section { display: grid; gap: 18px; }
+
+.ml-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 4px 0 10px; }
+.ml-section-head h3 { margin: 0; color: var(--text-heading); font: 600 0.95rem var(--display); }
+.ml-section-head small { color: var(--text-subtle); font-size: 0.72rem; }
+
+.slip-ml-mark { display: inline-grid; flex: none; place-items: center; width: 24px; height: 19px; color: var(--pink); }
+.slip-ml-mark svg { width: 15px; height: 15px; }
+
+/* Editor: prices set just for this list (pink corner), amber when the masterlist moved since. */
+#priceTable td.excel-cell.is-own-price { position: relative; }
+#priceTable td.excel-cell.is-own-price::before { content: ""; position: absolute; top: 0; left: 0; border-top: 7px solid color-mix(in srgb, var(--pink) 70%, transparent); border-right: 7px solid transparent; }
+#priceTable td.excel-cell.is-own-stale::before { border-top-color: #f59e0b; }
+
+/* Upload dialog */
+dialog.ml-upload-dialog { width: min(760px, calc(100vw - 32px)); }
+dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; width: auto !important; max-width: none !important; max-height: min(88vh, 860px); }
+.ml-upload-step { display: grid; gap: 14px; min-height: 0; }
+.ml-reveal { display: grid; align-self: start; grid-template-rows: 0fr; margin-top: -14px; opacity: 0; visibility: hidden;
+  transition: grid-template-rows .36s cubic-bezier(0.22, 1, 0.36, 1), margin-top .36s cubic-bezier(0.22, 1, 0.36, 1), opacity .24s ease, visibility 0s linear .36s; }
+.ml-reveal.is-open { grid-template-rows: 1fr; margin-top: 0; opacity: 1; visibility: visible;
+  transition: grid-template-rows .36s cubic-bezier(0.22, 1, 0.36, 1), margin-top .36s cubic-bezier(0.22, 1, 0.36, 1), opacity .3s ease .06s, visibility 0s; }
+.ml-reveal-inner { min-height: 0; overflow: hidden; padding: 0 3px; margin: 0 -3px; }
+.ml-reveal.is-open .ml-reveal-inner { padding-block: 3px 4px; margin-block: -3px -4px; } /* room for the focus ring */
+
+/* Dropdowns with a flag / level badge in front, a soft chevron, and the app's pink focus ring. */
+.ml-select { position: relative; display: flex; align-items: center; min-width: 0; }
+.ml-select select {
+  width: 100%; min-width: 0; height: 42px; padding: 0 34px 0 44px;
+  border: 1px solid var(--line-panel); border-radius: 10px; background: var(--surface-card);
+  color: var(--text-subtle); font: 500 0.86rem var(--sans);
+  appearance: none; -webkit-appearance: none; cursor: pointer; outline: none;
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .04);
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease, color .18s ease;
+}
+.ml-select.is-filled select { color: var(--text-heading); font-weight: 600; }
+.ml-select select:hover { border-color: #d88b9c; background: var(--surface-elevated); }
+.ml-select select:focus-visible, .ml-select select:focus { border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-glow); }
+.ml-select-lead {
+  position: absolute; left: 10px; z-index: 1; display: inline-grid; place-items: center; width: 24px; height: 18px;
+  color: var(--text-subtle); pointer-events: none; transition: transform .3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ml-select-lead .country-flag, .ml-select-lead img, .ml-select-lead svg:not([width="15"]) { width: 24px; height: 17px; border-radius: 3px; }
+.ml-select-lead img, .ml-select-lead .country-flag { box-shadow: 0 0 0 1px rgba(40, 20, 30, .12); } /* white flags (Japan…) stay visible */
+.ml-select:focus-within .ml-select-lead { transform: scale(1.06); }
+.ml-select-chevron { position: absolute; right: 12px; color: var(--text-subtle); pointer-events: none; transition: transform .25s cubic-bezier(0.22, 1, 0.36, 1), color .18s ease; }
+.ml-select:hover .ml-select-chevron, .ml-select:focus-within .ml-select-chevron { color: var(--pink); }
+.ml-select:focus-within .ml-select-chevron { transform: translateY(1px); }
+
+.ml-drop-zone.has-file { border-style: solid; border-color: color-mix(in srgb, var(--pink) 45%, var(--line-th)); }
+.ml-drop-zone.has-file .drop-zone-text strong { color: var(--pink); }
+.ml-preview { overflow-y: auto; margin: 0 -4px; padding: 2px 4px 4px; }
+.ml-preview .review-stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.ml-upload-dialog .dialog-actions { margin-top: 14px; }
+
+@media (max-width: 900px) {
+}
+
+[data-theme="dark"] #priceTable td.excel-cell.is-own-price::before { border-top-color: rgba(250, 187, 203, .75); }
+[data-theme="dark"] #priceTable td.excel-cell.is-own-stale::before { border-top-color: #fbbf24; }
+
+/* The masterlist file in the editor: "Prices for" (the country › level chip) opens views of it. */
+.list-switcher-menu.is-masterlist .lsm-columns { grid-template-columns: 1fr 1fr; }
+.list-switcher-menu.is-masterlist .lsm-col-lists { display: none; }
+.lsm-item.lsm-base { margin-bottom: 6px; border-bottom: 1px dashed var(--line-soft); border-radius: 8px 8px 0 0; }
+.lsm-item.lsm-base .lsm-label { font-weight: 700; }
+.list-switcher-menu.is-masterlist .lsm-meta { color: var(--pink); }
+#workspacePanel.is-masterlist-file .list-context { border-color: color-mix(in srgb, var(--pink) 30%, var(--line-soft)); }
+
+/* % for many lists (Edit prices, in a country list of the masterlist) */
+.adj-scope { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 12px 0 2px; }
+.adj-scope-label { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.adj-scope-select select { height: 36px; padding-left: 38px; border-radius: 9px; font-size: 0.8rem; }
+.adj-scope-select .ml-select-lead { left: 9px; color: var(--pink); }
+.adj-scope-reveal { grid-column: 1 / -1; margin-top: -6px; }
+.adj-scope-reveal.is-open { margin-top: 2px; }
+.adj-scope-countries { overflow: hidden; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface-card); }
+.adj-scope-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 156px; overflow-y: auto; padding: 4px 0; overscroll-behavior: contain; }
+.price-popover .adj-scope-grid .adj-cat-row { height: 28px; }
+
+/* Saving the masterlist file: one row per view (or % for many lists), each can be dropped. */
+.ml-save-row { align-items: center; }
+.ml-pending-remove { flex: none; width: 26px; height: 26px; margin-left: 8px; }
+[data-theme="dark"] .adj-scope-countries { border-color: #2c2f37; background: #16171b; }
+[data-theme="dark"] .price-popover .adj-scope-all { background: #1d1f25; border-bottom-color: #2c2f37; }
+[data-theme="dark"] .list-switcher-menu.is-masterlist .lsm-meta { color: #fabbcb; }
+
+[data-theme="dark"] .ml-select select { border-color: #2c2f37; background: #1b1c21; color: #8b8b94; box-shadow: none; }
+[data-theme="dark"] .ml-select.is-filled select { color: #ececf0; }
+[data-theme="dark"] .ml-select select:hover { border-color: rgba(250, 187, 203, .35); background: #202127; }
+[data-theme="dark"] .ml-select select:focus { border-color: #fabbcb; box-shadow: 0 0 0 3px rgba(250, 187, 203, .14); }
+[data-theme="dark"] .ml-select select option { background: #1b1c21; color: #ececf0; }
+[data-theme="dark"] .ml-select:hover .ml-select-chevron, [data-theme="dark"] .ml-select:focus-within .ml-select-chevron { color: #fabbcb; }
+[data-theme="dark"] .adj-scope-select .ml-select-lead { color: #fabbcb; }
+
+/* Saving the masterlist file: one section per list (and per % for many lists) with its price changes. */
+#saveDialog .save-change-summary:has(.ml-save-section) { display: grid; gap: 10px; max-height: min(46vh, 420px); overflow-y: auto; padding: 10px; overscroll-behavior: contain; }
+.ml-save-section { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface-card); }
+.ml-save-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ml-save-head strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-heading); font-size: 0.84rem; text-overflow: ellipsis; white-space: nowrap; }
+.ml-save-head .ml-pending-remove { margin-left: 2px; }
+.ml-save-note { margin: 6px 0 0; color: var(--text-subtle); font-size: 0.74rem; line-height: 1.45; }
+.ml-save-rates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ml-save-section .edit-change-list { max-height: none; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-soft); }
+.ml-save-section .edit-change-row { flex-wrap: nowrap; }
+.ml-save-section .edit-change-code { min-width: 92px; }
+.ml-save-section .edit-change-col { min-width: 64px; }
+.ml-save-section .review-delta { margin-left: auto; font-size: 0.7rem; }
+[data-theme="dark"] .ml-save-section { border-color: #2c2f37; background: #1b1c21; }
+[data-theme="dark"] .ml-save-section .edit-change-list { border-top-color: #2c2f37; }
+.ml-save-section .adjustment-pill { flex: none; padding: 2px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; }
+.ml-save-section .adjustment-pill.pos { background: color-mix(in srgb, var(--good) 13%, transparent); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good); }
+.ml-save-section .adjustment-pill.neg { background: color-mix(in srgb, var(--danger) 13%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent); color: var(--danger); }
+[data-theme="dark"] .ml-save-section .adjustment-pill.pos { background: rgba(16, 185, 129, 0.18); border-color: rgba(16, 185, 129, 0.4); color: #34d399; }
+[data-theme="dark"] .ml-save-section .adjustment-pill.neg { background: #2a161e; border-color: #4e2a36; color: #fabbcb; }
+.ml-save-product { display: grid; flex: 1 1 auto; min-width: 0; line-height: 1.25; }
+.ml-save-product strong { overflow: hidden; color: var(--text-heading); font-size: 0.8rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ml-save-product small { color: var(--text-subtle); font-size: 0.66rem; letter-spacing: .02em; }
+.ml-save-section .edit-change-row { padding: 3px 0; }
+.ml-save-section .edit-change-col { flex: none; min-width: 58px; }
+.ml-save-section .review-delta { flex: none; min-width: 58px; text-align: right; }
+[data-theme="dark"] .ml-save-product strong { color: #ececf0; }
+/* One row per product: name (code under it) on the left, its changes in aligned columns on the right. */
+.ml-save-products { gap: 0; }
+.ml-save-product-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; padding: 7px 0; border-bottom: 1px dashed var(--line-soft); }
+.ml-save-product-row:last-child { border-bottom: 0; padding-bottom: 2px; }
+.ml-save-changes { display: grid; gap: 4px; }
+.ml-save-change { display: grid; grid-template-columns: 62px 66px 14px 66px 58px; align-items: center; justify-items: end; font-size: 0.76rem; }
+.ml-save-change .edit-change-col { justify-self: start; min-width: 0; color: var(--text-muted); }
+.ml-save-change .diff-chip { justify-self: stretch; text-align: right; }
+.ml-save-change .diff-arrow { justify-self: center; color: var(--text-subtle); }
+.ml-save-delta { justify-self: end; }
+.ml-save-delta .review-delta { margin: 0; font-size: 0.7rem; }
+[data-theme="dark"] .ml-save-product-row { border-bottom-color: #2c2f37; }
+@media (max-width: 640px) { .ml-save-product-row { grid-template-columns: 1fr; } .ml-save-changes { justify-self: end; } }
+.ml-upload-intro { margin: -6px 0 0; font-size: 0.84rem; }
+@media (prefers-reduced-motion: reduce) { .ml-reveal, .ml-reveal.is-open, .ml-select-lead, .ml-select-chevron { transition: none; } }
+
+/* ==========================================================================
+   Files › the price list: what it is, open it, or go straight to one country.
+   ========================================================================== */
+.ml-home {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 0;
+  overflow: hidden; border: 1px solid var(--line-panel); border-radius: 16px; background: var(--surface-card);
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .04), 0 10px 24px -14px rgba(40, 20, 30, .18);
+}
+.ml-home.is-open { box-shadow: inset 0 3px 0 0 var(--pink), 0 10px 24px -14px rgba(40, 20, 30, .18); }
+.ml-home-main { display: flex; gap: 16px; padding: 24px 26px; }
+.ml-home-mark { display: inline-grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--pink-subtle); color: var(--pink); }
+.ml-home-mark svg { width: 22px; height: 22px; }
+.ml-home-text { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.ml-home-kicker { margin: 0; color: var(--text-subtle); font-size: 0.68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ml-home-kicker span { color: var(--pink); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.ml-home h2 { margin: 0; color: var(--text-heading); font: 600 1.35rem/1.25 var(--display); }
+.ml-home-meta { margin: 0; color: var(--text-muted); font-size: 0.84rem; }
+.ml-home-status { margin: 4px 0 0; font-size: 0.78rem; font-weight: 600; }
+.ml-home-status.is-unsaved { color: var(--pink); }
+.ml-home-status.is-waiting { color: #b45309; }
+.ml-home-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.ml-home-actions .button { height: 40px; padding: 0 18px; font-size: 0.86rem; }
+.ml-home-open { border: 0 !important; box-shadow: 0 6px 14px -6px var(--pink-glow); }
+
+/* "See prices for": a soft side panel with the two dropdowns and Open. */
+.ml-home-pick {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) auto; align-content: center; gap: 10px;
+  margin: 0; padding: 22px 24px; border-left: 1px dashed var(--line-th);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--pink) 4%, var(--surface-card)), var(--surface-elevated));
+}
+.ml-home-pick-title { grid-column: 1 / -1; margin: 0; color: var(--text-heading); font-size: 0.86rem; font-weight: 700; }
+.ml-home-select select { height: 42px; }
+.ml-home-level { width: 22px; height: 22px; border-radius: 7px; background: var(--pink-subtle); color: var(--pink); font: 700 0.72rem ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.ml-home-go { display: inline-flex; align-items: center; gap: 6px; height: 42px; padding: 0 16px; }
+.ml-home-go span { font-size: 1rem; transition: transform .3s cubic-bezier(0.22, 1, 0.36, 1); }
+.ml-home-go:not(:disabled):hover span { transform: translateX(3px); }
+.ml-home-hint { grid-column: 1 / -1; margin: 0; color: var(--text-subtle); font-size: 0.74rem; }
+
+/* How it works: three quiet steps under the card. */
+.ml-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.ml-steps li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; color: var(--text-muted); font-size: 0.78rem; line-height: 1.45; }
+.ml-steps b { display: inline-grid; flex: none; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--line-th); color: var(--pink); font-size: 0.72rem; }
+.ml-steps strong { display: block; color: var(--text-heading); font-size: 0.8rem; }
+
+
+@media (max-width: 980px) {
+  .ml-home { grid-template-columns: 1fr; }
+  .ml-home-pick { border-left: 0; border-top: 1px dashed var(--line-th); }
+  .ml-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) { .ml-home-pick { grid-template-columns: 1fr; } }
+
+[data-theme="dark"] .ml-home { border-color: #2a2d34; background: #1b1c21; box-shadow: none; }
+[data-theme="dark"] .ml-home.is-open { box-shadow: inset 0 3px 0 0 #fabbcb; }
+[data-theme="dark"] .ml-home-mark, [data-theme="dark"] .ml-home-level { background: #2a161e; color: #fabbcb; }
+[data-theme="dark"] .ml-home-kicker span, [data-theme="dark"] .ml-home-status.is-unsaved { color: #fabbcb; }
+[data-theme="dark"] .ml-home-pick { border-left-color: #2c2f37; border-top-color: #2c2f37; background: linear-gradient(135deg, #1e1a1f, #17181c); }
+[data-theme="dark"] .ml-steps b { background: #1b1c21; box-shadow: inset 0 0 0 1px #3a3d46; color: #fabbcb; }
+.audit-what-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
+.audit-what-chips .diff-chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

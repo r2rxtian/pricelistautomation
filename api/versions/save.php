@@ -27,17 +27,23 @@ if ($isUpload) {
 $name = clean_text($data['name'] ?? '', 160);
 $priceLevelInput = clean_text($data['priceLevel'] ?? '', 120);
 $countryInput = clean_text($data['country'] ?? '', 120);
-if ($name === '' || $priceLevelInput === '' || $countryInput === '') {
-    json_response(['ok' => false, 'message' => 'Enter the price list name, price level, and country.'], 422);
-}
-// Countries come from the configured list, so "philippines" and "Philippines" are the same record.
-$country = canonical_country($countryInput);
-if ($country === null) {
-    json_response(['ok' => false, 'message' => "\"{$countryInput}\" is not in the country list. Choose a country from the dropdown."], 422);
-}
-$priceLevel = canonical_price_level($priceLevelInput);
-if ($priceLevel === null) {
-    json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not in the price level list. Choose a price level from the dropdown."], 422);
+// The masterlist and its lists have a fixed name, country and price level (taken from the list below).
+$virtualEdit = !$isUpload && masterlist_is_virtual_id(clean_text($data['id'] ?? '', 32));
+if ($virtualEdit) {
+    $country = $priceLevel = '';
+} else {
+    if ($name === '' || $priceLevelInput === '' || $countryInput === '') {
+        json_response(['ok' => false, 'message' => 'Enter the price list name, price level, and country.'], 422);
+    }
+    // Countries come from the configured list, so "philippines" and "Philippines" are the same record.
+    $country = canonical_country($countryInput);
+    if ($country === null) {
+        json_response(['ok' => false, 'message' => "\"{$countryInput}\" is not in the country list. Choose a country from the dropdown."], 422);
+    }
+    $priceLevel = canonical_price_level($priceLevelInput);
+    if ($priceLevel === null) {
+        json_response(['ok' => false, 'message' => "\"{$priceLevelInput}\" is not in the price level list. Choose a price level from the dropdown."], 422);
+    }
 }
 // New uploads only use countries and price levels that are still offered (Config); existing
 // price lists keep working with ones that were switched off later.
@@ -66,6 +72,7 @@ if ($isUpload) {
     // Country and price level are set at upload: saving price changes keeps the list's own.
     if (trim((string) ($editBase['country'] ?? '')) !== '') $country = $editBase['country'];
     if (trim((string) ($editBase['priceLevel'] ?? '')) !== '') $priceLevel = $editBase['priceLevel'];
+    if ($virtualEdit) $name = $editBase['name'];
     if (!empty($editBase['templateVersion'])) {
         if (($data['headers'] ?? null) !== price_list_template()['normalizedHeaders'] || ($data['priceColumns'] ?? null) !== [8, 9]) {
             json_response(['ok' => false, 'message' => 'The price list columns cannot be changed. Use the approved template layout.'], 422);
@@ -123,6 +130,15 @@ foreach ($categories as $category => $count) {
 // A price change that changes nothing (e.g. prices edited, then reset) is not saved as a new version.
 if (!$isUpload && !$adjustedCategories && isset($editBase) && rows_match_version($cleanRows, $editBase, $priceColumns)) {
     json_response(['ok' => false, 'message' => 'Nothing has changed since this price list was opened, so there is nothing to save.'], 422);
+}
+// Masterlist and its lists: work out exactly which prices (and, in the masterlist, details) change,
+// so approving applies only those, even if the masterlist moves on in the meantime.
+$masterlistEdits = null;
+if ($virtualEdit) {
+    $result = masterlist_edits($editBase, masterlist_effective_rows($cleanRows, (float) $adjustment, $categoryAdjustments));
+    if ($result['error'] !== null) json_response(['ok' => false, 'message' => $result['error']], 422);
+    if (!$result['edits']) json_response(['ok' => false, 'message' => 'Nothing has changed since this price list was opened, so there is nothing to save.'], 422);
+    $masterlistEdits = $result['edits'];
 }
 
 $changes = [];
@@ -242,6 +258,11 @@ $version = [
     // with it is on top of those prices: +5% means 5% more than before, not "+5% of the upload".
     'adjustOnCurrent' => ($data['adjustBase'] ?? '') === 'current',
 ];
+if ($virtualEdit) {
+    $version['kind'] = $editBase['kind'];
+    $version['basedOn'] = $editBase['id'];
+    $version['masterlistEdits'] = $masterlistEdits;
+}
 // Top approvers (e.g. Ms. Gen) publish directly: their saves are approved on the spot.
 $autoApproved = is_auto_approver($user['username']);
 if ($autoApproved) {
@@ -249,6 +270,7 @@ if ($autoApproved) {
     $version['approvals'] = [['username' => $user['username'], 'name' => $user['name'], 'at' => gmdate('c'), 'remarks' => 'Approved on save', 'auto' => true]];
     $version['approvedAt'] = gmdate('c');
     $version['approvedBy'] = $user['name'];
+    if ($virtualEdit) masterlist_apply_version($version, $user['name']);
 }
 repo_save_version($version);
 if ($autoApproved) supersede_older_approved($version);

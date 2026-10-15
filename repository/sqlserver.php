@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * SQL Server storage for price lists, audit logs, notifications and photos (dbo.PLA_ACD_* tables).
+ * SQL Server storage for price lists, audit logs, notifications and photos (dbo.PLA_* tables).
  * Used when conn/config.php sets PLA_STORAGE_DRIVER to 'sqlserver'.
  */
 
@@ -28,122 +28,218 @@ function database_connection(): PDO
 function ensure_database_schema(PDO $connection): void
 {
     $statements = [
-        "IF OBJECT_ID(N'dbo.PLA_ACD_Versions', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_Versions (
+        "IF OBJECT_ID(N'dbo.PLA_Versions', N'U') IS NULL
+         CREATE TABLE dbo.PLA_Versions (
             version_id varchar(32) NOT NULL PRIMARY KEY,
             list_name nvarchar(160) NOT NULL,
-            adjustment decimal(12,4) NOT NULL CONSTRAINT DF_PLA_ACD_Adjustment DEFAULT 0,
+            adjustment decimal(12,4) NOT NULL CONSTRAINT DF_PLA_Adjustment DEFAULT 0,
             saved_at datetime2(0) NOT NULL,
             saved_by nvarchar(180) NOT NULL,
             data_json nvarchar(max) NOT NULL,
-            CONSTRAINT CK_PLA_ACD_Versions_JSON CHECK (ISJSON(data_json) = 1)
+            CONSTRAINT CK_PLA_Versions_JSON CHECK (ISJSON(data_json) = 1)
          )",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'status') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD status nvarchar(20) NOT NULL CONSTRAINT DF_PLA_ACD_Status DEFAULT N'pending'",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'price_level') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD price_level nvarchar(120) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'country') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD country nvarchar(120) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'revision') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD revision int NOT NULL CONSTRAINT DF_PLA_ACD_Revision DEFAULT 1",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'saved_by_user') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD saved_by_user nvarchar(120) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_Versions', 'summary_json') IS NULL
-         ALTER TABLE dbo.PLA_ACD_Versions ADD summary_json nvarchar(max) NULL",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_ProductImages', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_ProductImages (
+        "IF COL_LENGTH('dbo.PLA_Versions', 'status') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD status nvarchar(20) NOT NULL CONSTRAINT DF_PLA_Status DEFAULT N'pending'",
+        "IF COL_LENGTH('dbo.PLA_Versions', 'price_level') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD price_level nvarchar(120) NULL",
+        "IF COL_LENGTH('dbo.PLA_Versions', 'country') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD country nvarchar(120) NULL",
+        "IF COL_LENGTH('dbo.PLA_Versions', 'revision') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD revision int NOT NULL CONSTRAINT DF_PLA_Revision DEFAULT 1",
+        "IF COL_LENGTH('dbo.PLA_Versions', 'saved_by_user') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD saved_by_user nvarchar(120) NULL",
+        "IF COL_LENGTH('dbo.PLA_Versions', 'summary_json') IS NULL
+         ALTER TABLE dbo.PLA_Versions ADD summary_json nvarchar(max) NULL",
+        "IF OBJECT_ID(N'dbo.PLA_ProductImages', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ProductImages (
             product_code nvarchar(100) NOT NULL PRIMARY KEY,
             image_path nvarchar(500) NOT NULL,
             alt_text nvarchar(250) NULL,
-            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_ImageUpdated DEFAULT SYSUTCDATETIME(),
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ImageUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_GroupImages', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_GroupImages (
+        "IF OBJECT_ID(N'dbo.PLA_GroupImages', N'U') IS NULL
+         CREATE TABLE dbo.PLA_GroupImages (
             image_key varchar(64) NOT NULL PRIMARY KEY,
             category_name nvarchar(120) NOT NULL,
             group_name nvarchar(300) NOT NULL,
             image_path nvarchar(500) NOT NULL,
             alt_text nvarchar(250) NULL,
-            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_GroupImageUpdated DEFAULT SYSUTCDATETIME(),
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_GroupImageUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_AuditLog', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_AuditLog (
+        "IF OBJECT_ID(N'dbo.PLA_AuditLog', N'U') IS NULL
+         CREATE TABLE dbo.PLA_AuditLog (
             audit_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
             action_name nvarchar(60) NOT NULL,
             version_id varchar(32) NULL,
             actor nvarchar(180) NOT NULL,
             details nvarchar(1000) NULL,
-            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_AuditCreated DEFAULT SYSUTCDATETIME()
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_AuditCreated DEFAULT SYSUTCDATETIME()
          )",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'log_uid') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD log_uid varchar(32) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'title') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD title nvarchar(300) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'actor_user') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD actor_user nvarchar(120) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'role_name') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD role_name nvarchar(40) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'file_name') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD file_name nvarchar(300) NULL",
-        "IF COL_LENGTH('dbo.PLA_ACD_AuditLog', 'metadata_json') IS NULL
-         ALTER TABLE dbo.PLA_ACD_AuditLog ADD metadata_json nvarchar(max) NULL",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_Notifications', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_Notifications (
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'log_uid') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD log_uid varchar(32) NULL",
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'title') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD title nvarchar(300) NULL",
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'actor_user') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD actor_user nvarchar(120) NULL",
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'role_name') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD role_name nvarchar(40) NULL",
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'file_name') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD file_name nvarchar(300) NULL",
+        "IF COL_LENGTH('dbo.PLA_AuditLog', 'metadata_json') IS NULL
+         ALTER TABLE dbo.PLA_AuditLog ADD metadata_json nvarchar(max) NULL",
+        "IF OBJECT_ID(N'dbo.PLA_Notifications', N'U') IS NULL
+         CREATE TABLE dbo.PLA_Notifications (
             notification_id varchar(32) NOT NULL PRIMARY KEY,
             recipient nvarchar(120) NOT NULL,
             notification_type nvarchar(40) NOT NULL,
             title nvarchar(300) NOT NULL,
             message nvarchar(1000) NULL,
             version_id varchar(32) NULL,
-            is_read bit NOT NULL CONSTRAINT DF_PLA_ACD_NotificationRead DEFAULT 0,
-            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_NotificationCreated DEFAULT SYSUTCDATETIME()
+            is_read bit NOT NULL CONSTRAINT DF_PLA_NotificationRead DEFAULT 0,
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_NotificationCreated DEFAULT SYSUTCDATETIME()
          )",
-        "IF COL_LENGTH('dbo.PLA_ACD_GroupImages', 'library_id') IS NULL
-         ALTER TABLE dbo.PLA_ACD_GroupImages ADD library_id varchar(32) NULL",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_PhotoLibrary', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_PhotoLibrary (
+        "IF COL_LENGTH('dbo.PLA_GroupImages', 'library_id') IS NULL
+         ALTER TABLE dbo.PLA_GroupImages ADD library_id varchar(32) NULL",
+        "IF OBJECT_ID(N'dbo.PLA_PhotoLibrary', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PhotoLibrary (
             photo_id varchar(32) NOT NULL PRIMARY KEY,
             photo_name nvarchar(200) NOT NULL,
             image_path nvarchar(500) NOT NULL,
             width int NULL,
             height int NULL,
             size_bytes int NULL,
-            uploaded_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoUploaded DEFAULT SYSUTCDATETIME(),
+            uploaded_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PhotoUploaded DEFAULT SYSUTCDATETIME(),
             uploaded_by nvarchar(180) NOT NULL
          )",
-        "IF COL_LENGTH('dbo.PLA_ACD_PhotoLibrary', 'category_name') IS NULL
-         ALTER TABLE dbo.PLA_ACD_PhotoLibrary ADD category_name nvarchar(120) NULL",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_PhotoFolders', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_PhotoFolders (
+        "IF COL_LENGTH('dbo.PLA_PhotoLibrary', 'category_name') IS NULL
+         ALTER TABLE dbo.PLA_PhotoLibrary ADD category_name nvarchar(120) NULL",
+        "IF OBJECT_ID(N'dbo.PLA_PhotoFolders', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PhotoFolders (
             folder_name nvarchar(120) NOT NULL PRIMARY KEY,
-            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_PhotoFolderCreated DEFAULT SYSUTCDATETIME()
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PhotoFolderCreated DEFAULT SYSUTCDATETIME()
          )",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_SearchKeywords', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_SearchKeywords (
+        "IF OBJECT_ID(N'dbo.PLA_SearchKeywords', N'U') IS NULL
+         CREATE TABLE dbo.PLA_SearchKeywords (
             keyword_id varchar(64) NOT NULL PRIMARY KEY,
             scope varchar(10) NOT NULL,
             category_name nvarchar(120) NULL,
             group_name nvarchar(200) NULL,
             product_code nvarchar(80) NULL,
             keywords nvarchar(1000) NOT NULL,
-            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ACD_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
-        "IF OBJECT_ID(N'dbo.PLA_ACD_ListOptions', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ACD_ListOptions (
+        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NULL
+         CREATE TABLE dbo.PLA_ListOptions (
             option_type varchar(20) NOT NULL,
             option_name nvarchar(120) NOT NULL,
             description nvarchar(300) NULL,
-            is_active bit NOT NULL CONSTRAINT DF_PLA_ACD_ListOptionActive DEFAULT 1,
+            is_active bit NOT NULL CONSTRAINT DF_PLA_ListOptionActive DEFAULT 1,
             sort_order int NOT NULL,
-            CONSTRAINT PK_PLA_ACD_ListOptions PRIMARY KEY (option_type, option_name)
+            CONSTRAINT PK_PLA_ListOptions PRIMARY KEY (option_type, option_name)
          )",
-        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_ACD_Notifications_Recipient')
-         CREATE INDEX IX_PLA_ACD_Notifications_Recipient ON dbo.PLA_ACD_Notifications (recipient, created_at DESC)",
+        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_Notifications_Recipient')
+         CREATE INDEX IX_PLA_Notifications_Recipient ON dbo.PLA_Notifications (recipient, created_at DESC)",
+        // Countries and price levels (Config). Ids are kept, so masterlist prices stay attached.
+        "IF OBJECT_ID(N'dbo.PLA_Countries', N'U') IS NULL
+         CREATE TABLE dbo.PLA_Countries (
+            country_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            name nvarchar(120) NOT NULL CONSTRAINT UQ_PLA_Countries_name UNIQUE,
+            description nvarchar(300) NULL,
+            is_active bit NOT NULL CONSTRAINT DF_PLA_Countries_active DEFAULT 1,
+            sort_order int NOT NULL CONSTRAINT DF_PLA_Countries_sort DEFAULT 0,
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_Countries_created DEFAULT SYSUTCDATETIME()
+         )",
+        "IF OBJECT_ID(N'dbo.PLA_PriceLevels', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PriceLevels (
+            price_level_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            name nvarchar(120) NOT NULL CONSTRAINT UQ_PLA_PriceLevels_name UNIQUE,
+            description nvarchar(300) NULL,
+            is_active bit NOT NULL CONSTRAINT DF_PLA_PriceLevels_active DEFAULT 1,
+            sort_order int NOT NULL CONSTRAINT DF_PLA_PriceLevels_sort DEFAULT 0,
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceLevels_created DEFAULT SYSUTCDATETIME()
+         )",
+        // Carry over what Config had in the older shared list table (once, while the new tables are empty).
+        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.PLA_Countries)
+         INSERT INTO dbo.PLA_Countries (name, description, is_active, sort_order)
+         SELECT option_name, description, is_active, sort_order FROM dbo.PLA_ListOptions WHERE option_type = 'countries'",
+        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.PLA_PriceLevels)
+         INSERT INTO dbo.PLA_PriceLevels (name, description, is_active, sort_order)
+         SELECT option_name, description, is_active, sort_order FROM dbo.PLA_ListOptions WHERE option_type = 'priceLevels'",
+        // The price masterlist: one row per product (LRN code) with its base prices.
+        "IF OBJECT_ID(N'dbo.PLA_Products', N'U') IS NULL
+         CREATE TABLE dbo.PLA_Products (
+            product_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            product_code nvarchar(80) NOT NULL CONSTRAINT UQ_PLA_Products_code UNIQUE,
+            category nvarchar(120) NOT NULL,
+            product_group nvarchar(300) NULL,
+            layout varchar(20) NOT NULL CONSTRAINT CK_PLA_Products_layout CHECK (layout IN ('standard', 'presentation')),
+            description nvarchar(500) NOT NULL,
+            base_price_pc decimal(14,4) NULL,
+            base_price_box decimal(14,4) NULL,
+            row_json nvarchar(max) NOT NULL CONSTRAINT CK_PLA_Products_row CHECK (ISJSON(row_json) = 1),
+            sort_order int NOT NULL CONSTRAINT DF_PLA_Products_sort DEFAULT 0,
+            is_active bit NOT NULL CONSTRAINT DF_PLA_Products_active DEFAULT 1,
+            version_id varchar(32) NULL,
+            created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_Products_created DEFAULT SYSUTCDATETIME(),
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_Products_updated DEFAULT SYSUTCDATETIME()
+         )",
+        // Price rules: % on the base price. NULL country / level / category = all of them.
+        "IF OBJECT_ID(N'dbo.PLA_PriceRules', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PriceRules (
+            rule_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            country_id int NULL CONSTRAINT FK_PLA_PriceRules_country REFERENCES dbo.PLA_Countries (country_id),
+            price_level_id int NULL CONSTRAINT FK_PLA_PriceRules_level REFERENCES dbo.PLA_PriceLevels (price_level_id),
+            category nvarchar(120) NULL,
+            percent_change decimal(9,4) NOT NULL,
+            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceRules_updated DEFAULT SYSUTCDATETIME(),
+            updated_by nvarchar(180) NOT NULL,
+            CONSTRAINT UQ_PLA_PriceRules_scope UNIQUE (country_id, price_level_id, category)
+         )",
+        // Prices set for one product in one country + price level (only where they differ from the rules).
+        "IF OBJECT_ID(N'dbo.PLA_PriceOverrides', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PriceOverrides (
+            product_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_product REFERENCES dbo.PLA_Products (product_id),
+            country_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_country REFERENCES dbo.PLA_Countries (country_id),
+            price_level_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_level REFERENCES dbo.PLA_PriceLevels (price_level_id),
+            price_pc decimal(14,4) NULL,
+            price_box decimal(14,4) NULL,
+            base_price_pc_when_set decimal(14,4) NULL,
+            base_price_box_when_set decimal(14,4) NULL,
+            version_id varchar(32) NULL,
+            set_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceOverrides_set DEFAULT SYSUTCDATETIME(),
+            set_by nvarchar(180) NOT NULL,
+            CONSTRAINT PK_PLA_PriceOverrides PRIMARY KEY (product_id, country_id, price_level_id)
+         )",
+        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceOverrides_list')
+         CREATE INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides (country_id, price_level_id)",
+        // What each save changed (one row per price or product), for history and the audit trail.
+        "IF OBJECT_ID(N'dbo.PLA_PriceChanges', N'U') IS NULL
+         CREATE TABLE dbo.PLA_PriceChanges (
+            change_id bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            version_id varchar(32) NOT NULL,
+            change_kind varchar(20) NOT NULL CONSTRAINT CK_PLA_PriceChanges_kind CHECK (change_kind IN ('base', 'rule', 'override', 'product_add', 'product_remove', 'field')),
+            product_code nvarchar(80) NULL,
+            country_id int NULL,
+            price_level_id int NULL,
+            category nvarchar(120) NULL,
+            field_name nvarchar(60) NULL,
+            old_value nvarchar(400) NULL,
+            new_value nvarchar(400) NULL,
+            changed_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceChanges_at DEFAULT SYSUTCDATETIME()
+         )",
+        "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceChanges_version')
+         CREATE INDEX IX_PLA_PriceChanges_version ON dbo.PLA_PriceChanges (version_id)",
     ];
+    // Each check is a round trip to the server, so they run once per change to this list (remembered
+    // in storage/schema-ready.txt; delete it to check again), not on every request.
+    $marker = APP_ROOT . '/storage/schema-ready.txt';
+    $signature = md5(implode("\n", $statements));
+    if (is_file($marker) && trim((string) @file_get_contents($marker)) === $signature) return;
     foreach ($statements as $statement) $connection->exec($statement);
+    @file_put_contents($marker, $signature);
 }
 
 function database_datetime(?string $iso): string
@@ -166,7 +262,7 @@ function database_list_version_summaries(): array
 {
     $query = database_connection()->query(
         'SELECT version_id, list_name, adjustment, saved_at, saved_by, status, price_level, country, revision, saved_by_user, summary_json
-         FROM dbo.PLA_ACD_Versions ORDER BY saved_at DESC, version_id DESC'
+         FROM dbo.PLA_Versions ORDER BY saved_at DESC, version_id DESC'
     );
     $summaries = [];
     foreach ($query->fetchAll() as $record) {
@@ -189,7 +285,7 @@ function database_list_version_summaries(): array
 
 function database_get_version(string $id): ?array
 {
-    $statement = database_connection()->prepare('SELECT data_json, status FROM dbo.PLA_ACD_Versions WHERE version_id = ?');
+    $statement = database_connection()->prepare('SELECT data_json, status FROM dbo.PLA_Versions WHERE version_id = ?');
     $statement->execute([$id]);
     $record = $statement->fetch();
     if (!$record) return null;
@@ -209,7 +305,7 @@ function database_save_version(array $version): void
         $version['savedByUser'] ?? '', $summary,
     ];
     $statement = database_connection()->prepare(
-        'MERGE dbo.PLA_ACD_Versions AS target
+        'MERGE dbo.PLA_Versions AS target
          USING (SELECT ? AS version_id) AS source ON target.version_id = source.version_id
          WHEN MATCHED THEN UPDATE SET
             list_name = ?, adjustment = ?, saved_at = ?, saved_by = ?, data_json = ?, status = ?,
@@ -223,7 +319,7 @@ function database_save_version(array $version): void
 
 function database_delete_version(string $id): bool
 {
-    $statement = database_connection()->prepare('DELETE FROM dbo.PLA_ACD_Versions WHERE version_id = ?');
+    $statement = database_connection()->prepare('DELETE FROM dbo.PLA_Versions WHERE version_id = ?');
     $statement->execute([$id]);
     return $statement->rowCount() > 0;
 }
@@ -236,7 +332,7 @@ function database_add_audit(array $log): void
 {
     $metadata = is_array($log['metadata'] ?? null) ? $log['metadata'] : [];
     $statement = database_connection()->prepare(
-        'INSERT INTO dbo.PLA_ACD_AuditLog
+        'INSERT INTO dbo.PLA_AuditLog
             (action_name, version_id, actor, details, created_at, log_uid, title, actor_user, role_name, file_name, metadata_json)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
@@ -260,7 +356,7 @@ function database_list_audit(int $limit): array
     $limit = max(1, min(5000, $limit));
     $query = database_connection()->query(
         "SELECT TOP ({$limit}) audit_id, action_name, version_id, actor, details, created_at, log_uid, title, actor_user, role_name, file_name, metadata_json
-         FROM dbo.PLA_ACD_AuditLog ORDER BY created_at DESC, audit_id DESC"
+         FROM dbo.PLA_AuditLog ORDER BY created_at DESC, audit_id DESC"
     );
     return array_map(static function (array $record): array {
         $metadata = json_decode((string) ($record['metadata_json'] ?? ''), true);
@@ -288,7 +384,7 @@ function database_list_audit(int $limit): array
 function database_add_notification(array $notification): void
 {
     $statement = database_connection()->prepare(
-        'INSERT INTO dbo.PLA_ACD_Notifications (notification_id, recipient, notification_type, title, message, version_id, is_read, created_at)
+        'INSERT INTO dbo.PLA_Notifications (notification_id, recipient, notification_type, title, message, version_id, is_read, created_at)
          VALUES (?, ?, ?, ?, ?, ?, 0, ?)'
     );
     $statement->execute([
@@ -302,7 +398,7 @@ function database_list_notifications(string $username, int $limit): array
     $limit = max(1, min(500, $limit));
     $statement = database_connection()->prepare(
         "SELECT TOP ({$limit}) notification_id, recipient, notification_type, title, message, version_id, is_read, created_at
-         FROM dbo.PLA_ACD_Notifications WHERE recipient = ? ORDER BY created_at DESC"
+         FROM dbo.PLA_Notifications WHERE recipient = ? ORDER BY created_at DESC"
     );
     $statement->execute([$username]);
     return array_map(static fn(array $record): array => [
@@ -321,13 +417,13 @@ function database_mark_notifications_read(string $username, ?array $ids): void
 {
     $connection = database_connection();
     if ($ids === null) {
-        $connection->prepare('UPDATE dbo.PLA_ACD_Notifications SET is_read = 1 WHERE recipient = ? AND is_read = 0')->execute([$username]);
+        $connection->prepare('UPDATE dbo.PLA_Notifications SET is_read = 1 WHERE recipient = ? AND is_read = 0')->execute([$username]);
         return;
     }
     $ids = array_values(array_filter($ids, fn($id) => is_string($id) && preg_match('/^[a-f0-9]{16,32}$/', $id)));
     if (!$ids) return;
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $connection->prepare("UPDATE dbo.PLA_ACD_Notifications SET is_read = 1 WHERE recipient = ? AND notification_id IN ({$placeholders})")
+    $connection->prepare("UPDATE dbo.PLA_Notifications SET is_read = 1 WHERE recipient = ? AND notification_id IN ({$placeholders})")
         ->execute(array_merge([$username], $ids));
 }
 
@@ -336,7 +432,7 @@ function database_resolve_notifications(string $versionId, array $types): void
     $types = array_values(array_filter($types, 'is_string'));
     if (!$types) return;
     $placeholders = implode(',', array_fill(0, count($types), '?'));
-    database_connection()->prepare("UPDATE dbo.PLA_ACD_Notifications SET is_read = 1 WHERE version_id = ? AND is_read = 0 AND notification_type IN ({$placeholders})")
+    database_connection()->prepare("UPDATE dbo.PLA_Notifications SET is_read = 1 WHERE version_id = ? AND is_read = 0 AND notification_type IN ({$placeholders})")
         ->execute(array_merge([$versionId], $types));
 }
 
@@ -348,7 +444,7 @@ function database_read_group_images(): array
 {
     $query = database_connection()->query(
         'SELECT image_key, category_name, group_name, image_path, alt_text, updated_at, updated_by, library_id
-         FROM dbo.PLA_ACD_GroupImages
+         FROM dbo.PLA_GroupImages
          ORDER BY category_name, group_name'
     );
     return array_map(
@@ -369,12 +465,12 @@ function database_read_group_images(): array
 function database_upsert_group_image(array $image): ?array
 {
     $connection = database_connection();
-    $existing = $connection->prepare('SELECT image_key, image_path FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?');
+    $existing = $connection->prepare('SELECT image_key, image_path FROM dbo.PLA_GroupImages WHERE image_key = ?');
     $existing->execute([$image['key']]);
     $previous = $existing->fetch() ?: null;
 
     $statement = $connection->prepare(
-        'MERGE dbo.PLA_ACD_GroupImages AS target
+        'MERGE dbo.PLA_GroupImages AS target
          USING (SELECT ? AS image_key) AS source
          ON target.image_key = source.image_key
          WHEN MATCHED THEN UPDATE SET
@@ -396,12 +492,12 @@ function database_delete_group_image(string $key): ?array
 {
     $connection = database_connection();
     $select = $connection->prepare(
-        'SELECT image_key, category_name, group_name, image_path FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?'
+        'SELECT image_key, category_name, group_name, image_path FROM dbo.PLA_GroupImages WHERE image_key = ?'
     );
     $select->execute([$key]);
     $record = $select->fetch() ?: null;
     if (!$record) return null;
-    $connection->prepare('DELETE FROM dbo.PLA_ACD_GroupImages WHERE image_key = ?')->execute([$key]);
+    $connection->prepare('DELETE FROM dbo.PLA_GroupImages WHERE image_key = ?')->execute([$key]);
     return $record;
 }
 
@@ -413,7 +509,7 @@ function database_list_library(): array
 {
     $query = database_connection()->query(
         'SELECT photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by, category_name
-         FROM dbo.PLA_ACD_PhotoLibrary ORDER BY uploaded_at DESC, photo_id DESC'
+         FROM dbo.PLA_PhotoLibrary ORDER BY uploaded_at DESC, photo_id DESC'
     );
     return array_map(static fn(array $record): array => [
         'id' => (string) $record['photo_id'],
@@ -431,7 +527,7 @@ function database_list_library(): array
 function database_add_library_photo(array $photo): void
 {
     database_connection()->prepare(
-        'INSERT INTO dbo.PLA_ACD_PhotoLibrary (photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by, category_name)
+        'INSERT INTO dbo.PLA_PhotoLibrary (photo_id, photo_name, image_path, width, height, size_bytes, uploaded_at, uploaded_by, category_name)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $photo['id'], $photo['name'], $photo['imagePath'], $photo['width'], $photo['height'], $photo['size'],
@@ -443,7 +539,7 @@ function database_delete_library_photo(string $id): ?array
 {
     foreach (database_list_library() as $photo) {
         if ($photo['id'] !== $id) continue;
-        database_connection()->prepare('DELETE FROM dbo.PLA_ACD_PhotoLibrary WHERE photo_id = ?')->execute([$id]);
+        database_connection()->prepare('DELETE FROM dbo.PLA_PhotoLibrary WHERE photo_id = ?')->execute([$id]);
         return $photo;
     }
     return null;
@@ -451,15 +547,15 @@ function database_delete_library_photo(string $id): ?array
 
 function database_list_library_folders(): array
 {
-    return database_connection()->query('SELECT folder_name FROM dbo.PLA_ACD_PhotoFolders ORDER BY folder_name')->fetchAll(PDO::FETCH_COLUMN);
+    return database_connection()->query('SELECT folder_name FROM dbo.PLA_PhotoFolders ORDER BY folder_name')->fetchAll(PDO::FETCH_COLUMN);
 }
 
 function database_add_library_folder(string $category): string
 {
     $connection = database_connection();
-    $connection->prepare('INSERT INTO dbo.PLA_ACD_PhotoFolders (folder_name)
-        SELECT ? WHERE NOT EXISTS (SELECT 1 FROM dbo.PLA_ACD_PhotoFolders WITH (UPDLOCK, HOLDLOCK) WHERE LOWER(folder_name) = LOWER(?))')->execute([$category, $category]);
-    $existing = $connection->prepare('SELECT folder_name FROM dbo.PLA_ACD_PhotoFolders WHERE LOWER(folder_name) = LOWER(?)');
+    $connection->prepare('INSERT INTO dbo.PLA_PhotoFolders (folder_name)
+        SELECT ? WHERE NOT EXISTS (SELECT 1 FROM dbo.PLA_PhotoFolders WITH (UPDLOCK, HOLDLOCK) WHERE LOWER(folder_name) = LOWER(?))')->execute([$category, $category]);
+    $existing = $connection->prepare('SELECT folder_name FROM dbo.PLA_PhotoFolders WHERE LOWER(folder_name) = LOWER(?)');
     $existing->execute([$category]);
     $name = $existing->fetchColumn();
     return $name !== false ? (string) $name : $category;
@@ -469,7 +565,7 @@ function database_move_library_photo(string $id, string $category): ?array
 {
     foreach (database_list_library() as $photo) {
         if ($photo['id'] !== $id) continue;
-        database_connection()->prepare('UPDATE dbo.PLA_ACD_PhotoLibrary SET category_name = ? WHERE photo_id = ?')->execute([$category, $id]);
+        database_connection()->prepare('UPDATE dbo.PLA_PhotoLibrary SET category_name = ? WHERE photo_id = ?')->execute([$category, $id]);
         return array_replace($photo, ['category' => $category]);
     }
     return null;
@@ -479,7 +575,7 @@ function database_rename_library_photo(string $id, string $name): ?array
 {
     foreach (database_list_library() as $photo) {
         if ($photo['id'] !== $id) continue;
-        database_connection()->prepare('UPDATE dbo.PLA_ACD_PhotoLibrary SET photo_name = ? WHERE photo_id = ?')->execute([$name, $id]);
+        database_connection()->prepare('UPDATE dbo.PLA_PhotoLibrary SET photo_name = ? WHERE photo_id = ?')->execute([$name, $id]);
         return array_replace($photo, ['name' => $name]);
     }
     return null;
@@ -491,7 +587,7 @@ function database_rename_library_photo(string $id, string $name): ?array
 
 function database_list_search_keywords(): array
 {
-    $rows = database_connection()->query('SELECT keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by FROM dbo.PLA_ACD_SearchKeywords')->fetchAll();
+    $rows = database_connection()->query('SELECT keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by FROM dbo.PLA_SearchKeywords')->fetchAll();
     return array_map(static fn(array $row): array => [
         'id' => (string) $row['keyword_id'],
         'scope' => (string) $row['scope'],
@@ -507,9 +603,9 @@ function database_list_search_keywords(): array
 function database_save_search_keywords(array $entry): ?array
 {
     $connection = database_connection();
-    $connection->prepare('DELETE FROM dbo.PLA_ACD_SearchKeywords WHERE keyword_id = ?')->execute([$entry['id']]);
+    $connection->prepare('DELETE FROM dbo.PLA_SearchKeywords WHERE keyword_id = ?')->execute([$entry['id']]);
     if (!$entry['keywords']) return null;
-    $connection->prepare('INSERT INTO dbo.PLA_ACD_SearchKeywords (keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    $connection->prepare('INSERT INTO dbo.PLA_SearchKeywords (keyword_id, scope, category_name, group_name, product_code, keywords, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([$entry['id'], $entry['scope'], $entry['category'], $entry['group'], $entry['code'], implode(',', $entry['keywords']), database_datetime($entry['updatedAt']), $entry['updatedBy']]);
     return $entry;
 }
@@ -518,28 +614,56 @@ function database_save_search_keywords(array $entry): ?array
 // Country and price level lists
 // ---------------------------------------------------------------------------
 
+/** dbo.PLA_Countries or dbo.PLA_PriceLevels with its id column. */
+function database_list_option_table(string $type): array
+{
+    return $type === 'countries' ? ['dbo.PLA_Countries', 'country_id'] : ['dbo.PLA_PriceLevels', 'price_level_id'];
+}
+
 function database_get_list_options(string $type): ?array
 {
-    $statement = database_connection()->prepare('SELECT option_name, description, is_active FROM dbo.PLA_ACD_ListOptions WHERE option_type = ? ORDER BY sort_order');
-    $statement->execute([$type]);
-    $rows = $statement->fetchAll();
+    [$table, $idColumn] = database_list_option_table($type);
+    $rows = database_connection()->query("SELECT {$idColumn} AS id, name, description, is_active FROM {$table} ORDER BY sort_order, name")->fetchAll();
     if (!$rows) return null;
     return array_map(static fn(array $row): array => [
-        'name' => (string) $row['option_name'],
+        'id' => (int) $row['id'],
+        'name' => (string) $row['name'],
         'description' => (string) ($row['description'] ?? ''),
         'active' => (bool) $row['is_active'],
     ], $rows);
 }
 
+/**
+ * Saves the list in display order. Entries are matched by name (any case), so a country keeps its id
+ * and the masterlist prices set for it. Entries left out are deleted, unless masterlist prices or rules
+ * still use them; those are switched off instead.
+ */
 function database_save_list_options(string $type, array $items): void
 {
+    [$table, $idColumn] = database_list_option_table($type);
     $connection = database_connection();
     $connection->beginTransaction();
     try {
-        $connection->prepare('DELETE FROM dbo.PLA_ACD_ListOptions WHERE option_type = ?')->execute([$type]);
-        $insert = $connection->prepare('INSERT INTO dbo.PLA_ACD_ListOptions (option_type, option_name, description, is_active, sort_order) VALUES (?, ?, ?, ?, ?)');
+        $existing = [];
+        foreach ($connection->query("SELECT {$idColumn} AS id, name FROM {$table}")->fetchAll() as $row) $existing[mb_strtolower((string) $row['name'])] = (int) $row['id'];
+        $update = $connection->prepare("UPDATE {$table} SET name = ?, description = ?, is_active = ?, sort_order = ? WHERE {$idColumn} = ?");
+        $insert = $connection->prepare("INSERT INTO {$table} (name, description, is_active, sort_order) VALUES (?, ?, ?, ?)");
+        $kept = [];
         foreach (array_values($items) as $order => $item) {
-            $insert->execute([$type, $item['name'], $item['description'] ?? '', $item['active'] ? 1 : 0, $order]);
+            $key = mb_strtolower($item['name']);
+            if (isset($existing[$key])) {
+                $update->execute([$item['name'], $item['description'] ?? '', $item['active'] ? 1 : 0, $order, $existing[$key]]);
+                $kept[$existing[$key]] = true;
+            } else {
+                $insert->execute([$item['name'], $item['description'] ?? '', $item['active'] ? 1 : 0, $order]);
+            }
+        }
+        $inUse = $connection->prepare("SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.PLA_PriceOverrides WHERE {$idColumn} = ?) OR EXISTS (SELECT 1 FROM dbo.PLA_PriceRules WHERE {$idColumn} = ?) THEN 1 ELSE 0 END");
+        foreach ($existing as $id) {
+            if (isset($kept[$id])) continue;
+            $inUse->execute([$id, $id]);
+            if ($inUse->fetchColumn()) $connection->prepare("UPDATE {$table} SET is_active = 0, sort_order = 100000 WHERE {$idColumn} = ?")->execute([$id]);
+            else $connection->prepare("DELETE FROM {$table} WHERE {$idColumn} = ?")->execute([$id]);
         }
         $connection->commit();
     } catch (Throwable $error) {

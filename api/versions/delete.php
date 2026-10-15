@@ -20,7 +20,7 @@ if (!repo_delete_version($version['id'])) json_response(['ok' => false, 'message
 repo_resolve_notifications($version['id'], ['approval_request']); // a withdrawn request needs no action
 
 $withdrawn = $version['status'] === 'pending';
-record_audit('delete_version', ($withdrawn ? 'Withdrew' : 'Deleted') . " '{$version['name']}'",
+record_audit('delete_version', ($withdrawn ? 'Withdrew ' : 'Deleted ') . version_title($version),
     "{$user['name']} " . ($withdrawn ? 'withdrew the approval request for ' : 'deleted ') . version_label($version) . " ({$version['status']}).", [
     'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'status' => $version['status'],
 ]);

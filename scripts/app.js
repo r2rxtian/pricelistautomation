@@ -2,7 +2,7 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: [], auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], photoFolders: [], libraryFolder: null, configTab: rememberedConfigTab(), librarySearch: '' };
+  const state = { user: window.__BOOT__.user, csrf: window.__BOOT__.csrf, permissions: [], canEdit: false, active: null, rows: [], headers: [], priceColumns: [], adjustment: 0, categoryAdjustments: {}, search: '', category: '', codeFilter: '', priceLevelFilter: '', countryFilter: '', pending: null, pendingDelete: null, pendingDecision: null, versions: [], directory: [], approvers: [], approvalMode: 'any', notifications: [], unreadCount: 0, productImages: [], imageCategory: '', imageSearch: '', pendingImageGroup: null, pendingImageDelete: null, activeCell: { rowIdx: null, colIdx: null, td: null }, isEditing: false, auditLogs: null, auditTab: 'all', auditSearch: '', auditFile: '', auditType: '', auditUser: '', auditPage: 1, historyPage: 1, historyPageSize: 10, listTab: 'all', listSearch: '', listPriceLevel: '', listCountry: '', listStatus: '', photoLibrary: [], photoFolders: [], libraryFolder: null, configTab: rememberedConfigTab(), librarySearch: '' };
   // Normalised row layout (see parseWorkbook): 0 category … 18 product group, 19 price level, 20 country.
   const COL = { category: 0, code: 1, description: 2, priceLevel: 19, country: 20 };
   const ROW_WIDTH = 21;
@@ -185,7 +185,7 @@
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
     'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
-    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save',
+    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch',
     'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
@@ -283,7 +283,7 @@
   function adjusted(value, category = state.category) {
     const rawNum = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, '').trim());
     if (!Number.isFinite(rawNum)) return value;
-    const adj = getCategoryAdjustment(category);
+    const adj = shownRate(category);
     if (!adj || !Number.isFinite(adj)) return rawNum;
     const computed = rawNum * (1 + adj / 100);
     return Math.max(0, Math.round(computed * 10000) / 10000);
@@ -380,6 +380,76 @@
   /** Each open price list (tab) keeps its own unsaved draft, so switching tabs never loses changes. */
   const draftKey = (list = state.active) => (state.user ? `draft_${state.user.username}_${tabKeyOf(list) || 'current'}` : 'draft_current');
   const legacyDraftKey = () => (state.user ? `draft_${state.user.username}` : 'draft_current'); // the one draft of earlier builds
+
+  // --- The price masterlist is ONE file. Its base prices and every country + price level list are
+  // views of it, picked with "Prices for" in the file header. Each view keeps its unsaved edits (its
+  // own draft, as above); a % for many lists at once is kept with the file. One Save sends all of it
+  // as one change. ---
+  const MASTERLIST_ID = 'masterlist';
+  const MASTERLIST_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></svg>';
+  const inMasterlistFile = list => list?.source === 'masterlist';
+  /** The tab / file a list belongs to: every view of the masterlist is the one masterlist file. */
+  const fileKeyOf = list => (inMasterlistFile(list) ? MASTERLIST_ID : tabKeyOf(list));
+  const viewLabel = list => (list?.kind === 'masterlist' ? 'Standard prices' : [list?.country, list?.priceLevel].filter(Boolean).join(' · '));
+  let masterlistPendingCache = null;
+  const masterlistPendingKey = () => `pla_ml_pending_${state.user?.username || 'user'}`;
+  /** Unsaved work in the masterlist file: {views: {id: {name, country, priceLevel, kind}}, scoped: [{countries, levels, categories, percent}]}. */
+  function masterlistPending() {
+    if (masterlistPendingCache) return masterlistPendingCache;
+    let data = {};
+    try { data = JSON.parse(localStorage.getItem(masterlistPendingKey()) || '{}') || {}; } catch { }
+    return masterlistPendingCache = { views: data.views && typeof data.views === 'object' ? data.views : {}, scoped: Array.isArray(data.scoped) ? data.scoped : [] };
+  }
+  function setMasterlistPending(pending) {
+    masterlistPendingCache = pending;
+    try { localStorage.setItem(masterlistPendingKey(), JSON.stringify(pending)); } catch { }
+  }
+  function markMasterlistView(list, dirty) {
+    if (!inMasterlistFile(list) || !list.id) return;
+    const pending = masterlistPending();
+    if (dirty) pending.views[list.id] = { name: list.name, country: list.country, priceLevel: list.priceLevel, kind: list.kind };
+    else delete pending.views[list.id];
+    setMasterlistPending(pending);
+  }
+  const masterlistUnsavedCount = () => Object.keys(masterlistPending().views).length + masterlistPending().scoped.length;
+  /** Throws away every unsaved change in the masterlist file. */
+  async function discardMasterlistPending() {
+    const pending = masterlistPending();
+    await Promise.all(Object.values(pending.views).map(view => removeDraft(draftKey(view))));
+    setMasterlistPending({ views: {}, scoped: [] });
+  }
+  /** The combined % of unsaved "many lists" changes that cover this category of the open list. */
+  function scopedRate(category) {
+    const active = state.active;
+    if (!inMasterlistFile(active) || active.kind !== 'list') return 0;
+    let factor = 1;
+    masterlistPending().scoped.forEach(entry => {
+      if (entry.levels?.length && !entry.levels.includes(active.priceLevel)) return;
+      if (entry.countries?.length && !entry.countries.includes(active.country)) return;
+      if (entry.categories?.length && !entry.categories.includes(String(category ?? '').trim())) return;
+      factor *= 1 + Number(entry.percent) / 100;
+    });
+    return (factor - 1) * 100;
+  }
+  /** "+5% every country · Price Level 2 (Breads)": a % for many lists, in words. */
+  function scopedLabel(entry) {
+    const few = (items, noun) => (items.length > 2 ? `${items.length} ${noun}` : items.join(', '));
+    const countries = entry.countries?.length ? few(entry.countries, 'countries') : 'every country';
+    const levels = entry.levels?.length ? few(entry.levels, 'price levels') : 'every price level';
+    const categories = entry.categories?.length ? ` (${few(entry.categories, 'categories')})` : '';
+    return `${entry.percent > 0 ? '+' : ''}${entry.percent}% · ${countries} · ${levels}${categories}`;
+  }
+  /** Everything unsaved in the masterlist file, in a few words. */
+  function masterlistPendingSummary() {
+    const pending = masterlistPending();
+    return [...Object.values(pending.views).map(viewLabel), ...pending.scoped.map(scopedLabel)].join(', ') || 'nothing';
+  }
+  /** The % shown on a category's prices: the list's own, and any covering it from "many lists" changes. */
+  function shownRate(category) {
+    const own = getCategoryAdjustment(category);
+    const wide = scopedRate(category);
+    return wide ? ((1 + own / 100) * (1 + wide / 100) - 1) * 100 : own;
+  }
   async function clearAllDrafts() {
     try {
       const db = await openDraftDb();
@@ -449,10 +519,11 @@
   const TAB_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
   function tabInnerMarkup(tab) {
     const name = escapeHtml(tab.name || 'Price list');
+    const mark = tab.master && !tab.country ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>`;
     return `<button type="button" class="file-tab-open" role="tab">
-        <span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>
+        ${mark}
         <span class="file-tab-name">${name}</span>
-        <span class="file-tab-meta">${escapeHtml([tab.country, tab.priceLevel].filter(Boolean).join(' · '))}</span>
+        <span class="file-tab-meta">${escapeHtml(tab.meta ?? [tab.country, tab.priceLevel].filter(Boolean).join(' · '))}</span>
         <span class="file-tab-return" aria-hidden="true">Back to editor<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
       <span class="file-tab-dot" aria-hidden="true"></span>
@@ -467,9 +538,13 @@
     const bar = $('#fileTabs');
     const list = bar?.querySelector('.file-tabs-list');
     if (!list) return;
-    const activeKey = state.active ? tabKeyOf(state.active) : '';
-    // One file is open at a time, so the bar holds just that file (with its unsaved dot).
-    openTabs = state.active ? [{ key: activeKey, id: state.active.id || '', name: state.active.name, country: state.active.country, priceLevel: state.active.priceLevel, dirty: Boolean(state.active.isDraft) }] : [];
+    const activeKey = state.active ? fileKeyOf(state.active) : '';
+    // One file is open at a time, so the bar holds just that file (with its unsaved dot). The
+    // masterlist is one file whichever view is shown; its tab names the view.
+    const masterFile = inMasterlistFile(state.active);
+    openTabs = state.active ? [masterFile
+      ? { key: activeKey, id: state.active.id || '', name: 'Price list', country: state.active.country, priceLevel: state.active.priceLevel, meta: viewLabel(state.active), master: true, dirty: masterlistUnsavedCount() > 0 }
+      : { key: activeKey, id: state.active.id || '', name: state.active.name, country: state.active.country, priceLevel: state.active.priceLevel, dirty: Boolean(state.active.isDraft) }] : [];
     saveTabs();
     const inEditor = !$('#workspacePanel')?.hidden;
     bar.hidden = !openTabs.length;
@@ -492,7 +567,7 @@
     }
     openTabs.forEach((tab, index) => {
       let el = existing.get(tab.key);
-      const signature = [tab.name, tab.country, tab.priceLevel].join('|');
+      const signature = [tab.name, tab.country, tab.priceLevel, tab.meta || ''].join('|');
       if (!el) {
         el = document.createElement('div');
         el.className = 'file-tab';
@@ -515,7 +590,7 @@
       el.classList.toggle('is-dirty', Boolean(tab.dirty));
       const open = el.querySelector('.file-tab-open');
       open.setAttribute('aria-selected', String(current && inEditor));
-      open.title = `${[tab.name, tab.country, tab.priceLevel].filter(Boolean).join(' · ')}${tab.dirty ? ' · unsaved changes' : ''}`;
+      open.title = `${[tab.name, tab.meta ?? [tab.country, tab.priceLevel].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')}${tab.dirty ? ' · unsaved changes' : ''}`;
     });
     // Closed tabs shrink away.
     existing.forEach(el => {
@@ -555,11 +630,18 @@
   async function closeTab(key) {
     const index = openTabs.findIndex(tab => tab.key === key);
     const tab = openTabs[index];
-    const isOpen = Boolean(state.active && tabKeyOf(state.active) === key);
+    const isOpen = Boolean(state.active && fileKeyOf(state.active) === key);
     if (!tab && !isOpen) return false;
     const name = tab?.name || state.active?.name || 'this price list';
     let discarded = null;
-    if (isOpen) {
+    if (isOpen && inMasterlistFile(state.active)) {
+      // The masterlist file: unsaved edits in any of its views (and % for many lists) go together.
+      if (masterlistUnsavedCount() && !(await confirmDiscardDraft(`Closing ${name}`))) return false;
+      if (state.active.isDraft) discarded = state.active;
+      if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
+      setPriceEditor(false);
+      await discardMasterlistPending();
+    } else if (isOpen) {
       if (state.active.isDraft && !(await confirmDiscardDraft(`Closing ${name}`))) return false;
       if (state.active.isDraft) discarded = state.active;
       if (state.isEditing && state.activeCell.td) cancelCellEdit(state.activeCell.td);
@@ -602,14 +684,14 @@
   }
   /** "Close file" in the editor = closing the open list's tab. */
   function closeActiveFile() {
-    return state.active ? closeTab(tabKeyOf(state.active)) : Promise.resolve(false);
+    return state.active ? closeTab(fileKeyOf(state.active)) : Promise.resolve(false);
   }
   $('#fileTabs')?.addEventListener('click', async event => {
     const tabEl = event.target.closest('.file-tab');
     if (!tabEl) return;
     const key = tabEl.dataset.tab;
     if (event.target.closest('.file-tab-close')) return closeTab(key);
-    if (state.active && tabKeyOf(state.active) === key) return switchPanel('workspacePanel', true);
+    if (state.active && fileKeyOf(state.active) === key) return switchPanel('workspacePanel', true);
     const tab = openTabs.find(item => item.key === key);
     if (!tab) return;
     try { await switchToTab(tab); } catch (error) { toast(error.message); }
@@ -625,7 +707,7 @@
     if (!inEditor || reducedMotion()) return openVersion(id, { silent: true });
     const turn = ++tabSwitching;
     const keys = openTabs.map(item => item.key);
-    const direction = keys.indexOf(tab.key) >= keys.indexOf(tabKeyOf(state.active)) ? 1 : -1;
+    const direction = keys.indexOf(tab.key) >= keys.indexOf(fileKeyOf(state.active)) ? 1 : -1;
     const parts = [$('#workspacePanel .page-heading'), dom.dataView].filter(el => el && !el.hidden);
     parts.forEach(el => el.getAnimations().forEach(anim => anim.id === 'tab-swap' && anim.cancel()));
     const out = parts.map(el => {
@@ -685,6 +767,8 @@
   function activeStatus() {
     if (!state.active) return null;
     if (state.active.isDraft || !state.active.id) return 'draft';
+    // The masterlist file is unsaved while any of its views (or a % for many lists) has changes.
+    if (inMasterlistFile(state.active) && masterlistUnsavedCount()) return 'draft';
     return state.active.status || 'pending';
   }
   function canExportActive() {
@@ -778,6 +862,7 @@
       popover.style.right = `${Math.max(16, Math.round(window.innerWidth - rect.right))}px`;
       // Nothing is pre-selected: choose the categories to adjust (or tick "All categories").
       selectedAdjustmentCategories.clear();
+      renderAdjustScope();
       dom.percentage.value = 0;
       if (dom.categoryAdjustSearch) dom.categoryAdjustSearch.value = '';
       renderCategoryAdjustmentList();
@@ -793,11 +878,11 @@
     Object.assign(state, {
       user: data.user, csrf: data.csrf, permissions: data.permissions || [], directory: data.directory || [],
       approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], priceLevels: data.priceLevels || [],
-      versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || [], photoLibrary: data.photoLibrary || [],
+      versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || state.auditLogs || null, photoLibrary: data.photoLibrary || [],
       photoFolders: data.photoFolders || [],
       searchKeywords: data.searchKeywords || [],
       listOptions: data.listOptions || null, priceLevelInfo: data.priceLevelInfo || [],
-      importTemplate: data.importTemplate || null,
+      importTemplate: data.importTemplate || null, masterlist: data.masterlist || null,
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
     });
@@ -882,7 +967,14 @@
       return state.active;
     }
     // One file is open at a time: opening another one replaces it, so its unsaved changes are asked about first.
-    if (state.active?.isDraft) {
+    // Views of the masterlist are one file: moving between them keeps every view's unsaved edits.
+    const sameFile = inMasterlistFile(state.active) && inMasterlistFile(summary);
+    if (!sameFile && inMasterlistFile(state.active) && masterlistUnsavedCount()) {
+      if (!silent && !(await confirmDiscardDraft('Opening another price list'))) return null;
+      await discardMasterlistPending();
+      if (state.active) state.active.isDraft = false;
+    }
+    if (state.active?.isDraft && !sameFile) {
       if (!silent && !(await confirmDiscardDraft(sameList ? 'Opening another version of this price list' : 'Opening another price list'))) return null;
       logDiscardedChanges(state.active);
       if (can('update')) await removeDraft(draftKey());
@@ -897,7 +989,9 @@
     if (!active) active = preloaded ? structuredClone(preloaded) : (await api('open', { method: 'POST', body: JSON.stringify({ id }) })).active;
     loadActive(active);
     if (!stay) switchPanel('workspacePanel', true);
-    if (!silent) toast(restored ? `Opened ${active.name} with your unsaved changes.` : `Opened ${active.name}.`);
+    if (!silent) toast(inMasterlistFile(active)
+      ? `Prices for ${viewLabel(active)}${restored ? ', with your unsaved changes' : ''}.`
+      : restored ? `Opened ${active.name} with your unsaved changes.` : `Opened ${active.name}.`);
     return active;
   }
   function setSavedMeta(text) {
@@ -994,20 +1088,25 @@
     state.countryFilter = '';
     if (dom.codeFilterOptions) dom.codeFilterOptions.innerHTML = uniqueValues(state.rows.map(row => row[COL.code])).slice(0, 2000).map(code => `<option value="${escapeHtml(code)}"></option>`).join('');
 
-    dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = active.name; dom.listMeta.textContent = active.name;
+    // The masterlist is one file: its title stays, and the chip beside it says which prices are shown.
+    const fileName = inMasterlistFile(active) ? 'Price list' : active.name;
+    dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = fileName; dom.listMeta.textContent = fileName;
     dom.listTitle.title = ''; // the switcher's tooltip shows the full Country › Level › List path
-    dom.listMeta.title = active.name;
+    dom.listMeta.title = fileName;
     $('#workspacePanel')?.classList.add('has-file');
+    $('#workspacePanel')?.classList.toggle('is-masterlist-file', inMasterlistFile(active));
     if (dom.listTagsRow) {
       dom.listTagsRow.hidden = false;
-      dom.listPriceLevel.textContent = active.priceLevel || 'Not set';
-      dom.listCountry.textContent = active.country || 'Not set';
+      const base = active.kind === 'masterlist';
+      dom.listPriceLevel.textContent = base ? 'all countries' : (active.priceLevel || 'Not set');
+      dom.listCountry.textContent = base ? 'Standard prices' : (active.country || 'Not set');
     }
+    $('.list-context')?.setAttribute('title', inMasterlistFile(active) ? 'Switch to another country or price level, or to the standard prices' : 'Change country, price level or price list');
     if (!active.isDraft && active.id) rememberOpenVersion(active.id);
     // In the editor, the address follows the open list (a save makes a new version).
     if (state.booted && !$('#workspacePanel')?.hidden && active.id) {
       history.replaceState({ panel: 'workspacePanel' }, '', `files.php?list=${encodeURIComponent(active.id)}`);
-      document.title = `${active.name} · ${APP_TITLE}`;
+      document.title = `${fileName}${inMasterlistFile(active) ? ` · ${viewLabel(active)}` : ''} · ${APP_TITLE}`;
     }
 
     $('#saveButton').classList.toggle('is-disabled', !canEdit);
@@ -1032,7 +1131,14 @@
     const settled = status === 'approved' || status === 'uploaded';
     dom.activeBadge.hidden = settled;
 
-    if (settled) {
+    if (status === 'draft' && inMasterlistFile(active)) {
+      setSavedMeta(`Unsaved: ${masterlistPendingSummary()}`);
+    } else if (settled && active.source === 'masterlist') {
+      // Worked out from the masterlist: say so, and how many prices are this list's own.
+      const own = Object.keys(active.ownPrices || {}).length;
+      setSavedMeta(active.kind === 'masterlist' ? 'The prices every country and price level starts from'
+        : (own ? `${own} price${own === 1 ? '' : 's'} set by hand for ${active.country} · ${active.priceLevel}` : `Standard prices for ${active.country} · ${active.priceLevel}`));
+    } else if (settled) {
       setSavedMeta('');
     } else if (status === 'draft') {
       const edits = (active.pendingChanges || []).length;
@@ -1134,6 +1240,7 @@
       state.active.isDraft = false;
       state.active.pendingChanges = [];
       removeDraft(draftKey());
+      markMasterlistView(state.active, false);
       renderWorkflowState();
       return;
     }
@@ -1142,6 +1249,7 @@
       state.active.pendingChanges = [];
     }
     setDraft(draftKey(), state.active);
+    markMasterlistView(state.active, true);
     renderWorkflowState();
   }
   function hasPriceAdjustments() {
@@ -1544,6 +1652,7 @@
     // The rows were just replaced: forget the old hover so the next mouse move draws it fresh.
     hoveredCell = null;
     applyChangeMarks(); // a change under review shows what it changed ("was 1.25")
+    applyOwnPriceMarks(); // a list from the masterlist marks the prices set just for it
     updateFormulaBar();
   }
 
@@ -1695,7 +1804,7 @@
       input.disabled = true;
       return;
     }
-    input.disabled = !state.canEdit;
+    input.disabled = !state.canEdit || cellLocked(state.activeCell.colIdx);
     const rowIdx = state.activeCell.rowIdx;
     const colIdx = state.activeCell.colIdx;
     const { letter, rowNumber } = cellReference(state.activeCell.td, rowIdx, colIdx);
@@ -1716,8 +1825,16 @@
     }
   }
 
+  /** A country + price level list from the masterlist only sets prices: other cells come from the masterlist. */
+  function cellLocked(colIdx) {
+    return Boolean(state.active?.priceOnly) && !state.priceColumns.includes(Number(colIdx));
+  }
   function startCellEdit(td, initialChar = null, selectAll = false) {
     if (!state.canEdit || !td || state.isEditing) return;
+    if (cellLocked(td.dataset.col)) {
+      toast('Only prices can be changed here. Change descriptions and sizes in Standard prices.');
+      return;
+    }
     state.isEditing = true;
     const rowIdx = Number(td.dataset.row);
     const colIdx = Number(td.dataset.col);
@@ -1801,7 +1918,7 @@
     td.classList.remove('is-editing');
     const rowIdx = Number(td.dataset.row);
     const colIdx = Number(td.dataset.col);
-    if (!Number.isFinite(rowIdx) || !Number.isFinite(colIdx)) return;
+    if (!Number.isFinite(rowIdx) || !Number.isFinite(colIdx) || cellLocked(colIdx)) return;
 
     const input = td.querySelector('.excel-cell-editor');
     const finalVal = newValue !== null ? newValue : (input ? input.value : '');
@@ -1814,7 +1931,7 @@
         const cleanNum = Number(String(finalVal).replace(/[^0-9.-]/g, ''));
         if (Number.isFinite(cleanNum) && cleanNum >= 0 && String(finalVal).trim() !== '') {
           const cat = String(state.rows[rowIdx][0] ?? '').trim();
-          const catAdj = getCategoryAdjustment(cat);
+          const catAdj = shownRate(cat); // the price is typed as shown, with every % that covers it
           const divisor = 1 + catAdj / 100;
           const baseVal = (catAdj !== 0 && divisor > 0) ? (cleanNum / divisor) : cleanNum;
           const newNumericVal = Number(baseVal.toFixed(4));
@@ -2096,6 +2213,11 @@
           ${meta.category ? `<span class="diff-chip neutral">${escapeHtml(meta.category)}</span>` : ''}
         </div>`;
     }
+    if (log.type === 'save_version' && Array.isArray(meta.parts) && meta.parts.length) {
+      // A price list save: what it changed, in words (which countries / levels, which %, which products).
+      const shown = meta.parts.slice(0, 2);
+      return `<span class="audit-what-chips">${shown.map(part => `<span class="diff-chip neutral" title="${escapeHtml(part)}">${escapeHtml(part)}</span>`).join('')}${meta.parts.length > 2 ? `<span class="diff-chip neutral" title="${escapeHtml(meta.parts.slice(2).join('; '))}">+${meta.parts.length - 2} more</span>` : ''}</span>`;
+    }
     if (log.type === 'save_version') {
       const cats = Array.isArray(meta.adjustedCategories) ? meta.adjustedCategories.length : 0;
       const edits = Number(meta.changeCount || 0);
@@ -2200,6 +2322,7 @@
     } else if (log.type === 'save_version') {
       const approvers = (logMeta.approvers || []).filter(Boolean);
       body = facts([
+        Array.isArray(logMeta.parts) && logMeta.parts.length ? fact('What', logMeta.parts.map(part => escapeHtml(part)).join('<br>')) : '',
         fact('Approval', logMeta.autoApproved ? 'Approved on save (no approval needed)' : approvers.length ? `Sent to ${escapeHtml(approvers.join(' & '))}` : 'Sent for approval'),
         logMeta.revision ? fact('Revision', `#${escapeHtml(String(logMeta.revision))}`) : '',
       ]) + '<div class="audit-entry-review"><p class="review-loading">Comparing with the version before it…</p></div>';
@@ -2262,8 +2385,25 @@
     }
   }
 
+  /** Audit logs load with the Audit Logs page (each time it opens), not with every refresh. */
+  let auditLoading = null;
+  function loadAuditLogs() {
+    if (!can('viewAudit')) return Promise.resolve();
+    if (auditLoading) return auditLoading;
+    auditLoading = api('audit-logs')
+      .then(res => { state.auditLogs = res.auditLogs || []; renderHistory(); })
+      .catch(() => { if (state.auditLogs === null) state.auditLogs = []; renderHistory(); })
+      .finally(() => { auditLoading = null; });
+    return auditLoading;
+  }
   function renderHistory() {
     if (!dom.historyTableBody) return;
+    if (state.auditLogs === null) {
+      // Not loaded yet: it loads once the Audit Logs page is showing.
+      dom.historyTableBody.innerHTML = '<p class="review-loading audit-loading">Loading the audit log…</p>';
+      if (!$('#historyPanel')?.hidden) loadAuditLogs();
+      return;
+    }
 
     // 1. Update tab count badges
     const allLogs = state.auditLogs || [];
@@ -2485,7 +2625,9 @@
     return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
   }
   function navigableVersions() {
-    return (state.versions || []).filter(version => version.status !== 'superseded' && version.country);
+    // Inside the masterlist file only its own country + price level lists; elsewhere only separate files.
+    const master = inMasterlistFile(state.active);
+    return (state.versions || []).filter(version => version.status !== 'superseded' && version.country && inMasterlistFile(version) === master);
   }
   function renderNavigator() {
     const lists = navigableVersions();
@@ -2563,14 +2705,19 @@
     // One row per file: its latest upload, acting on the price list's current prices. Saved and
     // approved price changes update the file (they don't make it "older").
     const listKey = v => [v.name, v.country, v.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|');
+    // With the price masterlist, its country + price level lists are on the board at the top; only
+    // files uploaded before it (separate price lists) are still sheets.
+    const masterlistMode = Boolean(state.masterlist?.enabled);
+    if (masterlistMode) Object.assign(filesView, { search: '', country: '', level: '' }); // (its filter bar is hidden)
+    const isSeparateFile = version => !version.kind && version.source !== 'masterlist';
     const latest = new Map();
-    (state.versions || []).filter(version => version.source === 'upload').forEach(version => {
+    (state.versions || []).filter(version => version.source === 'upload' && isSeparateFile(version)).forEach(version => {
       const key = listKey(version);
       if (!latest.has(key) || (version.revision || 0) > (latest.get(key).revision || 0)) latest.set(key, version);
     });
     // Export-only users only receive live lists, so a list whose upload was replaced by an approved
     // change has no upload here: its live version stands in as the file.
-    (state.versions || []).filter(version => ['approved', 'uploaded'].includes(version.status)).forEach(version => {
+    (state.versions || []).filter(version => ['approved', 'uploaded'].includes(version.status) && isSeparateFile(version)).forEach(version => {
       if (!latest.has(listKey(version))) latest.set(listKey(version), version);
     });
     const files = [...latest.values()];
@@ -2581,9 +2728,14 @@
       (!filesView.country || version.country === filesView.country) &&
       (!filesView.level || version.priceLevel === filesView.level) &&
       (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))));
-    $('#filesCount').textContent = `${visible.length} file${visible.length === 1 ? '' : 's'}`;
+    const board = masterlistMode ? masterlistBoardMarkup() : null;
+    const uploadLabel = $('#filesUploadBtn span');
+    if (uploadLabel) uploadLabel.textContent = masterlistMode ? 'Upload price list' : 'Upload files';
+    $('#filesCount').textContent = board
+      ? 'Price list'
+      : `${visible.length} file${visible.length === 1 ? '' : 's'}`;
     const filtering = Boolean(query || filesView.country || filesView.level);
-    const showUpload = can('upload') && !filtering;
+    const showUpload = can('upload') && !filtering && !masterlistMode;
     // Approvals (merged into this page): price changes waiting for approval and rejected ones sit in
     // the tray at the top; approved changes are simply each file's current prices.
     const changes = (state.versions || []).filter(version => version.source !== 'upload' && version.status !== 'superseded');
@@ -2593,7 +2745,7 @@
       (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))))
       .sort((a, b) => Number(Boolean(b.canApprove)) - Number(Boolean(a.canApprove)) || Number(a.status !== 'pending') - Number(b.status !== 'pending') || String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
     const latestChange = key => changes.filter(version => listKey(version) === key).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0];
-    $('#filesEmpty').hidden = visible.length > 0 || showUpload || trayItems.length > 0;
+    $('#filesEmpty').hidden = visible.length > 0 || showUpload || trayItems.length > 0 || Boolean(board);
     $('#filesEmptyText').textContent = files.length ? 'No files match these filters.' : (can('upload') ? 'Use “Upload files” to add price lists. Uploads need no approval.' : 'Uploaded price lists will appear here.');
     // Files are grouped by country (with its flag), each group sorted by price level. Every file is a
     // small sheet of paper: price level and status on top, the name, then products, when it last
@@ -2664,15 +2816,24 @@
         ? `<button type="button" class="row-primary is-approve" data-action="approve" data-id="${vid}">Approve</button><button type="button" class="row-primary slip-reject" data-action="reject" data-id="${vid}">Reject</button><button type="button" class="row-primary slip-review" data-action="review" data-id="${vid}" title="See every price this change makes">Review</button>`
         : `<button type="button" class="row-primary" data-action="review" data-id="${vid}">Review changes</button>`;
       const edits = Number(version.changeCount || 0);
-      const what = adjustmentChips(version) + (edits ? `<span class="adj-chip edits">${edits} cell edit${edits === 1 ? '' : 's'}</span>` : '') || '<span class="adj-chip edits">No price adjustments</span>';
+      const what = version.kind === 'batch'
+        ? `<span class="adj-chip edits" title="${escapeHtml(version.summary?.what || '')}">${escapeHtml(version.summary?.what || `${edits} changes`)}</span>`
+        : version.kind === 'rules'
+        ? `<span class="adj-chip edits">${edits} rule change${edits === 1 ? '' : 's'}</span>`
+        : adjustmentChips(version) + (edits ? `<span class="adj-chip edits">${edits} cell edit${edits === 1 ? '' : 's'}</span>` : '') || '<span class="adj-chip edits">No price adjustments</span>';
+      // The masterlist and its rules cover every list: a small ledger mark instead of a flag.
+      const wide = ['masterlist', 'rules', 'batch'].includes(version.kind);
+      const mark = wide ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(version.country, countryCodeOf(version.country))}</span>`;
+      const tag = wide ? '<span class="sheet-level">All countries &amp; price levels</span>'
+        : `<span class="sheet-level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>${version.kind === 'list' ? `<span class="sheet-level">${escapeHtml(version.country)}</span>` : ''}`;
       return `<article class="approval-slip ${pending ? 'is-pending' : 'is-rejected'} ${version.canApprove ? 'is-mine' : ''}" role="listitem" data-key="change-${vid}" aria-label="${name}, ${escapeHtml(stampText)}">
         <svg class="slip-clip" width="16" height="34" viewBox="0 0 16 34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 24V7a3 3 0 0 1 6 0v19a5 5 0 0 1-10 0V9"/></svg>
         <div class="slip-head">
-          <span class="country-flag" aria-hidden="true">${flagMarkup(version.country, countryCodeOf(version.country))}</span>
+          ${mark}
           <strong class="slip-name" title="${name}">${name}</strong>
           <span class="slip-stamp">${stampText}</span>
         </div>
-        <div class="slip-tags"><span class="sheet-level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span></div>
+        <div class="slip-tags">${tag}</div>
         <div class="slip-what">${what}</div>
         <small class="slip-note" title="${escapeHtml(note)}">${escapeHtml(note)}</small>
         <div class="slip-actions">${actions}<button type="button" class="kebab-btn" data-id="${vid}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${name}" title="More actions"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button></div>
@@ -2690,7 +2851,7 @@
         <div class="tray-slips" role="list">${trayItems.map(slip).join('')}</div>
       </section>` : '';
     // No price lists at all (and not just filtered away): a friendly starting point instead of an empty board.
-    const nothingYet = !files.length && !trayItems.length && !filtering;
+    const nothingYet = !files.length && !trayItems.length && !filtering && !board;
     $('#filesPanel')?.classList.toggle('is-empty', nothingYet);
     if (nothingYet) {
       $('#filesEmpty').hidden = true;
@@ -2707,7 +2868,10 @@
       </div>`;
       return;
     }
+    // Files uploaded before the masterlist stay below it, under their own heading.
+    // With the price list, it is the only thing here: files uploaded one by one before it aren't listed.
     flipMove(body, () => {
+      if (board) { body.innerHTML = tray + board.markup; return; }
       body.innerHTML = tray + uploadTile + [...groups.values()]
         .sort((a, b) => a.country.localeCompare(b.country))
         .map(({ country, files: list }) => {
@@ -2723,6 +2887,9 @@
           </section>`;
         }).join('');
     });
+    // The search / country / level bar only ever filtered separate files: with the price list it goes.
+    const tools = $('#filesPanel .history-tools');
+    if (tools) tools.hidden = Boolean(board);
   }
   // The blank sheet opens the upload dialog (same as the "Upload files" button).
   $('#filesTable')?.addEventListener('click', event => {
@@ -2742,6 +2909,405 @@
   $('#filesCountryFilter')?.addEventListener('change', event => { filesView.country = event.target.value; renderFiles(); });
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
   $('#filesUploadBtn')?.addEventListener('click', () => openUploadModal());
+
+  // --- Price masterlist: one list of products and base prices. Every country + price level list is
+  // worked out from it (with the price rules), and can have prices of its own. On the Files page the
+  // masterlist is a ledger card, and its lists are a board of countries × price levels. ---
+  // Saving the masterlist file: one dialog listing every view with changes (and each % for many
+  // lists); any of them can be dropped there. One Save sends them all as one change.
+  /**
+   * What one view of the masterlist file will change, product by product, as it will be saved: its
+   * prices before (as live now) → after (typed prices, with every % covering them), and, in the base
+   * prices, other details too.
+   */
+  function masterlistViewChanges(draft, live, view) {
+    const scopedFor = category => {
+      if (view.kind !== 'list') return 1;
+      let factor = 1;
+      masterlistPending().scoped.forEach(entry => {
+        if (entry.levels?.length && !entry.levels.includes(view.priceLevel)) return;
+        if (entry.countries?.length && !entry.countries.includes(view.country)) return;
+        if (entry.categories?.length && !entry.categories.includes(category)) return;
+        factor *= 1 + Number(entry.percent) / 100;
+      });
+      return factor;
+    };
+    const ownRate = category => Number(draft.categoryAdjustments?.[category] ?? draft.adjustment ?? 0) || 0;
+    const headers = normalizeHeaders(live.headers);
+    const liveByCode = new Map((live.rows || []).map(row => [String(row[COL.code] ?? '').toLowerCase(), row]));
+    const changes = [];
+    (draft.rows || []).forEach(row => {
+      const old = liveByCode.get(String(row[COL.code] ?? '').toLowerCase());
+      if (!old) return;
+      const category = String(row[0] ?? '').trim();
+      const factor = (1 + ownRate(category) / 100) * scopedFor(category);
+      const name = row[2] || row[1];
+      [8, 9].forEach(col => {
+        if (!isNumeric(row[col])) return;
+        const after = Math.max(0, Math.round(numeric(row[col]) * factor * 10000) / 10000);
+        const before = isNumeric(old[col]) ? numeric(old[col]) : null;
+        if (before !== null && Math.abs(after - before) < 0.005) return;
+        changes.push({ code: row[COL.code], name, column: col === 8 ? 'Price/pc' : 'Price/box', before, after, price: true });
+      });
+      if (view.kind === 'masterlist') {
+        headers.forEach((header, col) => {
+          if ([0, 1, 8, 9, 17, COL.priceLevel, COL.country].includes(col) || !String(header || '').trim()) return;
+          if (String(row[col] ?? '').trim() !== String(old[col] ?? '').trim()) changes.push({ code: row[COL.code], name, column: String(header).replace(/\s+/g, ' ').trim(), before: old[col], after: row[col], price: false });
+        });
+      }
+    });
+    // The list's own % per category, for a one-line summary above its products.
+    const rates = [...new Set((draft.rows || []).map(row => String(row[0] ?? '').trim()))]
+      .map(category => ({ category, rate: ownRate(category) })).filter(item => item.rate);
+    return { changes, rates };
+  }
+  let saveSummaryTurn = 0;
+  async function renderMasterlistSaveSummary() {
+    const turn = ++saveSummaryTurn;
+    const box = $('#saveChangeSummary');
+    const pending = masterlistPending();
+    const remove = (attr, label) => `<button type="button" class="icon-button ml-pending-remove" ${attr} title="Discard" aria-label="Discard ${escapeHtml(label)}">×</button>`;
+    const count = Object.keys(pending.views).length + pending.scoped.length;
+    dom.confirmSave.disabled = !count || !dom.saveConfirmCheck.checked;
+    if (!count) { box.innerHTML = '<div class="save-summary-empty">Nothing left to save.</div>'; return; }
+    if (!box.innerHTML.trim() || box.querySelector('.save-summary-empty')) box.innerHTML = '<p class="review-loading">Working out the changes…</p>';
+    const sections = [];
+    // % for many lists at once: what it covers (its prices show in each of those lists).
+    pending.scoped.forEach((entry, index) => {
+      const pct = Number(entry.percent);
+      sections.push(`<section class="ml-save-section">
+        <header class="ml-save-head"><strong>${escapeHtml(scopedLabel(entry).replace(/^[^·]+·\s*/, '').replace(/^./, letter => letter.toUpperCase()))}</strong><span class="adjustment-pill ${pct > 0 ? 'pos' : 'neg'}">${pct > 0 ? '+' : ''}${pct}%</span>${remove(`data-scoped="${index}"`, scopedLabel(entry))}</header>
+        <p class="ml-save-note">Every price in ${entry.countries?.length ? (entry.countries.length > 3 ? `${entry.countries.length} countries` : entry.countries.join(', ')) : 'every country'} · ${entry.levels?.length ? entry.levels.join(', ') : 'every price level'}${entry.categories?.length ? ` (${entry.categories.join(', ')})` : ''} moves by ${pct > 0 ? '+' : ''}${pct}%.</p>
+      </section>`);
+    });
+    for (const [id, view] of Object.entries(pending.views)) {
+      let detail = '';
+      let total = 0;
+      try {
+        const draft = String(state.active?.id) === id ? state.active : await getDraft(draftKey(view));
+        const live = await fetchVersion(id);
+        if (turn !== saveSummaryTurn) return;
+        const { changes, rates } = masterlistViewChanges(draft || { rows: [] }, live || { rows: [] }, view);
+        total = new Set(changes.map(change => String(change.code || change.name))).size; // products changed
+        const money2 = value => (isNumeric(value) ? money.format(numeric(value)) : escapeHtml(String(value ?? '') || 'empty'));
+        const limit = 25;
+        detail = (rates.length ? `<div class="ml-save-rates">${rates.map(item => `<span class="adjustment-pill ${item.rate > 0 ? 'pos' : 'neg'}">${escapeHtml(item.category)} ${item.rate > 0 ? '+' : ''}${item.rate}%</span>`).join('')}</div>` : '')
+          + (changes.length ? (() => {
+            // One row per product (its name first, the code under it); its changes stacked beside it.
+            const products = new Map();
+            changes.forEach(change => {
+              const key = String(change.code || change.name);
+              if (!products.has(key)) products.set(key, { name: change.name, code: change.code, items: [] });
+              products.get(key).items.push(change);
+            });
+            const shown = [...products.values()].slice(0, limit);
+            const value = (change, side) => (change.price ? money2(change[side]) : escapeHtml(String(change[side] ?? '') || 'empty'));
+            return `<div class="edit-change-list ml-save-products">${shown.map(product => `<div class="ml-save-product-row">
+                <span class="ml-save-product" title="${escapeHtml(`${product.name} · ${product.code || ''}`)}"><strong>${escapeHtml(product.name || product.code || '—')}</strong><small>${escapeHtml(product.code || '')}</small></span>
+                <span class="ml-save-changes">${product.items.map(change => `<span class="ml-save-change">
+                  <span class="edit-change-col">${escapeHtml(change.column)}</span>
+                  <span class="diff-chip old">${value(change, 'before')}</span>
+                  <span class="diff-arrow">→</span>
+                  <span class="diff-chip new">${value(change, 'after')}</span>
+                  <span class="ml-save-delta">${change.price ? deltaMarkup(change.before, change.after) : ''}</span>
+                </span>`).join('')}</span>
+              </div>`).join('')}${products.size > limit ? `<div class="edit-change-more">+ ${(products.size - limit).toLocaleString()} more product${products.size - limit === 1 ? '' : 's'}</div>` : ''}</div>`;
+          })()
+            : '<p class="ml-save-note">No price is different from now.</p>');
+      } catch (error) {
+        detail = `<p class="ml-save-note">${escapeHtml(error.message || 'Could not work out these changes.')}</p>`;
+      }
+      sections.push(`<section class="ml-save-section">
+        <header class="ml-save-head"><strong>${escapeHtml(viewLabel(view))}</strong><span class="save-summary-badge">${total.toLocaleString()} product${total === 1 ? '' : 's'}</span>${remove(`data-view="${escapeHtml(id)}"`, viewLabel(view))}</header>
+        ${view.kind === 'masterlist' ? '<p class="ml-save-note">Every country and price level follows these, except prices set by hand for one country.</p>' : ''}
+        ${detail}
+      </section>`);
+    }
+    if (turn !== saveSummaryTurn) return;
+    box.innerHTML = sections.join('');
+  }
+  function openMasterlistSave() {
+    if (!masterlistUnsavedCount()) return toast('No changes to save. Change prices for any country, then save them all at once.');
+    dom.versionNameInput.closest('label').hidden = true;
+    dom.saveForm.noValidate = true; // its hidden name / country / level fields don't apply here
+    $('#saveDialog h2').textContent = 'Save price changes';
+    $('#saveMetaReadonly').hidden = true;
+    $('#saveMetaEdit').hidden = true;
+    dom.saveEditsSummary.hidden = true;
+    dom.saveApproversNote.textContent = state.autoApprove
+      ? 'As the approver, your save is approved immediately and the lists are ready for export.'
+      : state.approvers.length ? `One approval request goes to ${state.approvers.join(state.approvalMode === 'all' ? ' and ' : ' or ')}.` : 'No approver is configured for your account.';
+    dom.confirmSave.textContent = state.autoApprove ? 'Save & approve all' : 'Save all for approval';
+    $('#saveDialog .save-version-dialog > p.muted').textContent = 'Everything below is saved together as one change.';
+    dom.saveConfirmCheck.checked = false;
+    renderMasterlistSaveSummary();
+    dom.saveDialog.showModal();
+  }
+  $('#saveChangeSummary')?.addEventListener('click', async event => {
+    const remove = event.target.closest('.ml-pending-remove');
+    if (!remove) return;
+    const pending = masterlistPending();
+    if (remove.dataset.scoped !== undefined) {
+      pending.scoped.splice(Number(remove.dataset.scoped), 1);
+      setMasterlistPending(pending);
+    } else {
+      const id = remove.dataset.view;
+      const view = pending.views[id];
+      if (view) await removeDraft(draftKey(view));
+      delete pending.views[id];
+      setMasterlistPending(pending);
+      // The open view goes back to its saved prices.
+      if (String(state.active?.id) === id) loadActive((await api('open', { method: 'POST', body: JSON.stringify({ id }) })).active);
+    }
+    if (inMasterlistFile(state.active)) { renderTable(); renderWorkflowState(); }
+    renderMasterlistSaveSummary();
+  });
+  dom.saveConfirmCheck?.addEventListener('change', () => { if (inMasterlistFile(state.active)) dom.confirmSave.disabled = !masterlistUnsavedCount() || !dom.saveConfirmCheck.checked; });
+  async function saveMasterlistFile() {
+    const pending = masterlistPending();
+    const payload = { lists: [], scoped: pending.scoped };
+    for (const [id, view] of Object.entries(pending.views)) {
+      const draft = String(state.active?.id) === id ? state.active : await getDraft(draftKey(view));
+      if (!draft?.rows) continue;
+      const item = { id, rows: draft.rows, adjustment: Number(draft.adjustment || 0), categoryAdjustments: draft.categoryAdjustments || {} };
+      if (id === MASTERLIST_ID) payload.base = item; else payload.lists.push(item);
+    }
+    const data = await api('masterlist-save', { method: 'POST', body: JSON.stringify(payload) });
+    await discardMasterlistPending();
+    versionCache.clear();
+    if (data.version?.status === 'approved') stampDecision('approve');
+    // The open view shows its prices as they are now (new ones once approved).
+    const openId = state.active?.id;
+    if (openId) loadActive((await api('open', { method: 'POST', body: JSON.stringify({ id: openId }) })).active);
+    await refreshState();
+    toast(data.message);
+  }
+
+  /**
+   * The price list on Files, for people who just want prices: what it is, a big "Open price list",
+   * a shortcut straight to one country + price level, and how it works in three steps.
+   */
+  const pricePick = { country: '', level: '' };
+  function masterlistBoardMarkup() {
+    const master = versionSummaryById(MASTERLIST_ID);
+    const products = Number(master?.productCount || 0);
+    const lists = (state.versions || []).filter(version => version.source === 'masterlist' && version.kind === 'list');
+    const waiting = (state.versions || []).some(version => version.status === 'pending' && ['batch', 'masterlist', 'list', 'rules'].includes(version.kind));
+    const unsaved = masterlistUnsavedCount();
+    const isOpen = inMasterlistFile(state.active);
+    const openId = isOpen ? state.active.id : MASTERLIST_ID; // back to the view that is open
+    const chevron = '<svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+    if (!products) {
+      return { markup: `<section class="ml-section"><article class="ml-home is-empty" data-key="masterlist" aria-label="Price list">
+          <span class="ml-home-mark" aria-hidden="true">${MASTERLIST_ICON}</span>
+          <div class="ml-home-main">
+            <h2>No price list yet</h2>
+            <p>${can('upload') ? 'Upload one workbook with every product. Every country and price level is then ready to open, change and export.' : 'Once an admin uploads the price list, every country and price level will be here to open and export.'}</p>
+            ${can('upload') ? '<div class="ml-home-actions"><button type="button" class="button primary" data-ml="upload">Upload the price list</button></div>' : ''}
+          </div>
+        </article></section>` };
+    }
+    const countries = uniqueValues(lists.map(list => list.country));
+    const levelOrder = state.priceLevels || [];
+    const levels = uniqueValues(lists.map(list => list.priceLevel)).sort((a, b) => (levelOrder.indexOf(a) + 1 || 999) - (levelOrder.indexOf(b) + 1 || 999));
+    if (!countries.includes(pricePick.country)) pricePick.country = '';
+    if (!levels.includes(pricePick.level)) pricePick.level = levels[0] || '';
+    const option = (value, label, selected) => `<option value="${escapeHtml(value)}"${selected ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    const updated = master.savedAt ? `Updated ${formatRelativeTime(master.savedAt)}${master.savedBy ? ` by ${master.savedBy}` : ''}` : '';
+    const status = unsaved ? `<p class="ml-home-status is-unsaved" title="${escapeHtml(masterlistPendingSummary())}">You have unsaved changes in the price list.</p>`
+      : waiting ? '<p class="ml-home-status is-waiting">A price change is waiting for approval (see above).</p>' : '';
+    const markup = `<section class="ml-section">
+      <article class="ml-home ${isOpen ? 'is-open' : ''}" data-key="masterlist" aria-label="Price list">
+        <div class="ml-home-main">
+          <span class="ml-home-mark" aria-hidden="true">${MASTERLIST_ICON}</span>
+          <div class="ml-home-text">
+            <p class="ml-home-kicker">Price list${isOpen ? ' · <span>open in the editor</span>' : ''}</p>
+            <h2>Prices for every country and price level</h2>
+            <p class="ml-home-meta">${products.toLocaleString()} products · ${countries.length} countries · ${levels.length} price levels${updated ? ` · <span title="${escapeHtml(displayDate(master.savedAt))}">${escapeHtml(updated)}</span>` : ''}</p>
+            ${status}
+            <div class="ml-home-actions">
+              <button type="button" class="button primary row-primary ml-home-open" data-action="open" data-id="${escapeHtml(openId)}">${isOpen ? 'Back to the price list' : 'Open price list'}</button>
+              ${can('upload') ? '<button type="button" class="button secondary" data-ml="upload">Upload updated workbook</button>' : ''}
+            </div>
+          </div>
+        </div>
+        <form class="ml-home-pick" data-ml-pick onsubmit="return false;">
+          <p class="ml-home-pick-title">See prices for</p>
+          <label class="ml-select ml-home-select ${pricePick.country ? 'is-filled' : ''}">
+            <span class="ml-select-lead" aria-hidden="true">${pricePick.country ? flagMarkup(pricePick.country, countryCodeOf(pricePick.country)) : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'}</span>
+            <select data-pick="country" aria-label="Country">${option('', 'Choose a country…', !pricePick.country)}${countries.map(country => option(country, country, country === pricePick.country)).join('')}</select>${chevron}
+          </label>
+          <label class="ml-select ml-home-select is-filled">
+            <span class="ml-select-lead ml-home-level" aria-hidden="true">${escapeHtml((String(pricePick.level).match(/\d+/) || ['#'])[0])}</span>
+            <select data-pick="level" aria-label="Price level">${levels.map(level => option(level, level, level === pricePick.level)).join('')}</select>${chevron}
+          </label>
+          <button type="button" class="button secondary ml-home-go" data-ml="open-country" ${pricePick.country ? '' : 'disabled'}>Open<span aria-hidden="true">›</span></button>
+          <p class="ml-home-hint">View, change or export one country's prices.</p>
+        </form>
+      </article>
+      <ol class="ml-steps" aria-label="How it works">
+        <li><b>1</b><span><strong>Standard prices</strong> Every country and price level starts from these.</span></li>
+        <li><b>2</b><span><strong>Each country</strong> Open it to change its prices, or export it to Excel or PDF.</span></li>
+        <li><b>3</b><span><strong>Save</strong> All your changes go together for approval.</span></li>
+      </ol>
+    </section>`;
+    return { markup };
+  }
+  // The country / price level shortcut on the price list card.
+  $('#filesTable')?.addEventListener('change', event => {
+    const select = event.target.closest('[data-ml-pick] select');
+    if (!select) return;
+    pricePick[select.dataset.pick] = select.value;
+    renderFiles();
+  });
+  $('#filesTable')?.addEventListener('click', async event => {
+    const action = event.target.closest('[data-ml]');
+    if (action?.dataset.ml === 'upload') openMasterlistUpload();
+    else if (action?.dataset.ml === 'open-country') {
+      const list = (state.versions || []).find(version => version.source === 'masterlist' && version.kind === 'list' && version.country === pricePick.country && version.priceLevel === pricePick.level);
+      if (list) { openOriginRect = action.closest('.ml-home')?.getBoundingClientRect() || null; runListAction('open', list.id); }
+    }
+  });
+
+  // Upload: the price list workbook → check it → see exactly what it changes → apply.
+  const mlUpload = { file: null, fingerprint: '', step: 'choose', busy: false };
+  const mlDialog = $('#masterlistUploadDialog');
+  function openMasterlistUpload({ file = null } = {}) {
+    if (!mlDialog) return;
+    if (!can('upload')) return toast('Your role cannot upload price lists.');
+    Object.assign(mlUpload, { file, fingerprint: '', busy: false });
+    $('#mlFileInput').value = '';
+    mlUpload.step = '';
+    showMlStep('choose');
+    if (!mlDialog.open) mlDialog.showModal();
+  }
+  /** Eases a step of the upload window in: it rises slightly and fades, its parts one after another. */
+  function easeIn(el) {
+    if (!el || reducedMotion()) return;
+    [...el.children].slice(0, 8).forEach((child, index) => child.animate(
+      [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 340, delay: index * 45, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }));
+  }
+  function showMlStep(step) {
+    const changed = mlUpload.step !== step;
+    mlUpload.step = step;
+    $('#mlUploadChoose').hidden = step !== 'choose';
+    $('#mlUploadPreview').hidden = step !== 'preview';
+    $('#mlUploadBack').hidden = step !== 'preview';
+    if (step === 'choose') { $('#mlUploadErrors').hidden = true; renderMlChoose(); }
+    if (changed && mlDialog?.open) easeIn(step === 'choose' ? $('#mlUploadChoose') : $('#mlUploadPreview'));
+  }
+  function renderMlChoose() {
+    const first = !Number(versionSummaryById(MASTERLIST_ID)?.productCount || 0);
+    $('#mlUploadTitle').textContent = first ? 'Upload the price list' : 'Upload an updated price list';
+    $('#mlUploadIntro').textContent = first
+      ? 'One workbook with every product. Each country and price level starts from these prices.'
+      : 'You’ll see exactly what changes before anything is saved.';
+    const fileName = mlUpload.file ? mlUpload.file.name : 'Drop the workbook here';
+    if ($('#mlFileName').textContent !== fileName && mlUpload.file && !reducedMotion()) {
+      $('#mlFileName').animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    }
+    $('#mlFileName').textContent = fileName;
+    $('#mlDropZone').classList.toggle('has-file', Boolean(mlUpload.file));
+    const next = $('#mlUploadNext');
+    next.disabled = !mlUpload.file || mlUpload.busy;
+    next.textContent = mlUpload.busy ? 'Checking…' : 'Check file';
+  }
+  function setMlFile(file) {
+    if (!file) return;
+    if (!/\.xlsx$/i.test(file.name)) return toast('Choose an official .xlsx workbook.');
+    mlUpload.file = file;
+    $('#mlUploadErrors').hidden = true;
+    renderMlChoose();
+  }
+  async function sendMlUpload(confirm = '') {
+    const form = new FormData();
+    if (confirm) form.append('confirm', confirm);
+    form.append('workbook', mlUpload.file, mlUpload.file.name);
+    const response = await fetch('../api/masterlist/upload.php', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
+    if (response.status === 401) { window.location.href = 'login.php'; throw new Error('Please sign in again.'); }
+    const data = await response.json().catch(() => ({ ok: false, message: 'Invalid server response.' }));
+    if (!response.ok || !data.ok) {
+      const error = new Error(data.message || 'The upload did not go through.');
+      error.problems = Array.isArray(data.problems) ? data.problems : [];
+      throw error;
+    }
+    return data;
+  }
+  /** What the upload would change, in the same before → after style as a change review. */
+  function mlPreviewMarkup(preview, stale) {
+    const c = preview.counts;
+    const stat = (value, label) => `<div class="review-stat"><strong>${Number(value).toLocaleString()}</strong><span>${label}</span></div>`;
+    const plural = (n, one, many) => `${n === 1 ? one : many}`;
+    const more = (shown, total) => total > shown ? `<p class="review-note">Showing the first ${shown.toLocaleString()} of ${total.toLocaleString()}.</p>` : '';
+    const product = item => `<td class="review-product"><strong>${escapeHtml(item.description || item.code)}</strong><small>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</small></td>`;
+    const priceCell = (before, after) => masterlistSamePrice(before, after) ? '<td class="review-same">unchanged</td>'
+      : `<td class="review-price"><span class="review-before">${priceText(before)}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${priceText(after)}</strong>${deltaMarkup(before, after)}</td>`;
+    const priceTable = (title, note, items, total) => items.length ? `<section class="review-section"><h3>${title} <small>${note}</small></h3>
+        <div class="review-table-wrap"><table class="review-table"><thead><tr><th>Product</th><th>Price/pc</th><th>Price/box</th></tr></thead>
+        <tbody>${items.map(item => `<tr>${product(item)}${priceCell(item.pcOld, item.pcNew)}${priceCell(item.boxOld, item.boxNew)}</tr>`).join('')}</tbody></table></div>${more(items.length, total)}</section>` : '';
+    const simpleList = (title, note, items, total, extra = () => '') => items.length ? `<section class="review-section"><h3>${title} <small>${note}</small></h3>
+        <ul class="review-edits">${items.map(item => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>${extra(item)}</li>`).join('')}</ul>${more(items.length, total)}</section>` : '';
+    const head = stale ? '<p class="review-note is-rejected">Prices changed since this file was checked. This is what it would change now.</p>' : '';
+    const intro = preview.first
+      ? `<p class="review-note">${preview.products.toLocaleString()} products. Every country and price level starts at these prices.</p>`
+      : `<p class="review-note">${preview.fileName ? `<strong>${escapeHtml(preview.fileName)}</strong> · ` : ''}${preview.products.toLocaleString()} products. Every country and price level gets the new prices, except prices someone set by hand for one country.</p>`;
+    return head + intro + `<div class="review-stats">${stat(c.added, plural(c.added, 'product added', 'products added'))}${stat(c.removed, plural(c.removed, 'product removed', 'products removed'))}${stat(c.priceChanges, plural(c.priceChanges, 'new price', 'new prices'))}${stat(c.detailChanges, 'with new details')}</div>`
+      + (preview.first ? '' : priceTable('New prices', `${c.priceChanges.toLocaleString()} product${c.priceChanges === 1 ? '' : 's'}`, preview.priceChanges, c.priceChanges)
+        + simpleList('Added', `${c.added.toLocaleString()} new`, preview.added, c.added, item => `<strong>${priceText(item.pricePc)}</strong>`)
+        + simpleList('Removed', 'not in this file, so they leave every country', preview.removed, c.removed)
+        + (preview.detailChanges.length ? `<section class="review-section"><h3>New details <small>${c.detailChanges.toLocaleString()} product${c.detailChanges === 1 ? '' : 's'}</small></h3><ul class="review-edits">${preview.detailChanges.flatMap(item => item.fields.map(field => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(field.name)}</span><span class="review-before">${escapeHtml(String(field.old ?? '') || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(String(field.new ?? '') || '(empty)')}</strong></li>`)).join('')}</ul>${more(preview.detailChanges.length, c.detailChanges)}</section>` : '')
+        + (c.unchanged ? `<p class="review-note">${c.unchanged.toLocaleString()} product${c.unchanged === 1 ? ' is' : 's are'} the same.</p>` : ''));
+  }
+  function masterlistSamePrice(a, b) {
+    const blank = value => value === null || value === undefined || value === '';
+    if (blank(a) || blank(b)) return blank(a) && blank(b);
+    return Math.abs(Number(a) - Number(b)) < 0.00005;
+  }
+  function showMlErrors(error) {
+    const box = $('#mlUploadErrors');
+    box.innerHTML = `<strong>${escapeHtml(error.message)}</strong>${error.problems?.length ? `<ul>${error.problems.map(problem => `<li>${escapeHtml(problem)}</li>`).join('')}</ul>` : ''}`;
+    box.hidden = false;
+  }
+  function showMlPreview(data) {
+    mlUpload.fingerprint = data.fingerprint;
+    $('#mlUploadPreview').innerHTML = mlPreviewMarkup(data.preview, data.stale);
+    showMlStep('preview');
+    const next = $('#mlUploadNext');
+    next.disabled = !data.changeCount;
+    next.textContent = data.changeCount ? `Apply ${data.changeCount.toLocaleString()} change${data.changeCount === 1 ? '' : 's'}` : 'Nothing to change';
+  }
+  $('#mlUploadNext')?.addEventListener('click', async () => {
+    if (mlUpload.busy || !mlUpload.file) return;
+    mlUpload.busy = true;
+    const next = $('#mlUploadNext');
+    next.disabled = true;
+    const applying = mlUpload.step === 'preview';
+    next.textContent = applying ? 'Applying…' : 'Checking…';
+    try {
+      const data = await sendMlUpload(applying ? mlUpload.fingerprint : '');
+      mlUpload.busy = false;
+      if (data.preview) return showMlPreview(data); // checked (or prices moved since: checked again)
+      mlDialog.close();
+      toast(data.message);
+      await refreshState();
+    } catch (error) {
+      mlUpload.busy = false;
+      showMlStep('choose');
+      showMlErrors(error);
+    }
+  });
+  $('#mlUploadBack')?.addEventListener('click', () => showMlStep('choose'));
+  ['#mlUploadClose', '#mlUploadCancel'].forEach(selector => $(selector)?.addEventListener('click', () => mlDialog?.close()));
+  $('#mlBrowse')?.addEventListener('click', () => $('#mlFileInput').click());
+  $('#mlFileInput')?.addEventListener('change', event => setMlFile(event.target.files?.[0]));
+  $('#mlDropZone')?.addEventListener('dragover', event => { event.preventDefault(); $('#mlDropZone').classList.add('dragover'); });
+  $('#mlDropZone')?.addEventListener('dragleave', () => $('#mlDropZone').classList.remove('dragover'));
+  $('#mlDropZone')?.addEventListener('drop', event => {
+    event.preventDefault();
+    $('#mlDropZone').classList.remove('dragover');
+    setMlFile([...(event.dataTransfer?.files || [])][0]);
+  });
 
   // --- Price list switcher: one pill that opens a Country › Price level › Price list cascade ---
   const switcher = { country: '', level: '', query: '' };
@@ -2786,13 +3352,23 @@
     const item = (kind, value, label, { meta = '', highlight = false, current = false, arrow = false } = {}) =>
       `<button type="button" class="lsm-item ${highlight ? 'is-highlight' : ''} ${current ? 'is-current' : ''}" data-kind="${kind}" data-value="${escapeHtml(value)}" role="option" aria-selected="${highlight || current}">
         <span class="lsm-label">${escapeHtml(label)}</span>${meta ? `<span class="lsm-meta">${escapeHtml(meta)}</span>` : ''}${arrow ? '<span class="lsm-arrow" aria-hidden="true">›</span>' : ''}</button>`;
-    $('#lsmCountries').innerHTML = countries.map(entry => item('country', entry.name, entry.name, {
-      meta: String(entry.count), highlight: sameText(entry.name, switcher.country), current: sameText(entry.name, active?.country), arrow: true
-    })).join('') || '<p class="lsm-empty">No matches</p>';
+    // The masterlist file: "Base prices" first, then country › price level, which opens that view
+    // (one list per pair, so no third column). A dot marks views with unsaved changes.
+    const master = inMasterlistFile(active);
+    switcherMenu.classList.toggle('is-masterlist', master);
+    const unsaved = master ? Object.values(masterlistPending().views) : [];
+    const dot = count => (count ? `• ${count} unsaved` : '');
+    const baseItem = master && (!query || 'standard prices'.includes(query))
+      ? `<button type="button" class="lsm-item lsm-base ${active.kind === 'masterlist' ? 'is-current' : ''}" data-kind="base" data-value="${MASTERLIST_ID}" role="option"><span class="lsm-label">Standard prices</span><span class="lsm-meta">${unsaved.some(view => view.kind === 'masterlist') ? '• unsaved' : 'all countries'}</span></button>` : '';
+    $('#lsmCountries').innerHTML = baseItem + (countries.map(entry => item('country', entry.name, entry.name, {
+      meta: master ? dot(unsaved.filter(view => sameText(view.country, entry.name)).length) : String(entry.count),
+      highlight: sameText(entry.name, switcher.country), current: sameText(entry.name, active?.country), arrow: true
+    })).join('') || '<p class="lsm-empty">No matches</p>');
     $('#lsmLevels').innerHTML = levels.map(level => item('level', level, level, {
-      meta: String(forCountry.filter(version => sameText(version.priceLevel, level)).length),
+      meta: master ? (unsaved.some(view => sameText(view.country, switcher.country) && sameText(view.priceLevel, level)) ? '• unsaved' : '')
+        : String(forCountry.filter(version => sameText(version.priceLevel, level)).length),
       highlight: sameText(level, switcher.level),
-      current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: true
+      current: sameText(level, active?.priceLevel) && sameText(switcher.country, active?.country), arrow: !master
     })).join('') || '<p class="lsm-empty">—</p>';
     $('#lsmLists').innerHTML = files.map(version => item('list', version.id, version.name, {
       // Like the header, only a status that needs attention is named; approved lists are the norm.
@@ -2846,6 +3422,14 @@
   // Hovering a country or level previews the next column; clicking works too (touch, keyboard).
   const pickSwitcherItem = (button, fromHover) => {
     const { kind, value } = button.dataset;
+    if (kind === 'base' && !fromHover) { toggleSwitcher(false); openFromNavigator(value); return; }
+    // In the masterlist file a price level opens that country's list straight away.
+    if (kind === 'level' && !fromHover && inMasterlistFile(state.active)) {
+      const list = navigableVersions().find(version => sameText(version.country, switcher.country) && sameText(version.priceLevel, value));
+      toggleSwitcher(false);
+      if (list) openFromNavigator(list.id);
+      return;
+    }
     if (kind === 'country' && !sameText(switcher.country, value)) { switcher.country = value; switcher.level = ''; renderSwitcherMenu(); }
     else if (kind === 'level' && !sameText(switcher.level, value)) { switcher.level = value; renderSwitcherMenu(); }
     else if (kind === 'list' && !fromHover) { toggleSwitcher(false); openFromNavigator(value); }
@@ -3315,8 +3899,13 @@
     toast([`${saved} file${saved === 1 ? '' : 's'} uploaded`, failedNow ? `${failedNow} failed` : '', skipped ? `${skipped} skipped (not the template)` : ''].filter(Boolean).join(' · ') + '.');
   }
 
-  async function openUploadModal() {
+  async function openUploadModal(files = []) {
     if (!can('upload')) return toast('Your role cannot upload price lists.');
+    // With the price masterlist, a workbook updates the masterlist or one list's prices instead.
+    if (state.masterlist?.enabled) {
+      openMasterlistUpload({ file: [...files].find(file => /\.xlsx$/i.test(file.name)) || null });
+      return false;
+    }
     clearStagedFile();
     fillDatalists();
     renderTemplateGuide();
@@ -4202,7 +4791,7 @@
   });
   // "Upload a new price list" sits in the price list switcher, beside opening another list.
   $('#uploadButton').addEventListener('click', event => { event.stopPropagation(); toggleSwitcher(false); openUploadModal(); });
-  $('#emptyUploadButton').addEventListener('click', openUploadModal);
+  $('#emptyUploadButton').addEventListener('click', () => openUploadModal());
   dom.emptyState.addEventListener('dragover', event => {
     event.preventDefault();
     dom.emptyState.classList.add('dragover');
@@ -4217,7 +4806,7 @@
     if (!files.length) return;
     if (!can('upload')) return toast('Your role cannot upload price lists.');
     if (!files.some(file => /\.xlsx$/i.test(file.name))) return toast('Please drop official .xlsx workbooks. Legacy .xls files are not accepted.');
-    if (await openUploadModal()) stageFilesForUpload(files);
+    if (await openUploadModal(files)) stageFilesForUpload(files);
   });
   $('#editButton').addEventListener('click', event => {
     event.stopPropagation();
@@ -4232,7 +4821,7 @@
     const files = [...(dom.fileInput.files || [])];
     dom.fileInput.value = '';
     if (!files.length) return;
-    if (await openUploadModal()) stageFilesForUpload(files);
+    if (await openUploadModal(files)) stageFilesForUpload(files);
   });
 
   // --- Price roll: after Apply or Reset, every changed digit on screen rolls like an odometer
@@ -4313,6 +4902,85 @@
     if (rolled.length) rollTimer = setTimeout(() => rolled.forEach(({ td, to }) => { if (td.isConnected && td.querySelector('.odo')) td.textContent = money.format(to); }), longest + 80);
   }
 
+  // In a country + price level list of the masterlist, the % can cover more lists than this one.
+  function renderAdjustScope() {
+    const box = $('#adjScope');
+    if (!box) return;
+    const active = state.active;
+    const show = inMasterlistFile(active) && active.kind === 'list';
+    box.hidden = !show;
+    if (!show) return;
+    const select = $('#adjScopeSelect');
+    select.innerHTML = [
+      ['list', `${active.country} · ${active.priceLevel} only`],
+      ['level', `Every country · ${active.priceLevel}`],
+      ['country', `${active.country} · every price level`],
+      ['pick', `Pick countries · ${active.priceLevel}…`],
+      ['all', 'Every country and price level'],
+    ].map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+    select.value = 'list';
+    renderScopeCountries();
+  }
+  function renderScopeCountries() {
+    const box = $('#adjScopeCountries');
+    const pick = $('#adjScopeSelect')?.value === 'pick';
+    // The country checklist slides open under the dropdown.
+    const wrap = $('#adjScopeCountriesWrap');
+    wrap.classList.toggle('is-open', pick);
+    wrap.setAttribute('aria-hidden', String(!pick));
+    box.querySelectorAll('input').forEach(input => { input.tabIndex = pick ? 0 : -1; });
+    if (!pick || box.dataset.ready === `${state.active?.country}|${state.active?.priceLevel}`) return;
+    box.dataset.ready = `${state.active?.country}|${state.active?.priceLevel}`;
+    box.innerHTML = `<label class="adj-cat-row adj-cat-all adj-scope-all"><input type="checkbox" data-all-countries><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name">All countries</span><span class="cat-count" id="adjScopeCount"></span></label>`
+      + `<div class="adj-scope-grid">${(state.countries || []).map(country => `<label class="adj-cat-row adj-scope-country${country === state.active?.country ? ' checked' : ''}"><input type="checkbox" value="${escapeHtml(country)}"${country === state.active?.country ? ' checked' : ''}><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name" title="${escapeHtml(country)}">${escapeHtml(country)}</span></label>`).join('')}</div>`;
+    syncScopeCountries();
+  }
+  $('#adjScopeSelect')?.addEventListener('change', renderScopeCountries);
+  /** Ticks, the "All countries" box (all / some / none) and the count, after any change. */
+  function syncScopeCountries() {
+    const boxes = [...$$('#adjScopeCountries .adj-scope-country input')];
+    const ticked = boxes.filter(input => input.checked).length;
+    boxes.forEach(input => input.closest('.adj-cat-row').classList.toggle('checked', input.checked));
+    const all = $('#adjScopeCountries [data-all-countries]');
+    if (all) { all.checked = ticked === boxes.length && ticked > 0; all.indeterminate = ticked > 0 && ticked < boxes.length; }
+    if ($('#adjScopeCount')) $('#adjScopeCount').textContent = `${ticked} of ${boxes.length}`;
+  }
+  $('#adjScopeCountries')?.addEventListener('change', event => {
+    if (event.target.matches('[data-all-countries]')) [...$$('#adjScopeCountries .adj-scope-country input')].forEach(input => { input.checked = event.target.checked; });
+    syncScopeCountries();
+  });
+  /** The lists the % covers beyond this one, or null for "only this list". */
+  function adjustScope() {
+    const active = state.active;
+    if ($('#adjScope')?.hidden || !inMasterlistFile(active)) return null;
+    const value = $('#adjScopeSelect').value;
+    if (value === 'level') return { countries: [], levels: [active.priceLevel] };
+    if (value === 'country') return { countries: [active.country], levels: [] };
+    if (value === 'all') return { countries: [], levels: [] };
+    if (value === 'pick') return { countries: [...$$('#adjScopeCountries .adj-scope-country input:checked')].map(input => input.value), levels: [active.priceLevel] };
+    return null;
+  }
+  /** A % for many lists: kept with the masterlist file (shown in every list it covers) until saved. */
+  function applyScopedAdjustment(scope, value, selectedCats, allCategories) {
+    if (scope.countries && !scope.countries.length && $('#adjScopeSelect').value === 'pick') return toast('Pick at least one country.');
+    const isAll = selectedCats.length === allCategories.length;
+    const entry = { countries: scope.countries, levels: scope.levels, categories: isAll ? [] : selectedCats, percent: value };
+    const pending = masterlistPending();
+    // The same lists and categories again: the new % replaces the earlier one.
+    const same = item => JSON.stringify([item.countries, item.levels, item.categories]) === JSON.stringify([entry.countries, entry.levels, entry.categories]);
+    pending.scoped = pending.scoped.filter(item => !same(item));
+    if (value !== 0) pending.scoped.push(entry);
+    const pricesBefore = capturePrices();
+    setMasterlistPending(pending);
+    updateMetrics();
+    renderTable();
+    rollPrices(pricesBefore);
+    renderWorkflowState();
+    renderTabs();
+    setPriceEditor(false);
+    toast(value ? `Applied ${scopedLabel(entry)}. It shows in every list it covers; save to ${state.autoApprove ? 'make it live' : 'send it for approval'}.` : 'Removed that %.');
+  }
+
   async function applyPriceAdjustment() {
     const rawVal = String(dom.percentage.value ?? '').trim();
     if (rawVal === '') {
@@ -4330,6 +4998,8 @@
     if (!selectedCats.length) {
       return toast('Please select at least one category to apply the adjustment.');
     }
+    const scope = adjustScope();
+    if (scope) return applyScopedAdjustment(scope, value, selectedCats.map(String), allCategories);
 
     // Nothing to do (e.g. 0% on prices already at 0%): no draft, no audit entry.
     if (selectedCats.every(cat => getCategoryAdjustment(cat) === value)) {
@@ -4447,6 +5117,7 @@
     if ($('#saveButton').dataset.saveState === 'saving') return; // already saving
     if (!can('save')) return toast('You do not have permission to save price lists.');
     if (!state.active) return toast('Please upload or open a price list first before saving.');
+    if (inMasterlistFile(state.active)) return openMasterlistSave();
     if (!state.active.isDraft && state.active.status === 'pending') return toast('This price list is already saved and waiting for approval. Make changes first to save a new version.');
     if (!state.active.isDraft && ['approved', 'uploaded'].includes(state.active.status)) return toast('No changes to save. Adjust prices or edit cells first, then save to send the changes for approval.');
     dom.versionNameInput.value = state.active.name || '';
@@ -4455,10 +5126,15 @@
     dom.savePriceLevel.value = canonicalPriceLevel(state.active.priceLevel) || String(state.active.priceLevel || '').trim();
     dom.saveCountry.innerHTML = countryOptionsHtml(state.active.country, 'Select country…');
     dom.saveCountry.value = canonicalCountry(state.active.country) || String(state.active.country || '').trim();
+    // The masterlist and its lists have a fixed name, country and price level.
+    const fixed = state.active.source === 'masterlist';
+    dom.versionNameInput.closest('label').hidden = fixed;
+    dom.saveForm.noValidate = false;
+    $('#saveDialog h2').textContent = 'Review and save price list';
     // Price level and country are chosen at upload; show them read-only unless one is missing (older lists).
-    const metaMissing = !dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim();
-    $('#saveMetaPriceLevel').textContent = state.active.priceLevel || 'Not set';
-    $('#saveMetaCountry').textContent = state.active.country || 'Not set';
+    const metaMissing = !fixed && (!dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim());
+    $('#saveMetaPriceLevel').textContent = state.active.priceLevel || (fixed ? 'All price levels' : 'Not set');
+    $('#saveMetaCountry').textContent = state.active.country || (fixed ? 'All countries' : 'Not set');
     $('#saveMetaReadonly').hidden = metaMissing;
     $('#saveMetaEdit').hidden = !metaMissing;
     dom.saveApproversNote.textContent = state.autoApprove
@@ -4475,7 +5151,7 @@
     renderSaveSummary();
     renderSaveEdits();
     dom.saveDialog.showModal();
-    requestAnimationFrame(() => {
+    if (!fixed) requestAnimationFrame(() => {
       dom.versionNameInput.focus();
       dom.versionNameInput.select();
     });
@@ -4486,12 +5162,27 @@
       dom.saveDialog.close();
       return;
     }
-    const name = dom.versionNameInput.value.trim();
+    const fixed = state.active?.source === 'masterlist';
+    if (fixed) {
+      // The masterlist file: every view's changes go as one.
+      if (!dom.saveConfirmCheck.checked) return toast('Confirm that you have reviewed the prices.');
+      dom.saveDialog.close();
+      setSaveButtonState('saving');
+      try {
+        await saveMasterlistFile();
+        setSaveButtonState('done');
+      } catch (error) {
+        setSaveButtonState('error');
+        toast(error.message);
+      }
+      return;
+    }
+    const name = fixed ? state.active.name : dom.versionNameInput.value.trim();
     if (!name) {
       dom.versionNameInput.focus();
       return toast('Please enter a price list name.');
     }
-    if (!dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim()) {
+    if (!fixed && (!dom.savePriceLevel.value.trim() || !dom.saveCountry.value.trim())) {
       return toast('Enter the price level and country.');
     }
     if (!dom.saveConfirmCheck.checked) return toast('Confirm that you have reviewed the prices.');
@@ -4872,7 +5563,34 @@
     const value = numeric(raw);
     return rate ? Math.max(0, Math.round(value * (1 + rate / 100) * 10000) / 10000) : value;
   }
+  /**
+   * A masterlist or list change records exactly what it changes when it is saved, so its review stays
+   * right after it is applied (the live list it was made from has moved on by then).
+   */
+  function compareMasterlistEdits(change) {
+    const headers = normalizeHeaders(change.headers);
+    const result = { prices: [], edits: [], cells: new Map(), added: 0, removed: 0, compared: true };
+    const indexOf = new Map((change.rows || []).map((row, index) => [String(row[COL.code] ?? '').toLowerCase(), index]));
+    const header = col => String(headers[col] || '').replace(/\s+/g, ' ').trim();
+    change.masterlistEdits.forEach(edit => {
+      const index = indexOf.get(String(edit.code).toLowerCase()) ?? -1;
+      const product = { index, code: edit.code, name: edit.description || edit.code, category: edit.category, cols: [] };
+      Object.entries(edit.prices || {}).forEach(([field, price]) => {
+        const col = field === 'pricePc' ? 8 : 9;
+        product.cols.push({ col, header: header(col), before: price.old ?? '', after: price.new ?? '' });
+        result.cells.set(`${index}|${col}`, { before: price.old ?? '', isPrice: true });
+      });
+      (edit.fields || []).forEach(field => {
+        result.edits.push({ code: edit.code, name: product.name, header: field.name, before: String(field.old ?? ''), after: String(field.new ?? '') });
+        result.cells.set(`${index}|${field.col}`, { before: String(field.old ?? ''), isPrice: false });
+      });
+      if (product.cols.length) result.prices.push(product);
+    });
+    return result;
+  }
   function compareVersions(change, base) {
+    if (Array.isArray(change.masterlistEdits)) return compareMasterlistEdits(change);
+    if (change.kind === 'batch') return { prices: [], edits: [], cells: new Map(), added: 0, removed: 0, compared: true };
     const headers = normalizeHeaders(change.headers);
     const rows = normalizeRows(change.rows || [], change.priceLevel, change.country);
     const priceCols = pricedColumns(change, headers);
@@ -4961,7 +5679,41 @@
     const more = items.length - limit;
     return items.slice(0, limit).map(item => netChip(item)).join('') + (more > 0 ? `<span class="adj-chip more" title="${escapeHtml(items.slice(limit).map(item => `${item.category} ${item.net > 0 ? '▲' : '▼'} ${Math.abs(item.net)}%`).join(', '))}">+${more} more</span>` : '');
   }
+  /** A price rules change: each rule's % before → after. */
+  function rulesReviewMarkup(change) {
+    const percent = value => { const text = String(value ?? '').replace('%', '').trim(); return text === '' ? '' : `${Number(text) > 0 ? '+' : ''}${Number(text)}%`; };
+    const items = change.changes || [];
+    const status = change.status === 'rejected'
+      ? `<p class="review-note is-rejected">Rejected by ${escapeHtml(change.rejectedBy || 'an approver')}${change.rejectionRemarks ? `: “${escapeHtml(change.rejectionRemarks)}”` : ''}</p>` : '';
+    return `${status}<section class="review-section"><h3>Price rules <small>${items.length} change${items.length === 1 ? '' : 's'}</small></h3>
+      <ul class="review-edits">${items.map(item => `<li><span class="review-edit-what"><strong>${escapeHtml(item.product || 'All lists')}</strong></span><span class="review-before">${escapeHtml(percent(item.oldValue) || 'no rule')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(percent(item.newValue) || 'removed')}</strong></li>`).join('')}</ul></section>
+      <p class="review-note">Every list a rule covers moves by its new %. Prices set by hand in a list stay as they are.</p>`;
+  }
+  /** A one-file save of the masterlist: base prices, % changes, then each list's own prices. */
+  function batchReviewMarkup(change) {
+    const batch = change.masterlistBatch || { baseEdits: [], ruleOps: [], lists: [] };
+    const status = change.status === 'rejected'
+      ? `<p class="review-note is-rejected">Rejected by ${escapeHtml(change.rejectedBy || 'an approver')}${change.rejectionRemarks ? `: “${escapeHtml(change.rejectionRemarks)}”` : ''}</p>` : '';
+    const listPrices = batch.lists.reduce((sum, list) => sum + list.edits.length, 0);
+    const stat = (value, label) => `<div class="review-stat"><strong>${value}</strong><span>${label}</span></div>`;
+    const stats = `<div class="review-stats">${stat(batch.baseEdits.length, 'standard prices')}${stat(batch.ruleOps.length, '% changes')}${stat(listPrices, `prices in ${batch.lists.length} countr${batch.lists.length === 1 ? 'y' : 'ies'}`)}</div>`;
+    const table = (title, note, edits) => {
+      const diff = compareMasterlistEdits({ headers: [], rows: [], masterlistEdits: edits });
+      return `<section class="review-section"><h3>${escapeHtml(title)} <small>${escapeHtml(note)}</small></h3>
+        <div class="review-table-wrap"><table class="review-table"><thead><tr><th>Product</th><th>Price/pc</th><th>Price/box</th></tr></thead><tbody>${diff.prices.map(product => {
+          const cell = col => { const item = product.cols.find(entry => entry.col === col); return item ? `<td class="review-price"><span class="review-before">${priceText(item.before)}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${priceText(item.after)}</strong>${deltaMarkup(item.before, item.after)}</td>` : '<td class="review-same">unchanged</td>'; };
+          return `<tr><td class="review-product"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.code || '')}</small></td>${cell(8)}${cell(9)}</tr>`;
+        }).join('')}</tbody></table></div>${diff.edits.length ? `<ul class="review-edits">${diff.edits.map(edit => `<li><span class="review-edit-what"><strong>${escapeHtml(edit.name)}</strong> · ${escapeHtml(edit.header)}</span><span class="review-before">${escapeHtml(edit.before || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(edit.after || '(empty)')}</strong></li>`).join('')}</ul>` : ''}</section>`;
+    };
+    const rules = batch.ruleOps.length ? `<section class="review-section"><h3>% changes <small>every price there moves by this %</small></h3><div class="review-chips">${batch.ruleOps.map(op => `<span class="adj-chip ${op.percent > 0 ? 'up' : 'down'}">${escapeHtml(op.label)} <b>${op.percent > 0 ? '▲ +' : '▼ '}${op.percent}%</b></span>`).join('')}</div></section>` : '';
+    return status + stats
+      + (batch.baseEdits.length ? table('Standard prices', 'every country and price level follows these', batch.baseEdits) : '')
+      + rules
+      + batch.lists.map(list => table(`${list.country} · ${list.priceLevel}`, 'prices set by hand', list.edits)).join('');
+  }
   function reviewMarkup(change, diff, base) {
+    if (change.kind === 'batch') return batchReviewMarkup(change);
+    if (change.kind === 'rules') return rulesReviewMarkup(change);
     const adjusted = netAdjustments(change, base);
     const stat = (value, label) => `<div class="review-stat"><strong>${value}</strong><span>${label}</span></div>`;
     const priceCount = diff.prices.reduce((sum, product) => sum + product.cols.length, 0);
@@ -5004,6 +5756,7 @@
     $('#changeReviewApprove').hidden = !summary.canApprove;
     $('#changeReviewReject').hidden = !summary.canApprove;
     $('#changeReviewOpen').textContent = String(state.active?.id) === String(id) ? 'Back to the editor' : 'Open in editor';
+    $('#changeReviewOpen').hidden = ['rules', 'batch'].includes(summary.kind); // no rows of their own to open
     const body = $('#changeReviewBody');
     body.innerHTML = '<p class="review-loading">Comparing with the previous version…</p>';
     if (!dialog.open) dialog.showModal();
@@ -5034,6 +5787,25 @@
       applyChangeMarks();
     } catch { /* no marks: the review window still lists the recorded edits */ }
     renderChangeMarksButton();
+  }
+  /**
+   * Prices set just for this country + price level (not worked out from the masterlist) get a small
+   * pink corner; an amber one when the masterlist price moved since, so it may need another look.
+   */
+  function applyOwnPriceMarks() {
+    const own = state.active?.ownPrices;
+    if (!own || !dom.table) return;
+    state.rows.forEach((row, index) => {
+      const mark = own[String(row[COL.code] ?? '')];
+      if (!mark) return;
+      [[8, mark.pc, mark.rulePc], [9, mark.box, mark.ruleBox]].forEach(([col, set, rule]) => {
+        const td = dom.table.querySelector(`.excel-cell[data-row="${index}"][data-col="${col}"]`);
+        if (!set || !td) return;
+        td.classList.add('is-own-price');
+        td.classList.toggle('is-own-stale', Boolean(mark.baseChanged));
+        td.title = `Set by hand for this country${mark.setBy ? ` by ${mark.setBy}` : ''}${mark.setAt ? ` · ${displayDate(mark.setAt)}` : ''}. The standard price would be ${isNumeric(rule) ? money.format(numeric(rule)) : '—'}.${mark.baseChanged ? ' The standard price changed since.' : ''}`;
+      });
+    });
   }
   function applyChangeMarks() {
     const marks = state.changeMarks;
@@ -5121,8 +5893,8 @@
         <span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</button>`;
     const groups = [
       [
-        ...(version.source !== 'upload' ? [item('review', 'Review changes', { hint: 'Before → after' })] : []),
-        item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' }),
+        ...(version.source !== 'upload' && version.source !== 'masterlist' ? [item('review', 'Review changes', { hint: 'Before → after' })] : []),
+        ...(['rules', 'batch'].includes(version.kind) ? [] : [item('open', isOpen ? 'Go to editor' : 'Open in editor', { hint: isOpen ? 'Already open' : '' })]),
         ...(listHistory(version).length > 1 ? [item('history', 'Version history', { hint: `${listHistory(version).length} versions` })] : []),
       ],
       version.canApprove ? [item('approve', 'Approve'), item('reject', 'Reject', { danger: true })] : [],
@@ -5256,7 +6028,7 @@
     if (finalPanelId === 'usersPanel') { state.usersPreloaded = true; loadUsers(); }
     else if (can('manageUsers') && !state.usersPreloaded) { state.usersPreloaded = true; setTimeout(loadUsers, 1200); }
     if (finalPanelId !== 'usersPanel') closePersonMenu();
-    if (finalPanelId === 'historyPanel') renderHistory();
+    if (finalPanelId === 'historyPanel') { renderHistory(); loadAuditLogs(); }
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
 
@@ -5343,7 +6115,8 @@
     switchPanel(getInitialPanelId(), false);
   });
   document.addEventListener('click', event => {
-    if (!$('#adjustmentBar').hidden && !event.target.closest('#adjustmentBar') && !event.target.closest('#editButton')) {
+    // (The dropdown menu of a select inside it lives outside it, in <body>: choosing there isn't "outside".)
+    if (!$('#adjustmentBar').hidden && !event.target.closest('#adjustmentBar, #editButton, #selectDropdownMenu')) {
       setPriceEditor(false);
     }
   });
@@ -5951,6 +6724,7 @@
   dom.cancelUploadBtn?.addEventListener('click', closeUploadModal);
   dom.downloadTemplateBtn?.addEventListener('click', downloadExcelTemplate);
   $('#guideDownloadTemplateBtn')?.addEventListener('click', downloadExcelTemplate);
+  $('#mlDownloadTemplate')?.addEventListener('click', downloadExcelTemplate);
   $('#uploadTemplateRulesBtn')?.addEventListener('click', () => setUploadGuide(true));
   $('#uploadGuideBackBtn')?.addEventListener('click', () => setUploadGuide(false));
   $('.template-layout-tabs')?.addEventListener('click', event => {

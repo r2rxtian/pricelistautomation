@@ -119,7 +119,7 @@ final class OfficialPriceWorkbook
                 if ($localHeader[$field] !== $part[$field] && (!(($part['flags'] & 8)) || $localHeader[$field] !== 0)) $this->fail('The workbook archive is inconsistent.');
             }
             if (!str_ends_with($name, '/')) {
-                if (!preg_match('~^(?:\[Content_Types\]\.xml|_rels/\.rels|docProps/(?:app|core|custom)\.xml|xl/(?:workbook\.xml|styles\.xml|metadata\.xml|sharedStrings\.xml|_rels/workbook\.xml\.rels|theme/theme[0-9]+\.xml|worksheets/sheet[0-9]+\.xml))$~D', $name)) {
+                if (!preg_match('~^(?:\[Content_Types\]\.xml|_rels/\.rels|docProps/(?:app|core|custom)\.xml|xl/(?:workbook\.xml|styles\.xml|metadata\.xml|sharedStrings\.xml|_rels/workbook\.xml\.rels|theme/theme[0-9]+\.xml|worksheets/sheet[0-9]+\.xml|worksheets/_rels/sheet[0-9]+\.xml\.rels|drawings/drawing[0-9]+\.xml|persons/person\.xml))$~D', $name)) {
                     $this->fail("Workbook contains unsupported parts ({$name}). Macros, embedded objects, hyperlinks and external links are not accepted.");
                 }
                 $this->parts[$name] = $part['expanded'];
@@ -211,6 +211,15 @@ final class OfficialPriceWorkbook
         foreach (array_keys($this->parts) as $part) {
             if (str_starts_with($part, 'docProps/') || str_starts_with($part, 'xl/theme/') || in_array($part, ['xl/styles.xml', 'xl/metadata.xml'], true)) $this->xml($part);
         }
+        // Google Sheets adds an empty drawing to every sheet. Those are fine; a drawing with anything in
+        // it (a picture, shape or chart) is not.
+        foreach (array_keys($this->parts) as $part) {
+            if (!str_starts_with($part, 'xl/drawings/')) continue;
+            $drawing = $this->xml($part)->documentElement;
+            $empty = $drawing?->localName === 'wsDr' && !array_filter(iterator_to_array($drawing->childNodes), fn($node) => $node instanceof DOMElement);
+            if (!$empty) $this->fail('Workbook contains pictures, shapes or charts. Remove them and keep only the price list values.');
+        }
+        if (isset($this->parts['xl/persons/person.xml'])) $this->xml('xl/persons/person.xml');
         if (isset($this->parts['xl/sharedStrings.xml'])) {
             $document = $this->xml('xl/sharedStrings.xml');
             $xpath = $this->xpath($document);
@@ -242,7 +251,7 @@ final class OfficialPriceWorkbook
             $sheets[] = ['name' => $name, 'part' => $relations[$id]['target']];
         }
         foreach (array_keys($this->parts) as $part) {
-            if (str_starts_with($part, 'xl/worksheets/') && !isset($usedParts[$part])) $this->fail('Workbook contains an unregistered worksheet.');
+            if (str_starts_with($part, 'xl/worksheets/sheet') && !isset($usedParts[$part])) $this->fail('Workbook contains an unregistered worksheet.');
         }
         // 2. Each sheet is recognised by its header rows, not its name: any sheet whose headers match an
         //    approved layout is a category (the sheet name becomes the category), so new categories can
@@ -303,7 +312,8 @@ final class OfficialPriceWorkbook
         if ($problems) {
             $this->fail(count($problems) === 1 ? $problems[0] : count($problems) . ' things need fixing in this workbook:', count($problems) === 1 ? [] : $problems);
         }
-        return ['headers' => $template['normalizedHeaders'], 'rows' => $products, 'priceColumns' => [8, 9], 'templateVersion' => $template['version']];
+        // layouts: category (sheet name) => 'standard' | 'presentation', for the price masterlist.
+        return ['headers' => $template['normalizedHeaders'], 'rows' => $products, 'priceColumns' => [8, 9], 'templateVersion' => $template['version'], 'layouts' => $detected];
     }
 
     /** The values in a sheet's first rows (where the headers are), without the full checks. */
@@ -353,7 +363,15 @@ final class OfficialPriceWorkbook
         $document = $this->xml($part);
         $xpath = $this->xpath($document);
         if ($document->documentElement->localName !== 'worksheet') $this->fail("{$name}: invalid worksheet.");
-        if ($xpath->query('//m:hyperlinks | //m:oleObjects | //m:drawing | //m:legacyDrawing')->length) $this->fail("{$name}: hyperlinks and embedded objects are not accepted.");
+        if ($xpath->query('//m:hyperlinks | //m:oleObjects | //m:legacyDrawing')->length) $this->fail("{$name}: hyperlinks and embedded objects are not accepted.");
+        $relsPart = preg_replace('~^xl/worksheets/(sheet[0-9]+\.xml)$~', 'xl/worksheets/_rels/$1.rels', $part);
+        $sheetRelations = isset($this->parts[$relsPart]) ? $this->relationships($relsPart, 'xl/worksheets/') : [];
+        foreach ($sheetRelations as $relation) {
+            if ($relation['type'] !== self::DOC_REL_NS . '/drawing' || !str_starts_with($relation['target'], 'xl/drawings/')) $this->fail("{$name}: hyperlinks, comments and embedded objects are not accepted.");
+        }
+        foreach ($xpath->query('/m:worksheet/m:drawing') as $drawing) {
+            if (!isset($sheetRelations[$drawing->getAttributeNS(self::DOC_REL_NS, 'id')])) $this->fail("{$name}: invalid drawing reference.");
+        }
         $width = count($headers[0]);
         $dimension = $xpath->query('/m:worksheet/m:dimension')->item(0);
         if ($dimension) {

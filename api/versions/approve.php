@@ -20,6 +20,8 @@ if ($complete) {
     $version['status'] = 'approved';
     $version['approvedAt'] = gmdate('c');
     $version['approvedBy'] = implode(' & ', array_map(fn($a) => $a['name'], $version['approvals']));
+    // A masterlist or country list change takes effect now.
+    if (($version['kind'] ?? '') !== '') masterlist_apply_version($version, $version['savedBy'] ?? $user['name']);
 }
 repo_save_version($version);
 
@@ -30,7 +32,7 @@ else repo_mark_notifications_read($user['username'], array_column(array_filter(r
 
 if ($complete) {
     supersede_older_approved($version);
-    record_audit('approve_version', "Approved '{$version['name']}'", "{$user['name']} approved {$label}. It is now available for export." . ($remarks !== '' ? " Remarks: {$remarks}" : ''), [
+    record_audit('approve_version', 'Approved ' . version_title($version), "{$user['name']} approved {$label}. It is now available for export." . ($remarks !== '' ? " Remarks: {$remarks}" : ''), [
         'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'remarks' => $remarks,
     ]);
     notify([$submitter], 'approved', "Approved: {$version['name']}", "{$user['name']} approved {$label}. It is ready for export.", $version['id']);
@@ -39,7 +41,7 @@ if ($complete) {
     $message = 'Price list approved and available for export.';
 } else {
     $waiting = array_diff($version['requiredApprovers'], array_map(fn($a) => $a['username'], $version['approvals']));
-    record_audit('approve_version', "Approved '{$version['name']}' (partial)", "{$user['name']} approved {$label}. Still waiting for " . implode(' & ', array_map('user_display_name', $waiting)) . '.', [
+    record_audit('approve_version', 'Approved ' . version_title($version) . ' (partial)', "{$user['name']} approved {$label}. Still waiting for " . implode(' & ', array_map('user_display_name', $waiting)) . '.', [
         'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'remarks' => $remarks,
     ]);
     notify([$submitter], 'partial_approval', "Partially approved: {$version['name']}", "{$user['name']} approved {$label}. Waiting for the remaining approver(s).", $version['id']);

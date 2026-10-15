@@ -17,6 +17,7 @@ require_once __DIR__ . '/../authz/authz.php';
 require_once __DIR__ . '/../authz/audit.php';
 require_once __DIR__ . '/../rules/workflow.php';
 require_once __DIR__ . '/../rules/validation.php';
+require_once __DIR__ . '/../rules/masterlist.php';
 
 set_exception_handler(function (Throwable $error): void {
     error_log($error->__toString());
@@ -54,7 +55,8 @@ function apiUser(): array
 /** A version the user may open, or a 404 response. */
 function find_open_version(array $user, string $id): array
 {
-    $version = repo_get_version($id);
+    // The masterlist and its country + price level lists are worked out live, not stored.
+    $version = masterlist_is_virtual_id($id) ? masterlist_virtual_version($id) : repo_get_version($id);
     if (!$version || !version_visible_to($user, $version)) {
         json_response(['ok' => false, 'message' => 'Price list not found or not available to your account.'], 404);
     }

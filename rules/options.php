@@ -61,6 +61,11 @@ function option_usage(string $type): array
         $seen[$list] = true;
         $counts[$name] = ($counts[$name] ?? 0) + 1;
     }
+    // Prices set for a country / level in the masterlist, and price rules, use it too.
+    if (STORAGE_DRIVER === 'sqlserver') {
+        require_once __DIR__ . '/../repository/masterlist.php';
+        foreach (masterlist_db_option_usage($type) as $name => $count) $counts[$name] = ($counts[$name] ?? 0) + $count;
+    }
     return $counts;
 }
 

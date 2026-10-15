@@ -3,7 +3,7 @@ declare(strict_types=1);
 /**
  * User management (the Users page), the same flow as QRTS: look a person up by biometrics number in
  * the HR master list, then give them access with a role. Names, departments and sign-in always come
- * from the company tables; PLA_ACD_Users only holds who has access, their role and a short username.
+ * from the company tables; PLA_Users only holds who has access, their role and a short username.
  * IT department staff are not managed here: they get Admin automatically at sign-in.
  */
 

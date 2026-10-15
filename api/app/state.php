@@ -8,6 +8,9 @@ $user = apiUser();
 
 $versions = array_values(array_filter(repo_list_version_summaries(), fn($v) => version_visible_to($user, $v)));
 $versions = array_map(fn($v) => version_for_client($user, $v), $versions);
+// The price list and every country × price level in it (live, so always visible; nothing to approve
+// or delete, so they are sent as they are).
+$versions = array_merge($versions, masterlist_summaries());
 
 json_response([
     'ok' => true,
@@ -25,11 +28,12 @@ json_response([
     'importTemplate' => user_can($user, 'upload') ? price_list_template() : null,
     'directory' => directory_payload(),
     'versions' => $versions,
+    'masterlist' => masterlist_payload(),
     'productImages' => repo_list_images(),
     'photoLibrary' => user_can($user, 'manageImages') ? repo_list_library() : [],
     'photoFolders' => user_can($user, 'manageImages') ? repo_list_library_folders() : [],
     'searchKeywords' => repo_list_search_keywords(), // everyone's search uses them
 
-    'auditLogs' => user_can($user, 'viewAudit') ? repo_list_audit(1000) : [],
+    // Audit logs are loaded by the Audit Logs page itself (api/audit/list.php), not on every refresh.
     'devTools' => DEV_TOOLS_ENABLED && user_can($user, 'update'),
 ] + notifications_payload($user));

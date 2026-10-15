@@ -21,7 +21,7 @@ foreach ($targets as $target) {
         }
     }
 }
-$labels = ['versions' => 'saved price lists', 'audit' => 'audit log entries', 'notifications' => 'notifications', 'images' => 'product photos'];
+$labels = ['versions' => masterlist_enabled() ? 'saved price lists and all prices' : 'saved price lists', 'audit' => 'audit log entries', 'notifications' => 'notifications', 'images' => 'product photos'];
 $summary = implode(', ', array_map(fn($t) => "{$cleared[$t]} {$labels[$t]}", $targets));
 // Always leave a trace, even when the audit log itself was wiped.
 record_audit('dev_reset', 'Cleared test data', "{$user['name']} used developer tools to clear: {$summary}.", ['cleared' => $cleared]);

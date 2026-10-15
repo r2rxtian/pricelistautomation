@@ -22,7 +22,7 @@ const state={importTemplate:${JSON.stringify(contract)},countries:['Australia','
 const dom=Object.fromEntries(${JSON.stringify(domIds)}.map(id=>[id,$('#'+id)]));
 const can=()=>true,confirmDiscardDraft=async()=>true,fillDatalists=()=>{},guessPriceLevel=()=> 'Price Level 4';
 const priceLevelOptionsHtml=value=>'<option value="">Price level…</option><option'+(value?' selected':'')+'>Price Level 4</option>';
-const toast=message=>{window.lastToast=message;},escapeHtml=value=>{const node=document.createElement('div');node.textContent=String(value??'');return node.innerHTML;};
+const reducedMotion=()=>true,toast=message=>{window.lastToast=message;},escapeHtml=value=>{const node=document.createElement('div');node.textContent=String(value??'');return node.innerHTML;};
 const statusLabel=value=>value,refreshState=async()=>{},resetFilters=()=>{},rememberCategory=()=>{},draftKey=()=> 'old';
 const removeDraft=async()=>{window.removedDraft=(window.removedDraft||0)+1;},loadActive=active=>{state.active=active;},switchPanel=id=>{window.panel=id;};
 async function api(action,options){window.lastRequest={action,keys:[...options.body.keys()],csrf:options.headers['X-CSRF-Token']};if(window.holdUpload)await new Promise(resolve=>{window.releaseUpload=resolve;});if(window.failUpload)throw Error('Presentation Stands!C1: expected "PC/Set Per Box". <img src=x onerror=alert(1)>');return {ok:true,active:{id:'new',name:'Accepted list',productCount:6,status:'uploaded',rows:Array(6).fill([])}};}

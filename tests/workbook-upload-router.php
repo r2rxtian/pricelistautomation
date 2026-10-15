@@ -22,6 +22,9 @@ function clean_text(mixed $value, int $max = 180): string { return is_scalar($va
 function clean_number(mixed $value, float $min, float $max): ?float { return is_numeric($value) && (float)$value >= $min && (float)$value <= $max ? (float)$value : null; }
 function canonical_country(string $value): ?string { return in_array($value, ['Switzerland', 'Philippines'], true) ? $value : null; }
 function canonical_price_level(string $value): ?string { return in_array($value, PRICE_LEVELS, true) ? $value : null; }
+function find_option(string $type, string $input): ?array { return ['name' => $input, 'description' => '', 'active' => true]; }
+// The price masterlist is not part of this fixture: no id is one of its lists.
+function masterlist_is_virtual_id(string $id): bool { return false; }
 function repo_list_version_summaries(): array {
     return [
         ['id'=>'uploaded-base','revision'=>1,'name'=>'Test price list','country'=>'Switzerland','priceLevel'=>'Price Level 4','status'=>'uploaded'],

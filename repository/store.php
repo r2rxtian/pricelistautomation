@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /*
- * Repository layer. Every repo_* function dispatches to SQL Server (dbo.PLA_ACD_* tables) when
+ * Repository layer. Every repo_* function dispatches to SQL Server (dbo.PLA_* tables) when
  * conn/config.php sets PLA_STORAGE_DRIVER to 'sqlserver', otherwise to the JSON store (storage/app.json).
  */
 
@@ -73,10 +73,15 @@ function json_mutate(callable $callback): mixed
 // Versions
 // ---------------------------------------------------------------------------
 
-/** @return array<int,array> Version summaries (no rows), newest first. */
-function repo_list_version_summaries(): array
+/**
+ * @return array<int,array> Version summaries (no rows), newest first. Read once per request (many
+ * rules ask for them); saving or deleting a version reads them again.
+ */
+function repo_list_version_summaries(bool $fresh = false): array
 {
-    if (database_enabled()) return database_list_version_summaries();
+    static $cache = null;
+    if ($fresh) { $cache = null; return []; }
+    if (database_enabled()) return $cache ??= database_list_version_summaries();
     $versions = json_read_store()['versions'];
     usort($versions, fn($a, $b) => strcmp((string) ($b['savedAt'] ?? ''), (string) ($a['savedAt'] ?? '')));
     return array_map('version_summary', $versions);
@@ -94,6 +99,7 @@ function repo_get_version(string $id): ?array
 
 function repo_save_version(array $version): void
 {
+    repo_list_version_summaries(true); // what was read before this save is out of date
     if (database_enabled()) {
         database_save_version($version);
         return;
@@ -111,6 +117,7 @@ function repo_save_version(array $version): void
 
 function repo_delete_version(string $id): bool
 {
+    repo_list_version_summaries(true);
     if (database_enabled()) return database_delete_version($id);
     return json_mutate(function (array &$store) use ($id) {
         $before = count($store['versions']);
@@ -318,9 +325,13 @@ function repo_delete_library_photo(string $id): ?array
 /** Deletes every record of one kind ('versions', 'audit', 'notifications', 'images', 'library'); returns how many were removed. */
 function repo_dev_clear(string $target): int
 {
-    $tables = ['versions' => 'PLA_ACD_Versions', 'audit' => 'PLA_ACD_AuditLog', 'notifications' => 'PLA_ACD_Notifications', 'images' => 'PLA_ACD_GroupImages', 'library' => 'PLA_ACD_PhotoLibrary'];
+    $tables = ['versions' => 'PLA_Versions', 'audit' => 'PLA_AuditLog', 'notifications' => 'PLA_Notifications', 'images' => 'PLA_GroupImages', 'library' => 'PLA_PhotoLibrary'];
     if (!isset($tables[$target])) throw new InvalidArgumentException('Unknown data set.');
     if (database_enabled()) {
+        // Price lists include the price masterlist: its products, rules, list prices and change records.
+        if ($target === 'versions') {
+            foreach (['PLA_PriceChanges', 'PLA_PriceOverrides', 'PLA_PriceRules', 'PLA_Products'] as $table) database_connection()->exec("DELETE FROM dbo.{$table}");
+        }
         return (int) database_connection()->exec('DELETE FROM dbo.' . $tables[$target]);
     }
     $keys = ['versions' => 'versions', 'audit' => 'auditLogs', 'notifications' => 'notifications', 'images' => 'productImages', 'library' => 'photoLibrary'];

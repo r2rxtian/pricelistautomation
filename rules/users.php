@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * The people who can use the app: dbo.PLA_ACD_Users (the selected users, seeded by sql/seed.sql),
+ * The people who can use the app: dbo.PLA_Users (the selected users, seeded by sql/seed.sql),
  * with names taken live from the HR master list. Nothing about a person is hardcoded here.
  */
 

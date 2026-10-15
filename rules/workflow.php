@@ -41,6 +41,7 @@ const VERSION_SUMMARY_KEYS = [
     'id', 'name', 'priceLevel', 'country', 'revision', 'status', 'adjustment', 'categoryAdjustments', 'summary',
     'savedAt', 'savedBy', 'savedByUser', 'requiredApprovers', 'approvals', 'approvedAt', 'approvedBy',
     'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount', 'source', 'basedOn', 'adjustOnCurrent',
+    'kind', // price masterlist saves: 'masterlist' (the masterlist itself) or 'list' (one country + price level)
 ];
 
 function version_summary(array $version): array
@@ -110,8 +111,16 @@ function is_exportable(array $version): bool
     return in_array($version['status'] ?? '', ['approved', 'uploaded'], true);
 }
 
+/** What a log title calls a version: "price changes" for a price list save, else its quoted name. */
+function version_title(array $version): string
+{
+    return ($version['kind'] ?? '') === 'batch' ? 'price changes' : "'" . ($version['name'] ?? 'Price list') . "'";
+}
+
 function version_label(array $version): string
 {
+    // A price list save says what it changes (which countries / price levels, which %, which products).
+    if (($version['kind'] ?? '') === 'batch' && !empty($version['summary']['what'])) return "price changes ({$version['summary']['what']})";
     $parts = [$version['name'] ?? 'Price list'];
     $meta = array_filter([$version['priceLevel'] ?? '', $version['country'] ?? '']);
     if ($meta) $parts[] = '(' . implode(' · ', $meta) . ')';
@@ -135,6 +144,11 @@ function versions_built_on(): array
  */
 function version_delete_block(array $version): ?string
 {
+    // Masterlist uploads and approved masterlist changes are already applied to the prices.
+    if (($version['source'] ?? '') === 'masterlist') return 'This is the live price list';
+    if (($version['kind'] ?? '') !== '' && in_array($version['status'] ?? '', ['uploaded', 'approved', 'superseded'], true)) {
+        return 'Already applied to the prices, so it is kept as their record';
+    }
     if (($version['source'] ?? '') !== 'upload') {
         return in_array($version['status'] ?? '', ['approved', 'superseded'], true)
             ? 'Approved price lists are kept as the record of published prices'

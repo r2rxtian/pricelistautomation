@@ -46,7 +46,7 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=212">
+    <link rel="stylesheet" href="../styles/app.css?v=230">
     <script>
     (function() {
         try {
@@ -229,6 +229,20 @@ if ($required !== null && !user_can($user, $required)) {
                                         <button type="button" class="adj-preset-chip" data-preset="2">+2</button>
                                         <button type="button" class="adj-preset-chip" data-preset="5">+5</button>
                                         <button type="button" class="adj-preset-chip" data-preset="10">+10</button>
+                                    </div>
+                                </div>
+
+                                <!-- In a country of the price list: one % can cover many countries / price levels at once. -->
+                                <div class="adj-scope" id="adjScope" hidden>
+                                    <label class="adj-scope-label" for="adjScopeSelect">Apply to</label>
+                                    <span class="ml-select adj-scope-select is-filled">
+                                        <span class="ml-select-lead" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
+                                        <select id="adjScopeSelect" aria-label="Which lists the % applies to"></select>
+                                        <svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                                    </span>
+                                    <!-- "Countries I pick": slides open below. -->
+                                    <div class="ml-reveal adj-scope-reveal" id="adjScopeCountriesWrap" aria-hidden="true">
+                                        <div class="ml-reveal-inner"><div class="adj-scope-countries" id="adjScopeCountries" role="group" aria-label="Countries"></div></div>
                                     </div>
                                 </div>
 
@@ -879,6 +893,42 @@ if ($required !== null && !user_can($user, $required)) {
     </form>
 </dialog>
 
+<!-- Price list upload: check the workbook, see exactly what it changes, then apply. -->
+<dialog id="masterlistUploadDialog" class="ml-upload-dialog" aria-labelledby="mlUploadTitle">
+    <div class="dialog-card ml-upload-card">
+        <div class="dialog-heading">
+            <div><p class="kicker" id="mlUploadKicker">Price list</p><h2 id="mlUploadTitle">Upload the price list</h2></div>
+            <button type="button" class="icon-button" id="mlUploadClose" aria-label="Close">×</button>
+        </div>
+        <div id="mlUploadChoose" class="ml-upload-step">
+            <p class="muted ml-upload-intro" id="mlUploadIntro"></p>
+            <div class="upload-template-tools">
+                <span>Use the official workbook.</span>
+                <button type="button" id="mlDownloadTemplate" class="upload-text-button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>
+                    Download template
+                </button>
+            </div>
+            <div id="mlDropZone" class="modal-drop-zone ml-drop-zone" role="group" aria-label="Choose or drop an Excel workbook">
+                <input id="mlFileInput" type="file" accept=".xlsx" hidden>
+                <div class="drop-zone-content">
+                    <svg class="drop-zone-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6m-3 3 3-3 3 3"/></svg>
+                    <div class="drop-zone-text"><strong id="mlFileName">Drop the workbook here</strong><small>Official .xlsx template · 10 MB</small></div>
+                    <button type="button" id="mlBrowse" class="button secondary">Browse</button>
+                </div>
+            </div>
+            <div id="mlUploadErrors" class="upload-validation-errors" role="alert" hidden></div>
+        </div>
+        <div id="mlUploadPreview" class="ml-upload-step ml-preview" aria-live="polite" hidden></div>
+        <div class="dialog-actions">
+            <button type="button" class="button secondary" id="mlUploadBack" hidden>Back</button>
+            <span class="change-review-spacer"></span>
+            <button type="button" class="button secondary" id="mlUploadCancel">Cancel</button>
+            <button type="button" class="button primary" id="mlUploadNext" disabled>Check file</button>
+        </div>
+    </div>
+</dialog>
+
 <dialog id="logoutDialog">
     <form method="dialog" class="dialog-card" id="logoutForm">
         <div class="dialog-heading"><div><p class="kicker">Session</p><h2>Sign out?</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
@@ -950,7 +1000,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=196"></script>
+<script src="../scripts/app.js?v=217"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

@@ -28,6 +28,6 @@ foreach (['schema.sql', 'seed.sql'] as $file) {
     echo "{$file}: {$ran} batches run.", PHP_EOL;
 }
 
-$rows = db()->query('SELECT u.username, u.employee_id, r.name AS role FROM dbo.PLA_ACD_Users u JOIN dbo.PLA_ACD_Roles r ON r.id = u.role_id ORDER BY u.id')->fetchAll();
+$rows = db()->query('SELECT u.username, u.employee_id, r.name AS role FROM dbo.PLA_Users u JOIN dbo.PLA_Roles r ON r.id = u.role_id ORDER BY u.id')->fetchAll();
 echo 'Users:', PHP_EOL;
 foreach ($rows as $row) echo "  {$row['username']} ({$row['employee_id']}) – {$row['role']}", PHP_EOL;

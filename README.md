@@ -14,7 +14,7 @@ Sign-in works the same way as QRTS (`auth/login_handler.php`):
 
 1. **Company login** – `dbo.lrnph_users`: the biometrics number and the person's **company password** (the same login as the other internal apps). The account must be `active`.
 2. **HR master list** – `dbo.lrn_master_list`: the active row with that `BiometricsID` gives the `EmployeeID`, name and department.
-3. **This app's users** – `dbo.PLA_ACD_Users`: the `EmployeeID` must belong to one of the selected users, which also gives the role.
+3. **This app's users** – `dbo.PLA_Users`: the `EmployeeID` must belong to one of the selected users, which also gives the role.
 
 Nothing about a person is stored in this project: names come from the master list, passwords from `lrnph_users`. Five wrong passwords lock the account here for 15 minutes. Successful and failed sign-ins, and sign-outs, are written to the audit log.
 
@@ -27,7 +27,7 @@ Nothing about a person is stored in this project: names come from the master lis
 | Margaret Santos | 2014-00446 | 1857 | Admin – Upload · Update · Save · Approve · Export |
 | Gemma Comission | 2022-21518 | 21518 | User – Export only |
 
-To give someone access later, add a row to `dbo.PLA_ACD_Users` (employee_id, a short username, role) or add them to `sql/seed.sql` and re-run the installer.
+To give someone access later, add a row to `dbo.PLA_Users` (employee_id, a short username, role) or add them to `sql/seed.sql` and re-run the installer.
 
 **IT department:** as in QRTS, employees of *Information Technology Department - LRN* get Admin access automatically on a successful company sign-in, so IT can support the system. They are stored with the User role and are never approvers. Turn it off by setting `IT_ADMIN_DEPARTMENT` to `''` in `rules/constants.php`.
 
@@ -109,7 +109,7 @@ Admins see a small **Dev tools** button at the bottom-left of the screen. It ope
 Sign-in always uses SQL Server. Price lists, audit logs, notifications and photos follow `PLA_STORAGE_DRIVER` in `conn/config.php`:
 
 - `json` (current): `storage/app.json`. Writes are atomic and file-locked.
-- `sqlserver`: the `dbo.PLA_ACD_*` tables in `sql/schema.sql` (Versions, GroupImages, PhotoLibrary, AuditLog, Notifications).
+- `sqlserver`: the `dbo.PLA_*` tables in `sql/schema.sql` (Versions, GroupImages, PhotoLibrary, AuditLog, Notifications).
 
 ## Workbook behavior
 

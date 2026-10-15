@@ -6,14 +6,14 @@ declare(strict_types=1);
  *
  *   dbo.lrnph_users      company login for that biometrics number (must be active)
  *     → dbo.lrn_master_list   BiometricsID → EmployeeID, name, department
- *     → dbo.PLA_ACD_Users     EmployeeID → this app's account and role (the selected users)
+ *     → dbo.PLA_Users     EmployeeID → this app's account and role (the selected users)
  *
  * The password is the person's biometrics number, as held in the master list (BiometricsID). It is
  * looked up at sign-in, never stored here; most are the employee number without the year, but some
  * people have their own.
  *
  * Ordinary users need an active company login, an active master-list record and an active
- * PLA_ACD_Users row. Employees of the IT department (rules/constants.php) are provisioned
+ * PLA_Users row. Employees of the IT department (rules/constants.php) are provisioned
  * automatically on a successful company login and act as Admin. Failed attempts count towards a
  * lockout (LOGIN_MAX_ATTEMPTS / LOGIN_LOCKOUT_MINUTES).
  */
