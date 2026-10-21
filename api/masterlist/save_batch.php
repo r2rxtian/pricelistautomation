@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 /**
- * Saves the price masterlist as one file: base price edits, prices typed in any number of country +
- * price level lists, and % changes (for one list, every country of a level, or picked countries),
+ * Saves the price masterlist as one file: base price edits, prices typed in any number of price level
+ * and customer lists, and % changes (for one list, every customer of a level, or picked customers),
  * all as ONE change. It waits for approval (applied on the spot for auto-approvers).
  * Body: see masterlist_build_batch() in rules/masterlist.php.
  */
@@ -19,7 +19,7 @@ $result = masterlist_build_batch(request_json());
 if ($result['error'] !== null) json_response(['ok' => false, 'message' => $result['error']], 422);
 $batch = $result['batch'];
 [$baseCount, $ruleCount, $listCount] = masterlist_batch_counts($batch);
-// In plain words: which countries / price levels, which %, which products.
+// In plain words: which customers / price levels, which %, which products.
 $described = masterlist_batch_description($batch);
 $what = $described['text'];
 
@@ -53,8 +53,8 @@ repo_save_version($version);
 
 $meta = ['versionId' => $version['id'], 'versionName' => MASTERLIST_NAME, 'fileName' => MASTERLIST_NAME, 'kind' => 'batch', 'revision' => $revision,
     'parts' => $described['parts'], 'lines' => $described['lines'],
-    'lists' => array_map(fn($list) => "{$list['country']} · {$list['priceLevel']}", $batch['lists'])];
-// One country + price level only: the log shows its flag and name like a file.
+    'lists' => array_map('masterlist_list_name', $batch['lists'])];
+// One customer or price level only: the log shows its name like a file.
 if (count($batch['lists']) === 1 && !$batch['ruleOps'] && !$batch['baseEdits']) $meta += ['country' => $batch['lists'][0]['country'], 'priceLevel' => $batch['lists'][0]['priceLevel']];
 if ($autoApproved) {
     supersede_older_approved($version);

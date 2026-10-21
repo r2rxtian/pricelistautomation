@@ -1,21 +1,22 @@
 <?php
 declare(strict_types=1);
 /**
- * Saves the whole country or price level list (Config › Countries & price levels), in display
- * order. A name that saved price lists use can't be removed or renamed (switch it off instead),
- * so existing lists never lose their country or level.
+ * Saves the whole customer or price level list (Config › Customers & price levels), in display
+ * order; each customer comes with the price level it buys at. A name that saved price lists use
+ * can't be removed or renamed (switch it off instead), so existing lists never lose their customer
+ * or level. (The customer list is the type 'countries': see CUSTOMERS in rules/constants.php.)
  */
 require_once __DIR__ . '/../bootstrap.php';
 
 $user = apiUser();
 requirePost();
 csrfVerify();
-requirePermission($user, 'manageImages', 'You do not have permission to change the country and price level lists.');
+requirePermission($user, 'manageImages', 'You do not have permission to change the customer and price level lists.');
 
 $data = request_json();
 $type = in_array($data['type'] ?? '', LIST_OPTION_TYPES, true) ? $data['type'] : null;
-if (!$type) json_response(['ok' => false, 'message' => 'Choose the countries or the price levels list.'], 422);
-$noun = $type === 'countries' ? 'country' : 'price level';
+if (!$type) json_response(['ok' => false, 'message' => 'Choose the customers or the price levels list.'], 422);
+$noun = $type === 'countries' ? 'customer' : 'price level';
 
 $items = [];
 $seen = [];
@@ -26,14 +27,28 @@ foreach (is_array($data['items'] ?? null) ? $data['items'] : [] as $item) {
     $key = mb_strtolower($name);
     if (isset($seen[$key])) json_response(['ok' => false, 'message' => "\"{$name}\" is listed twice."], 422);
     $seen[$key] = true;
-    $items[] = [
+    $entry = [
         'name' => $name,
         'description' => $type === 'priceLevels' ? clean_text($item['description'] ?? '', 200) : '',
         'active' => (bool) ($item['active'] ?? true),
     ];
+    // Every customer buys at one of the price levels.
+    if ($type === 'countries') {
+        $level = find_option('priceLevels', clean_text($item['level'] ?? '', 120));
+        if (!$level) json_response(['ok' => false, 'message' => "Choose the price level {$name} buys at."], 422);
+        $entry['level'] = $level['name'];
+    }
+    $items[] = $entry;
 }
 if (count($items) > 300) json_response(['ok' => false, 'message' => 'The list can have at most 300 entries.'], 422);
 if (!array_filter($items, fn($item) => $item['active'])) json_response(['ok' => false, 'message' => "Keep at least one {$noun} switched on."], 422);
+
+// A price level with customers must stay (move its customers to another level first).
+if ($type === 'priceLevels') {
+    foreach (customer_levels() as $customer => $level) {
+        if (!isset($seen[mb_strtolower($level)])) json_response(['ok' => false, 'message' => "{$level} still has customers ({$customer}…). Move them to another price level first."], 409);
+    }
+}
 
 // Names in use must stay (as the same name).
 foreach (option_usage($type) as $usedName => $count) {
@@ -49,7 +64,7 @@ $beforeNames = array_map(fn($item) => $item['name'], $before);
 $afterNames = array_map(fn($item) => $item['name'], $items);
 $added = array_values(array_diff($afterNames, $beforeNames));
 $removed = array_values(array_diff($beforeNames, $afterNames));
-$label = $type === 'countries' ? 'countries' : 'price levels';
+$label = $type === 'countries' ? 'customers' : 'price levels';
 record_audit('list_options', "Updated the {$label} list", "{$user['name']} updated the {$label} list" . ($added ? '; added ' . implode(', ', $added) : '') . ($removed ? '; removed ' . implode(', ', $removed) : '') . '.', [
     'type' => $type, 'added' => $added, 'removed' => $removed,
 ]);

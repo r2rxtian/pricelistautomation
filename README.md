@@ -84,13 +84,48 @@ pricelistautomation/
 
 The server enforces export access, not just the UI. `api/versions/export.php` only returns uploaded files and approved price changes, and logs every export.
 
-## Countries and saved price lists
+## Price levels and customers (Requirements 17Oct2026)
 
-Each uploaded price list belongs to one country and price level, chosen at upload (e.g. Philippines · Price Level 1). Price levels are numbered (**Price Level 1, 2, …**; 5 by default, `PRICE_LEVEL_COUNT` in `rules/constants.php`). Countries are picked from a fixed list (`COUNTRIES` in `rules/constants.php`). The current list is a **placeholder**; replace it with the official 44 countries when they're provided.
+The official answers are in `Requirements 17Oct2026.xlsx`:
 
-A price list is identified by **name + country + price level**. Uploading another Philippines file with a different price level adds a second Philippines price level; it doesn't replace the first, and Philippines still appears once in the Country filter.
+- **Price levels (6):** FOB Price, EU Direct Price, USA Direct Price, Valrhona Price, PH Price, CW Price.
+- **Customers (42):** each customer buys at exactly one price level (sheet "Price Level").
+- **Upload:** choose the price level first, then the customer.
+- **Exports:** use the "Excel Header Template" columns. When exporting, the user picks a letterhead (SP or LRNPH) and bank details (SP, LRNPH USD or LRNPH PHP) from the "header & footer selection" sheet.
 
-The editor toolbar filters in this order: **Country → Level → List**, then **Category → LRN code → Search**. Choosing a country opens its most recent saved list, and Level/List switch between that country's saved files. With no file open, the same navigator appears on the start screen.
+How it works in the system (SQL Server storage):
+
+- **Each price level is its uploaded file.** Its products, prices, descriptions and categories come from the workbook uploaded for it, in the file's order. Each worksheet is a category.
+- **Re-uploading a level's workbook updates it.** The preview lists everything before it is applied:
+  - new products are added;
+  - changed prices and details are updated;
+  - products missing from the file leave that level only.
+- **A level with no file yet is empty.** The Dashboard and the switcher show it as "No file yet".
+- **Files page.** It shows one card per price level's file: its workbook name, products, customers, and who uploaded it and when.
+  - **Open** opens that file; **Upload new version** replaces it.
+  - Customers with their own prices are listed on their level's card.
+  - After an upload, the uploaded file opens in the editor.
+- **Customers.** A customer gets its level's products and prices. Uploading a file for one customer gives it its own prices; its other products keep the level's.
+- **The product list in the background.** `dbo.PLA_Products` holds one record per LRN code. Uploads add new products to it automatically. It links the levels, but users never open or maintain it ("Standard prices" is no longer shown).
+- **Changes in the editor.** One Save with one approval can change several levels or customers.
+- **A % change** applies to:
+  - one customer;
+  - every customer on a level;
+  - picked customers;
+  - every price level;
+  - optionally, only some categories.
+- **Dashboard** (`pages/dashboard.php`, the page after sign-in). The data comes from `rules/dashboard.php` through `api/dashboard/summary.php`. It shows:
+  - the price levels as a staircase (higher = dearer than the cheapest level, with how many products each file has);
+  - the price ladder (one product's price in every level);
+  - what needs attention;
+  - the last 30 days of uploads, price changes and exports.
+- **Config › Customers & price levels.** Add customers and change their price level. A level with customers can't be removed.
+- Defaults are in `rules/constants.php`:
+  - `CUSTOMERS` and `PRICE_LEVELS`;
+  - `EXPORT_LETTERHEADS` and `EXPORT_BANK_DETAILS` (edit the wording there).
+- `php sql/load_official_lists.php --apply` loads the official lists into the database (already done on LRNPH_OJT on 2026-10-21).
+
+**Naming note.** Customers replaced the countries of the first version. In the code and database they still use the old names: the list type `countries`, `dbo.PLA_Countries`, `country_id`, and the version field `country` all hold the **customer**. A price level's file is stored as its rows with `country_id` NULL in `dbo.PLA_PriceOverrides` (price, `row_json` with the file's details, `sort_order`); customer prices are rows with the customer's id.
 
 ## Product photos (Config)
 

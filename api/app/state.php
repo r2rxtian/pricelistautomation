@@ -20,12 +20,15 @@ json_response([
     'approvalMode' => APPROVAL_MODE,
     'approvers' => user_can($user, 'save') ? array_map('user_display_name', approvers_for($user['username'])) : [],
     'autoApprove' => user_can($user, 'save') && is_auto_approver($user['username']),
-    // Offered in the dropdowns (Config › Countries & price levels).
+    // Offered in the dropdowns (Config › Customers & price levels). 'countries' holds the customers.
     'countries' => active_option_names('countries'),
+    'customerLevels' => customer_levels(),
     'priceLevels' => active_option_names('priceLevels'),
     'priceLevelInfo' => array_map(fn($item) => ['name' => $item['name'], 'description' => $item['description']], list_options('priceLevels')),
     'listOptions' => user_can($user, 'manageImages') ? list_options_payload() : null,
     'importTemplate' => user_can($user, 'upload') ? price_list_template() : null,
+    // Letterheads and bank details to choose from when exporting (rules/constants.php).
+    'exportBranding' => user_can($user, 'export') ? ['letterheads' => EXPORT_LETTERHEADS, 'banks' => EXPORT_BANK_DETAILS] : null,
     'directory' => directory_payload(),
     'versions' => $versions,
     'masterlist' => masterlist_payload(),

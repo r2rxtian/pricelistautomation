@@ -77,18 +77,69 @@ const APPROVAL_MODE = 'any';
 // Price lists
 // ---------------------------------------------------------------------------
 
-// Price levels are numbered: Price Level 1 … Price Level N.
-const PRICE_LEVEL_COUNT = 5;
-define('PRICE_LEVELS', array_map(fn(int $n) => "Price Level {$n}", range(1, PRICE_LEVEL_COUNT)));
+// Price levels and customers: from "Requirements 17Oct2026.xlsx" › Price Level. These are the
+// defaults; the live lists are edited in Config › Customers & price levels.
+const PRICE_LEVELS = ['FOB Price', 'EU Direct Price', 'USA Direct Price', 'Valrhona Price', 'PH Price', 'CW Price'];
 
-// Countries a price list can be assigned to (upload and save dropdowns).
-// PLACEHOLDER: replace with the official list of 44 countries when it is provided.
-const COUNTRIES = [
-    'Australia', 'Bahrain', 'Bangladesh', 'Belgium', 'Brunei', 'Cambodia', 'Canada', 'China', 'Egypt', 'France', 'Germany',
-    'Hong Kong', 'India', 'Indonesia', 'Israel', 'Italy', 'Japan', 'Jordan', 'Kuwait', 'Lebanon', 'Malaysia', 'Maldives',
-    'Mexico', 'Myanmar', 'Netherlands', 'New Zealand', 'Oman', 'Pakistan', 'Philippines', 'Qatar', 'Saudi Arabia', 'Singapore',
-    'South Africa', 'South Korea', 'Spain', 'Sri Lanka', 'Switzerland', 'Taiwan', 'Thailand', 'Turkey', 'United Arab Emirates',
-    'United Kingdom', 'United States', 'Vietnam',
+// Every customer buys at exactly one price level. All customers on a level share its prices; a
+// customer can also have a few prices of its own.
+// NOTE: customers took the place of the countries of the first version. In the code and the database
+// they still use the old names: the 'countries' list type, dbo.PLA_Countries, country_id and the
+// version field 'country' all hold the CUSTOMER.
+const CUSTOMERS = [
+    'F.Mayer' => 'FOB Price', 'Cnudde' => 'EU Direct Price', 'Snowcap' => 'USA Direct Price', 'Qualifirst' => 'USA Direct Price',
+    'Sinodis' => 'FOB Price', 'Truebell' => 'FOB Price', 'EMF Trading' => 'FOB Price', 'LRN Europe' => 'FOB Price',
+    'LRN Switzerland' => 'FOB Price', 'Prescott' => 'EU Direct Price', 'Valrhona' => 'Valrhona Price', 'Baker Patissier' => 'FOB Price',
+    'Pandarusa' => 'FOB Price', 'La Rousse' => 'EU Direct Price', 'Selecta' => 'EU Direct Price', 'Nichifutsu' => 'FOB Price',
+    'Sunin' => 'FOB Price', 'Minerva' => 'FOB Price', 'Galaxy Entertainment' => 'FOB Price', 'Pastry Pro' => 'FOB Price',
+    'A La Carte' => 'EU Direct Price', 'Hanos' => 'EU Direct Price', 'Werdenberg' => 'PH Price', 'Guev Café' => 'PH Price',
+    'Zermatt' => 'PH Price', 'Maiks' => 'PH Price', 'Aqua Asia' => 'PH Price', 'Golden Acres' => 'PH Price',
+    'Food Fresh' => 'FOB Price', 'Indoguna' => 'FOB Price', 'Tehmag' => 'FOB Price', 'Global Food Product' => 'FOB Price',
+    'Town & Country' => 'EU Direct Price', 'Ace Endico' => 'USA Direct Price', 'Atalanta' => 'USA Direct Price', 'Cambie' => 'FOB Price',
+    'Chefs Warehouse' => 'CW Price', 'Fortune Fish' => 'USA Direct Price', 'Gourmet Kitchen' => 'USA Direct Price', 'LRN USA' => 'FOB Price',
+    'Paris Gourmet' => 'FOB Price', 'Savory Gourmet' => 'USA Direct Price',
+];
+
+// Exports: the letterhead on top and the bank details at the bottom are chosen when exporting
+// (Requirements 17Oct2026 › "header & footer selection"). Edit the wording here.
+const EXPORT_LETTERHEADS = [
+    'SP' => ['label' => 'Swiss Patissiers Limited', 'lines' => [
+        'Swiss Patissiers Limited',
+        'RM1516, 15/F., Corporation Square, 8 Lam Lok Street, Kowloon Bay, Hong Kong',
+    ]],
+    'LRNPH' => ['label' => 'La Rose Noire Philippines', 'lines' => [
+        'La Rose Noire Philippines, INC.',
+        'Lot 1 - A & B, Clark IE-05 Area, M.A Roxas Highway, Clark Freeport Zone, Philippines',
+        'Tel: +63 45 499-3010 · Fax: +63 45 499 2346 · Email: office@la-rose-noire.com',
+    ]],
+];
+const EXPORT_BANK_DETAILS = [
+    'SP' => ['label' => 'Swiss Patissiers (USD)', 'rows' => [
+        ['Beneficiary Name', 'Swiss Patissiers Limited'],
+        ['Beneficiary’s Bank', 'Standard Chartered Bank (Hong Kong) Limited'],
+        ['Bank account no', '578-1-010124-3'],
+        ['Account Currency', 'USD'],
+        ['Address of Beneficiary', 'RM1516, 15/F., Corporation Square, 8 Lam Lok Street, Kowloon Bay, Hong Kong'],
+        ['Address of Bank', '15/F, Standard Chartered Tower, 388 Kwun Tong Road, Kwun Tong, Kowloon, Hong Kong'],
+        ['Bank’s Swift Code', 'SCBLHKHH'],
+    ]],
+    'LRNPH USD' => ['label' => 'La Rose Noire PH (USD)', 'rows' => [
+        ['Beneficiary’s Name', 'La Rose Noire Philippines Inc.'],
+        ['Beneficiary’s Address', 'Lot 1-A&B, Clark IE-05 Area, M.A Roxas Highway Clark Freeport Zone Philippines'],
+        ['Beneficiary’s Bank', 'Metropolitan Bank & Trust Company'],
+        ['Bank account no', '377-2-37700867-1'],
+        ['Address of Bank', 'The Pavilion Mall Philexcel Business Park, Clark Freeport Zone, Philippines'],
+        ['Bank’s Swift Code', 'MBTCPHMM'],
+    ]],
+    'LRNPH PHP' => ['label' => 'La Rose Noire PH (PHP)', 'rows' => [
+        ['Beneficiary’s Account Name', 'PHP Savings Account'],
+        ['Beneficiary’s Name', 'La Rose Noire Philippines Inc'],
+        ['Beneficiary’s Address', 'Lot 1 A&B, Clark IE-05 Area, MA Roxas Highway, Clark Freeport Zone'],
+        ['Account Number', '377-7-37701111-9'],
+        ['Beneficiary’s Bank Name', 'Metropolitan Bank and Trust Company'],
+        ['Bank Address', 'CM Rector Highway, Clark Freeport Zone'],
+        ['Beneficiary Bank Swift Code', 'MBTCPHMM'],
+    ]],
 ];
 
 // Activity the browser may log on its own (everything else is logged by the server).

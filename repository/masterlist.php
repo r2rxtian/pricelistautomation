@@ -3,8 +3,10 @@ declare(strict_types=1);
 /**
  * The price masterlist tables (SQL Server only):
  *   dbo.PLA_Products        one row per product (LRN code) with its base prices
- *   dbo.PLA_PriceRules      % on the base price per country / price level / category (NULL = all)
- *   dbo.PLA_PriceOverrides  a price set for one product in one country + price level
+ *   dbo.PLA_PriceRules      % on the base price per customer / price level / category (NULL = all)
+ *   dbo.PLA_PriceOverrides  a price set for one product in one price level: for all its customers
+ *                           (country_id NULL) or for one customer
+ * (Customers live in dbo.PLA_Countries and are country_id: see CUSTOMERS in rules/constants.php.)
  *   dbo.PLA_PriceChanges    what each save changed
  * Business logic (how a price is found, uploads, approvals) is in rules/masterlist.php.
  */
@@ -66,14 +68,17 @@ function masterlist_db_rules(): array
     ], $query->fetchAll());
 }
 
-/** Overrides for one country + price level, keyed by product id. */
+/**
+ * Overrides for one customer + price level, keyed by product id. Customer 0 = the level's own prices
+ * (for every customer on it; country_id NULL in the table).
+ */
 function masterlist_db_overrides(int $countryId, int $levelId): array
 {
     $statement = database_connection()->prepare(
-        'SELECT product_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_at, set_by
-         FROM dbo.PLA_PriceOverrides WHERE country_id = ? AND price_level_id = ?'
+        'SELECT product_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_at, set_by, row_json, sort_order
+         FROM dbo.PLA_PriceOverrides WHERE ' . ($countryId === 0 ? 'country_id IS NULL' : 'country_id = ?') . ' AND price_level_id = ?'
     );
-    $statement->execute([$countryId, $levelId]);
+    $statement->execute($countryId === 0 ? [$levelId] : [$countryId, $levelId]);
     $overrides = [];
     foreach ($statement->fetchAll() as $r) {
         $overrides[(int) $r['product_id']] = [
@@ -84,12 +89,44 @@ function masterlist_db_overrides(int $countryId, int $levelId): array
             'versionId' => (string) ($r['version_id'] ?? ''),
             'setAt' => database_iso($r['set_at']),
             'setBy' => (string) $r['set_by'],
+            // A level's row: the product as its uploaded file has it (details and order).
+            'row' => $r['row_json'] === null ? null : (json_decode((string) $r['row_json'], true) ?: null),
+            'sort' => $r['sort_order'] === null ? null : (int) $r['sort_order'],
         ];
     }
     return $overrides;
 }
 
-/** How many own prices each list has: "countryId-levelId" => count (active products only). */
+/**
+ * Makes a price level's list exactly an uploaded file: $rows are product id => ['pricePc', 'priceBox',
+ * 'basePc', 'baseBox', 'row', 'sort'] (every product in the file); products of the level that are not in
+ * $rows leave it, with any prices set for its customers.
+ */
+function masterlist_db_replace_level(PDO $connection, int $levelId, array $rows, string $versionId, string $by): void
+{
+    $keep = array_map('intval', array_keys($rows));
+    $current = $connection->prepare('SELECT product_id FROM dbo.PLA_PriceOverrides WHERE country_id IS NULL AND price_level_id = ?');
+    $current->execute([$levelId]);
+    $remove = array_diff(array_map('intval', $current->fetchAll(PDO::FETCH_COLUMN)), $keep);
+    $drop = $connection->prepare('DELETE FROM dbo.PLA_PriceOverrides WHERE product_id = ? AND price_level_id = ?');
+    foreach ($remove as $productId) $drop->execute([$productId, $levelId]);
+    $update = $connection->prepare(
+        'UPDATE dbo.PLA_PriceOverrides SET price_pc = ?, price_box = ?, base_price_pc_when_set = ?, base_price_box_when_set = ?, row_json = ?, sort_order = ?,
+            version_id = ?, set_at = SYSUTCDATETIME(), set_by = ?
+         WHERE product_id = ? AND country_id IS NULL AND price_level_id = ?'
+    );
+    $insert = $connection->prepare(
+        'INSERT INTO dbo.PLA_PriceOverrides (product_id, country_id, price_level_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, row_json, sort_order, version_id, set_by)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    foreach ($rows as $productId => $r) {
+        $values = [$r['pricePc'], $r['priceBox'], $r['basePc'], $r['baseBox'], json_encode($r['row'], JSON_UNESCAPED_UNICODE), $r['sort']];
+        $update->execute(array_merge($values, [$versionId, $by, $productId, $levelId]));
+        if ($update->rowCount() === 0) $insert->execute(array_merge([$productId, $levelId], $values, [$versionId, $by]));
+    }
+}
+
+/** How many own prices each list has: "customerId-levelId" (0 = the level's) => count (active products only). */
 function masterlist_db_override_counts(): array
 {
     $counts = [];
@@ -98,8 +135,22 @@ function masterlist_db_override_counts(): array
          JOIN dbo.PLA_Products p ON p.product_id = o.product_id AND p.is_active = 1
          GROUP BY o.country_id, o.price_level_id'
     );
-    foreach ($query->fetchAll() as $r) $counts[$r['country_id'] . '-' . $r['price_level_id']] = (int) $r['n'];
+    foreach ($query->fetchAll() as $r) $counts[(int) $r['country_id'] . '-' . $r['price_level_id']] = (int) $r['n'];
     return $counts;
+}
+
+/** When each list last changed and by whom: "customerId-levelId" (0 = the level's file) => ['at', 'by']. */
+function masterlist_db_last_changes(): array
+{
+    $changes = [];
+    $query = database_connection()->query(
+        'SELECT country_id, price_level_id, set_at, set_by FROM (
+            SELECT country_id, price_level_id, set_at, set_by,
+                   ROW_NUMBER() OVER (PARTITION BY country_id, price_level_id ORDER BY set_at DESC) AS n
+            FROM dbo.PLA_PriceOverrides) latest WHERE n = 1'
+    );
+    foreach ($query->fetchAll() as $r) $changes[(int) $r['country_id'] . '-' . $r['price_level_id']] = ['at' => database_iso($r['set_at']), 'by' => (string) $r['set_by']];
+    return $changes;
 }
 
 /** When the masterlist was last changed and by which save. */
@@ -147,27 +198,31 @@ function masterlist_db_write_products(PDO $connection, array $upserts, array $de
 }
 
 /**
- * Sets (or clears, when both prices are null) the own prices of products in one list.
- * $prices: product id => ['pricePc' => ?float, 'priceBox' => ?float, 'basePc' => ?float, 'baseBox' => ?float].
+ * Sets (or clears, when both prices are null) the own prices of products in one list (customer 0 =
+ * the level's prices). $prices: product id => ['pricePc' => ?float, 'priceBox' => ?float, 'basePc' => ?float, 'baseBox' => ?float].
  */
 function masterlist_db_write_overrides(PDO $connection, int $countryId, int $levelId, array $prices, string $versionId, string $by): void
 {
-    $delete = $connection->prepare('DELETE FROM dbo.PLA_PriceOverrides WHERE product_id = ? AND country_id = ? AND price_level_id = ?');
-    $merge = $connection->prepare(
-        'MERGE dbo.PLA_PriceOverrides AS target
-         USING (SELECT ? AS product_id, ? AS country_id, ? AS price_level_id) AS source
-            ON target.product_id = source.product_id AND target.country_id = source.country_id AND target.price_level_id = source.price_level_id
-         WHEN MATCHED THEN UPDATE SET price_pc = ?, price_box = ?, base_price_pc_when_set = ?, base_price_box_when_set = ?, version_id = ?, set_at = SYSUTCDATETIME(), set_by = ?
-         WHEN NOT MATCHED THEN INSERT (product_id, country_id, price_level_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);'
+    $customer = $countryId === 0 ? null : $countryId;
+    $sameCustomer = $customer === null ? 'country_id IS NULL' : 'country_id = ?';
+    $delete = $connection->prepare("DELETE FROM dbo.PLA_PriceOverrides WHERE product_id = ? AND {$sameCustomer} AND price_level_id = ?");
+    $update = $connection->prepare(
+        "UPDATE dbo.PLA_PriceOverrides SET price_pc = ?, price_box = ?, base_price_pc_when_set = ?, base_price_box_when_set = ?, version_id = ?, set_at = SYSUTCDATETIME(), set_by = ?
+         WHERE product_id = ? AND {$sameCustomer} AND price_level_id = ?"
     );
+    $insert = $connection->prepare(
+        'INSERT INTO dbo.PLA_PriceOverrides (product_id, country_id, price_level_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $key = fn(int $productId) => $customer === null ? [$productId, $levelId] : [$productId, $customer, $levelId];
     foreach ($prices as $productId => $p) {
         if ($p['pricePc'] === null && $p['priceBox'] === null) {
-            $delete->execute([$productId, $countryId, $levelId]);
+            $delete->execute($key($productId));
             continue;
         }
         $values = [$p['pricePc'], $p['priceBox'], $p['basePc'], $p['baseBox'], $versionId, $by];
-        $merge->execute(array_merge([$productId, $countryId, $levelId], $values, [$productId, $countryId, $levelId], $values));
+        $update->execute(array_merge($values, $key($productId)));
+        if ($update->rowCount() === 0) $insert->execute(array_merge([$productId, $customer, $levelId], $values));
     }
 }
 
@@ -232,7 +287,7 @@ function masterlist_db_option_usage(string $type): array
     $otherColumn = $type === 'countries' ? 'price_level_id' : 'country_id';
     $usage = [];
     $query = database_connection()->query(
-        "SELECT t.name, (SELECT COUNT(DISTINCT o.{$otherColumn}) FROM dbo.PLA_PriceOverrides o WHERE o.{$idColumn} = t.{$idColumn})
+        "SELECT t.name, (SELECT COUNT(DISTINCT ISNULL(o.{$otherColumn}, 0)) FROM dbo.PLA_PriceOverrides o WHERE o.{$idColumn} = t.{$idColumn})
                       + (SELECT COUNT(*) FROM dbo.PLA_PriceRules r WHERE r.{$idColumn} = t.{$idColumn}) AS n
          FROM {$table} t"
     );

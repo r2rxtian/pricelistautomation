@@ -198,11 +198,15 @@ function ensure_database_schema(PDO $connection): void
             updated_by nvarchar(180) NOT NULL,
             CONSTRAINT UQ_PLA_PriceRules_scope UNIQUE (country_id, price_level_id, category)
          )",
-        // Prices set for one product in one country + price level (only where they differ from the rules).
+        // Customers (dbo.PLA_Countries, see CUSTOMERS in rules/constants.php) each buy at one price level.
+        "IF COL_LENGTH('dbo.PLA_Countries', 'price_level_id') IS NULL
+         ALTER TABLE dbo.PLA_Countries ADD price_level_id int NULL CONSTRAINT FK_PLA_Countries_level REFERENCES dbo.PLA_PriceLevels (price_level_id)",
+        // Prices set for one product in one price level: for every customer on it (country_id NULL) or
+        // for one customer (only where they differ from the rules).
         "IF OBJECT_ID(N'dbo.PLA_PriceOverrides', N'U') IS NULL
          CREATE TABLE dbo.PLA_PriceOverrides (
             product_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_product REFERENCES dbo.PLA_Products (product_id),
-            country_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_country REFERENCES dbo.PLA_Countries (country_id),
+            country_id int NULL CONSTRAINT FK_PLA_PriceOverrides_country REFERENCES dbo.PLA_Countries (country_id),
             price_level_id int NOT NULL CONSTRAINT FK_PLA_PriceOverrides_level REFERENCES dbo.PLA_PriceLevels (price_level_id),
             price_pc decimal(14,4) NULL,
             price_box decimal(14,4) NULL,
@@ -211,10 +215,24 @@ function ensure_database_schema(PDO $connection): void
             version_id varchar(32) NULL,
             set_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceOverrides_set DEFAULT SYSUTCDATETIME(),
             set_by nvarchar(180) NOT NULL,
-            CONSTRAINT PK_PLA_PriceOverrides PRIMARY KEY (product_id, country_id, price_level_id)
+            CONSTRAINT UQ_PLA_PriceOverrides_price UNIQUE (product_id, country_id, price_level_id)
          )",
+        // Tables made before level-wide prices: country_id becomes optional (its key and index are rebuilt).
+        "IF COLUMNPROPERTY(OBJECT_ID(N'dbo.PLA_PriceOverrides'), 'country_id', 'AllowsNull') = 0
+         BEGIN
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceOverrides_list') DROP INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides;
+            IF OBJECT_ID(N'dbo.PK_PLA_PriceOverrides', N'PK') IS NOT NULL ALTER TABLE dbo.PLA_PriceOverrides DROP CONSTRAINT PK_PLA_PriceOverrides;
+            IF OBJECT_ID(N'dbo.FK_PLA_PriceOverrides_country', N'F') IS NOT NULL ALTER TABLE dbo.PLA_PriceOverrides DROP CONSTRAINT FK_PLA_PriceOverrides_country;
+            ALTER TABLE dbo.PLA_PriceOverrides ALTER COLUMN country_id int NULL;
+            ALTER TABLE dbo.PLA_PriceOverrides ADD CONSTRAINT FK_PLA_PriceOverrides_country FOREIGN KEY (country_id) REFERENCES dbo.PLA_Countries (country_id);
+            ALTER TABLE dbo.PLA_PriceOverrides ADD CONSTRAINT UQ_PLA_PriceOverrides_price UNIQUE (product_id, country_id, price_level_id);
+         END",
+        // A price level's list is exactly its uploaded file: each of its rows keeps the file's product
+        // details and order (customer rows leave them NULL and use the level's).
+        "IF COL_LENGTH('dbo.PLA_PriceOverrides', 'row_json') IS NULL
+         ALTER TABLE dbo.PLA_PriceOverrides ADD row_json nvarchar(max) NULL, sort_order int NULL",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceOverrides_list')
-         CREATE INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides (country_id, price_level_id)",
+         CREATE INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides (price_level_id, country_id)",
         // What each save changed (one row per price or product), for history and the audit trail.
         "IF OBJECT_ID(N'dbo.PLA_PriceChanges', N'U') IS NULL
          CREATE TABLE dbo.PLA_PriceChanges (
@@ -623,14 +641,19 @@ function database_list_option_table(string $type): array
 function database_get_list_options(string $type): ?array
 {
     [$table, $idColumn] = database_list_option_table($type);
-    $rows = database_connection()->query("SELECT {$idColumn} AS id, name, description, is_active FROM {$table} ORDER BY sort_order, name")->fetchAll();
+    // Customers come with their price level (id and name).
+    $sql = $type === 'countries'
+        ? 'SELECT c.country_id AS id, c.name, c.description, c.is_active, c.price_level_id AS level_id, l.name AS level_name
+           FROM dbo.PLA_Countries c LEFT JOIN dbo.PLA_PriceLevels l ON l.price_level_id = c.price_level_id ORDER BY c.sort_order, c.name'
+        : "SELECT {$idColumn} AS id, name, description, is_active FROM {$table} ORDER BY sort_order, name";
+    $rows = database_connection()->query($sql)->fetchAll();
     if (!$rows) return null;
     return array_map(static fn(array $row): array => [
         'id' => (int) $row['id'],
         'name' => (string) $row['name'],
         'description' => (string) ($row['description'] ?? ''),
         'active' => (bool) $row['is_active'],
-    ], $rows);
+    ] + ($type === 'countries' ? ['levelId' => $row['level_id'] === null ? null : (int) $row['level_id'], 'level' => (string) ($row['level_name'] ?? '')] : []), $rows);
 }
 
 /**
@@ -648,6 +671,12 @@ function database_save_list_options(string $type, array $items): void
         foreach ($connection->query("SELECT {$idColumn} AS id, name FROM {$table}")->fetchAll() as $row) $existing[mb_strtolower((string) $row['name'])] = (int) $row['id'];
         $update = $connection->prepare("UPDATE {$table} SET name = ?, description = ?, is_active = ?, sort_order = ? WHERE {$idColumn} = ?");
         $insert = $connection->prepare("INSERT INTO {$table} (name, description, is_active, sort_order) VALUES (?, ?, ?, ?)");
+        // A customer's price level, by name (an unknown name leaves it without one).
+        $levelIds = [];
+        if ($type === 'countries') {
+            foreach ($connection->query('SELECT price_level_id AS id, name FROM dbo.PLA_PriceLevels')->fetchAll() as $row) $levelIds[mb_strtolower((string) $row['name'])] = (int) $row['id'];
+        }
+        $setLevel = $connection->prepare('UPDATE dbo.PLA_Countries SET price_level_id = ? WHERE name = ?');
         $kept = [];
         foreach (array_values($items) as $order => $item) {
             $key = mb_strtolower($item['name']);
@@ -657,13 +686,19 @@ function database_save_list_options(string $type, array $items): void
             } else {
                 $insert->execute([$item['name'], $item['description'] ?? '', $item['active'] ? 1 : 0, $order]);
             }
+            if ($type === 'countries') $setLevel->execute([$levelIds[mb_strtolower((string) ($item['level'] ?? ''))] ?? null, $item['name']]);
         }
         $inUse = $connection->prepare("SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.PLA_PriceOverrides WHERE {$idColumn} = ?) OR EXISTS (SELECT 1 FROM dbo.PLA_PriceRules WHERE {$idColumn} = ?) THEN 1 ELSE 0 END");
         foreach ($existing as $id) {
             if (isset($kept[$id])) continue;
             $inUse->execute([$id, $id]);
-            if ($inUse->fetchColumn()) $connection->prepare("UPDATE {$table} SET is_active = 0, sort_order = 100000 WHERE {$idColumn} = ?")->execute([$id]);
-            else $connection->prepare("DELETE FROM {$table} WHERE {$idColumn} = ?")->execute([$id]);
+            if ($inUse->fetchColumn()) {
+                $connection->prepare("UPDATE {$table} SET is_active = 0, sort_order = 100000 WHERE {$idColumn} = ?")->execute([$id]);
+                continue;
+            }
+            // Customers on a removed price level are left without one (Config shows them to fix).
+            if ($type === 'priceLevels') $connection->prepare('UPDATE dbo.PLA_Countries SET price_level_id = NULL WHERE price_level_id = ?')->execute([$id]);
+            $connection->prepare("DELETE FROM {$table} WHERE {$idColumn} = ?")->execute([$id]);
         }
         $connection->commit();
     } catch (Throwable $error) {

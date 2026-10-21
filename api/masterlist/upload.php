@@ -1,12 +1,15 @@
 <?php
 declare(strict_types=1);
 /**
- * Uploads the price list workbook (every product, its details and standard prices), in two steps with
- * the same file:
+ * Uploads a price list workbook, in two steps with the same file:
  *   1. without `confirm`: checks the workbook and returns a preview of what it would change;
  *   2. with `confirm` = that preview's fingerprint: applies it (only while the preview is still the
  *      same, so nothing changed in between).
- * Every country and price level follows the new prices, except prices set by hand for one of them.
+ * `target` says what the file is for (Requirements 17Oct2026: choose the price level, then the customer):
+ *   - 'masterlist' (or empty): the standard prices: every product, its details and standard prices;
+ *     every price level and customer follows them, except prices set by hand for one of them;
+ *   - list-0-<levelId>: the prices of one price level, for all its customers;
+ *   - list-<customerId>-<levelId>: the prices of one customer.
  * Like file uploads, it is live at once (no approval).
  */
 require_once __DIR__ . '/../bootstrap.php';
@@ -19,6 +22,11 @@ if (!masterlist_enabled()) json_response(['ok' => false, 'message' => 'The price
 if (count($_FILES) !== 1 || !isset($_FILES['workbook']) || !is_array($_FILES['workbook'])) {
     json_response(['ok' => false, 'message' => 'Upload one official .xlsx workbook.'], 422);
 }
+$target = clean_text($_POST['target'] ?? '', 40);
+$pair = $target === '' || $target === MASTERLIST_ID ? null : masterlist_parse_list_id($target);
+if ($target !== '' && $target !== MASTERLIST_ID && !$pair) json_response(['ok' => false, 'message' => 'Choose the price level and customer the file is for.'], 422);
+$list = $pair ? masterlist_list_version($pair[0], $pair[1]) : null;
+if ($pair && !$list) json_response(['ok' => false, 'message' => 'That price level or customer is no longer in Config. Refresh and choose again.'], 409);
 
 try {
     $import = import_official_uploaded_workbook($_FILES['workbook'], '', '');
@@ -26,10 +34,10 @@ try {
     json_response(['ok' => false, 'message' => $error->getMessage(), 'problems' => $error->problems], 422);
 }
 
-$preview = masterlist_preview_masterlist($import) + ['fileName' => $import['sourceFile']];
+$preview = ($pair ? masterlist_preview_list($import, $pair[0], $pair[1]) : masterlist_preview_masterlist($import)) + ['fileName' => $import['sourceFile']];
 $fingerprint = hash('sha256', json_encode($preview));
 $counts = $preview['counts'];
-$changes = $counts['added'] + $counts['removed'] + $counts['priceChanges'] + $counts['detailChanges'];
+$changes = $counts['added'] + ($counts['removed'] ?? 0) + $counts['priceChanges'] + ($counts['detailChanges'] ?? 0) + ($counts['reordered'] ?? 0);
 $confirm = (string) ($_POST['confirm'] ?? '');
 if ($confirm !== $fingerprint) {
     // A confirm with an older fingerprint: something changed since the preview, so show the new one.
@@ -38,16 +46,18 @@ if ($confirm !== $fingerprint) {
 if (!$changes) json_response(['ok' => false, 'message' => 'This file has no changes: every product and price is already the same.'], 422);
 
 $versionId = bin2hex(random_bytes(8));
-$records = masterlist_apply_masterlist($import, $versionId);
-$live = masterlist_base_version();
+$records = $pair ? masterlist_apply_list($import, $pair[0], $pair[1], $versionId, $user['name']) : masterlist_apply_masterlist($import, $versionId);
+$live = $pair ? masterlist_list_version($pair[0], $pair[1]) : masterlist_base_version();
 
 // The upload's record (history, audit and notifications), with the prices as they are now.
-$identity = ['name' => MASTERLIST_NAME, 'country' => '', 'priceLevel' => ''];
+$customer = $pair ? (string) $list['country'] : '';
+$level = $pair ? (string) $list['priceLevel'] : '';
+$identity = ['name' => MASTERLIST_NAME, 'country' => $customer, 'priceLevel' => $level];
 $revision = 1;
 foreach (repo_list_version_summaries() as $summary) if (same_price_list($summary, $identity)) $revision = max($revision, (int) $summary['revision'] + 1);
 $categories = array_values(array_unique(array_map(fn($row) => (string) $row[0], $live['rows'])));
 $version = [
-    'id' => $versionId, 'source' => 'upload', 'kind' => 'masterlist', 'name' => MASTERLIST_NAME, 'priceLevel' => '', 'country' => '',
+    'id' => $versionId, 'source' => 'upload', 'kind' => $pair ? 'list' : 'masterlist', 'name' => MASTERLIST_NAME, 'priceLevel' => $level, 'country' => $customer,
     'revision' => $revision, 'status' => 'uploaded',
     'headers' => $live['headers'], 'rows' => $live['rows'], 'priceColumns' => MASTERLIST_PRICE_COLUMNS,
     'adjustment' => 0.0, 'categoryAdjustments' => [],
@@ -56,21 +66,30 @@ $version = [
     'savedAt' => gmdate('c'), 'savedBy' => $user['name'], 'savedByUser' => $user['username'],
     'requiredApprovers' => [], 'approvals' => [], 'approvedAt' => null, 'approvedBy' => null,
     'rejectedAt' => null, 'rejectedBy' => null, 'rejectionRemarks' => null,
-    'basedOn' => MASTERLIST_ID, 'templateVersion' => $import['templateVersion'],
+    'basedOn' => $pair ? $list['id'] : MASTERLIST_ID, 'templateVersion' => $import['templateVersion'],
     'uploadSummary' => $counts, 'sourceFile' => $import['sourceFile'],
 ];
 repo_save_version($version);
 supersede_older_approved($version);
 
 $what = implode(', ', array_filter([
-    $counts['added'] ? "{$counts['added']} added" : '', $counts['removed'] ? "{$counts['removed']} removed" : '',
-    $counts['priceChanges'] ? "{$counts['priceChanges']} new prices" : '', $counts['detailChanges'] ? "{$counts['detailChanges']} with new details" : '',
+    $counts['added'] ? "{$counts['added']} added" : '', ($counts['removed'] ?? 0) ? "{$counts['removed']} removed" : '',
+    $counts['priceChanges'] ? "{$counts['priceChanges']} new prices" : '', ($counts['reordered'] ?? 0) ? 'new order' : '', ($counts['detailChanges'] ?? 0) ? "{$counts['detailChanges']} with new details" : '',
 ]));
-$title = $preview['first'] ? 'Uploaded the price list' : 'Uploaded an updated price list';
-$details = "{$user['name']} uploaded the price list ({$import['sourceFile']}): {$preview['products']} products; {$what}.";
+if ($pair) {
+    $for = masterlist_list_name($list);
+    $title = "Uploaded prices for {$for}";
+    $details = "{$user['name']} uploaded the prices for {$for} ({$import['sourceFile']}): {$preview['products']} products; {$what}.";
+    $message = "Prices for {$for} updated: {$what}.";
+} else {
+    $title = $preview['first'] ? 'Uploaded the price list' : 'Uploaded an updated price list';
+    $details = "{$user['name']} uploaded the price list ({$import['sourceFile']}): {$preview['products']} products; {$what}.";
+    $message = "Price list updated: {$what}.";
+}
 record_audit('import_workbook', $title, $details, [
-    'versionId' => $versionId, 'versionName' => MASTERLIST_NAME, 'fileName' => MASTERLIST_NAME, 'revision' => $revision, 'kind' => 'masterlist',
+    'versionId' => $versionId, 'versionName' => MASTERLIST_NAME, 'fileName' => MASTERLIST_NAME, 'revision' => $revision, 'kind' => $pair ? 'list' : 'masterlist',
+    'country' => $customer, 'priceLevel' => $level,
     'rowCount' => $preview['products'], 'counts' => $counts, 'sourceFile' => $import['sourceFile'], 'templateVersion' => $import['templateVersion'],
 ]);
 notify(usernames_with_permission('export'), 'available', $title, "{$details} The prices are live and can be exported.", $versionId);
-json_response(['ok' => true, 'active' => version_for_client($user, $live), 'message' => "Price list updated: {$what}.", 'changeCount' => count($records)]);
+json_response(['ok' => true, 'active' => version_for_client($user, $live), 'message' => $message, 'changeCount' => count($records)]);

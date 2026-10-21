@@ -41,6 +41,7 @@ const VERSION_SUMMARY_KEYS = [
     'id', 'name', 'priceLevel', 'country', 'revision', 'status', 'adjustment', 'categoryAdjustments', 'summary',
     'savedAt', 'savedBy', 'savedByUser', 'requiredApprovers', 'approvals', 'approvedAt', 'approvedBy',
     'rejectedAt', 'rejectedBy', 'rejectionRemarks', 'productCount', 'categories', 'changeCount', 'source', 'basedOn', 'adjustOnCurrent',
+    'sourceFile', // the workbook an upload came from (shown on its file card in Files)
     'kind', // price masterlist saves: 'masterlist' (the masterlist itself) or 'list' (one country + price level)
 ];
 

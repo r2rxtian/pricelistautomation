@@ -19,3 +19,4 @@ if (!$photo) json_response(['ok' => false, 'message' => 'That photo is no longer
 
 $record = assign_group_photo($user, $category, $groupName, $photo);
 json_response(['ok' => true, 'image' => $record, 'photo' => $photo, 'message' => 'Product photo updated.']);
+

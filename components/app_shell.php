@@ -12,6 +12,7 @@ require_once __DIR__ . '/../auth/csrf.php';
 require_once __DIR__ . '/logo.php';
 
 const APP_PAGES = [
+    'dashboard' => ['panel' => 'dashboardPanel', 'title' => 'Dashboard'],
     'prices' => ['panel' => 'workspacePanel', 'title' => 'Prices'],
     'files' => ['panel' => 'filesPanel', 'title' => 'Files'],
     'approvals' => ['panel' => 'filesPanel', 'title' => 'Files'], // merged into Files; old links still work
@@ -46,7 +47,7 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=230">
+    <link rel="stylesheet" href="../styles/app.css?v=238">
     <script>
     (function() {
         try {
@@ -84,9 +85,10 @@ if ($required !== null && !user_can($user, $required)) {
     <div id="appLoading" class="app-loading" role="status"><div class="loader-orbit"><span class="orbit-ring ring-1"></span><span class="orbit-ring ring-2"></span><span class="orbit-core"></span></div><strong>Loading price workspace</strong></div>
     <header class="topbar">
         <div class="topbar-left">
-            <a class="brand" href="files.php" aria-label="PLA Price List Automation: go to Files"><?= pla_logo_lockup() ?><span class="brand-quip" aria-hidden="true">Fresh prices, baked daily.</span></a>
+            <a class="brand" href="dashboard.php" aria-label="PLA Price List Automation: go to the Dashboard"><?= pla_logo_lockup() ?><span class="brand-quip" aria-hidden="true">Fresh prices, baked daily.</span></a>
         </div>
         <nav class="top-nav" aria-label="Primary">
+            <button class="nav-item" data-panel="dashboardPanel" id="dashboardNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h4v-6H3zM10 20h4V10h-4zM17 20h4V4h-4z"/></svg><strong>Dashboard</strong></button>
             <button class="nav-item<?= empty($_GET['list']) ? ' active' : '' ?>" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
             <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
             <button class="nav-item perm-manageUsers" data-panel="usersPanel" id="usersNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><strong>Users</strong></button>
@@ -149,7 +151,7 @@ if ($required !== null && !user_can($user, $required)) {
                 <div class="page-heading">
                     <div class="heading-left">
                         <p class="kicker">CURRENT FILE</p>
-                        <div class="title-line"><h1 class="list-title"><button type="button" id="listSwitcher" class="title-switcher" aria-haspopup="dialog" aria-expanded="false" aria-controls="listSwitcherMenu" disabled><span id="listTitle">Start with a workbook</span><svg class="ls-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></h1><button type="button" class="list-context switch-trigger" title="Change country, price level or price list"><svg class="lc-globe" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><strong id="listCountry">—</strong><span class="lc-sep" aria-hidden="true">›</span><strong id="listPriceLevel">—</strong><svg class="lc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><button type="button" id="closeFileBtn" class="close-file-btn" title="Close this file" aria-label="Close this file" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close file</span></button></div>
+                        <div class="title-line"><h1 class="list-title"><button type="button" id="listSwitcher" class="title-switcher" aria-haspopup="dialog" aria-expanded="false" aria-controls="listSwitcherMenu" disabled><span id="listTitle">Start with a workbook</span><svg class="ls-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></h1><button type="button" class="list-context switch-trigger" title="Change customer, price level or price list"><svg class="lc-globe" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><strong id="listCountry">—</strong><span class="lc-sep" aria-hidden="true">›</span><strong id="listPriceLevel">—</strong><svg class="lc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><button type="button" id="closeFileBtn" class="close-file-btn" title="Close this file" aria-label="Close this file" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close file</span></button></div>
                         <div class="meta-container">
                             <div class="file-identity-row">
                                 <svg class="file-badge-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -232,7 +234,7 @@ if ($required !== null && !user_can($user, $required)) {
                                     </div>
                                 </div>
 
-                                <!-- In a country of the price list: one % can cover many countries / price levels at once. -->
+                                <!-- In a price level or customer of the price list: one % can cover more customers or every price level. -->
                                 <div class="adj-scope" id="adjScope" hidden>
                                     <label class="adj-scope-label" for="adjScopeSelect">Apply to</label>
                                     <span class="ml-select adj-scope-select is-filled">
@@ -240,9 +242,9 @@ if ($required !== null && !user_can($user, $required)) {
                                         <select id="adjScopeSelect" aria-label="Which lists the % applies to"></select>
                                         <svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                                     </span>
-                                    <!-- "Countries I pick": slides open below. -->
+                                    <!-- "Pick customers": slides open below. -->
                                     <div class="ml-reveal adj-scope-reveal" id="adjScopeCountriesWrap" aria-hidden="true">
-                                        <div class="ml-reveal-inner"><div class="adj-scope-countries" id="adjScopeCountries" role="group" aria-label="Countries"></div></div>
+                                        <div class="ml-reveal-inner"><div class="adj-scope-countries" id="adjScopeCountries" role="group" aria-label="Customers"></div></div>
                                     </div>
                                 </div>
 
@@ -318,6 +320,52 @@ if ($required !== null && !user_can($user, $required)) {
                     </div>
                     <div class="table-frame"><table id="priceTable"><thead></thead><tbody></tbody></table><div id="noResults" class="no-results" hidden>No matching items.</div></div>
                     </div>
+                </section>
+            </section>
+
+            <!-- Dashboard: the price levels as steps (higher = dearer), the price ladder of one product
+                 across every level, what needs attention, and the last 30 days. Filled by scripts/app.js. -->
+            <section id="dashboardPanel" class="panel management-page dash-page" hidden>
+                <div class="page-heading dash-heading">
+                    <div class="heading-left">
+                        <p class="kicker" id="dashDate">Dashboard</p>
+                        <h1 id="dashGreeting">Dashboard</h1>
+                        <p class="muted" id="dashSummary">Loading the price levels…</p>
+                    </div>
+                    <div class="dash-actions">
+                        <button type="button" class="button secondary" id="dashOpenBtn">Go to files</button>
+                        <button type="button" class="button primary perm-upload" id="dashUploadBtn" hidden>Upload prices</button>
+                    </div>
+                </div>
+                <section class="dash-card dash-stairs-card" aria-labelledby="dashStairsTitle">
+                    <header class="dash-card-head"><div><h2 id="dashStairsTitle">Price levels</h2><p>Each step is a price level: the higher it stands, the dearer it is than the lowest level.</p></div></header>
+                    <div class="dash-stairs" id="dashStairs"></div>
+                </section>
+                <div class="dash-grid">
+                    <section class="dash-card dash-ladder-card" aria-labelledby="dashLadderTitle">
+                        <header class="dash-card-head">
+                            <div><h2 id="dashLadderTitle">Price ladder</h2><p>One product across every price level.</p></div>
+                            <div class="dash-ladder-tools">
+                                <div class="dash-seg" role="group" aria-label="Price shown"><button type="button" class="is-on" data-ladder-unit="pc">Per piece</button><button type="button" data-ladder-unit="box">Per box</button></div>
+                            </div>
+                        </header>
+                        <div class="dash-ladder-pick">
+                            <button type="button" class="icon-button dash-step-btn" id="dashLadderPrev" aria-label="Previous product">‹</button>
+                            <span class="ml-select is-filled dash-ladder-select"><select id="dashLadderProduct" aria-label="Product"></select><svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
+                            <button type="button" class="icon-button dash-step-btn" id="dashLadderNext" aria-label="Next product">›</button>
+                        </div>
+                        <div class="dash-ladder" id="dashLadder" aria-live="polite"></div>
+                        <p class="dash-ladder-note" id="dashLadderNote"></p>
+                    </section>
+                    <section class="dash-card dash-attention-card" aria-labelledby="dashAttentionTitle">
+                        <header class="dash-card-head"><div><h2 id="dashAttentionTitle">Needs attention</h2><p>What is waiting on someone.</p></div></header>
+                        <ul class="dash-attention" id="dashAttention"></ul>
+                    </section>
+                </div>
+                <section class="dash-card dash-pulse-card" aria-labelledby="dashPulseTitle">
+                    <header class="dash-card-head"><div><h2 id="dashPulseTitle">Last 30 days</h2><p id="dashPulseSummary">Uploads, price changes and exports, day by day.</p></div><div class="dash-legend"><span class="is-uploads">Uploads</span><span class="is-changes">Price changes</span><span class="is-exports">Exports</span></div></header>
+                    <div class="dash-pulse" id="dashPulse"></div>
+                    <ul class="dash-recent" id="dashRecent"></ul>
                 </section>
             </section>
 
@@ -510,7 +558,7 @@ if ($required !== null && !user_can($user, $required)) {
                         <span class="config-sections-glider" aria-hidden="true"></span>
                         <button type="button" class="config-section-btn is-active" data-config-section="library" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Photo library</span><span id="libraryCountBadge" class="config-section-count">0</span></button>
                         <button type="button" class="config-section-btn" data-config-section="types" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Product type photos</span><span id="typesCountBadge" class="config-section-count">0</span></button>
-                        <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Countries &amp; price levels</span></button>
+                        <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Customers &amp; price levels</span></button>
                     </div>
                 </div>
 
@@ -555,33 +603,30 @@ if ($required !== null && !user_can($user, $required)) {
                 <div class="lists-card" id="listsCard" hidden>
                     <section class="option-list country-list" data-option-type="countries" aria-labelledby="countriesTitle">
                         <header class="option-list-head">
-                            <div><h2 id="countriesTitle">Countries</h2><p class="option-list-sub" data-option-summary></p></div>
+                            <div><h2 id="countriesTitle">Customers</h2><p class="option-list-sub" data-option-summary></p></div>
                             <div class="country-head-tools">
-                                <label class="option-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" data-option-search placeholder="Search countries…" aria-label="Search countries" autocomplete="off"></label>
-                                <button type="button" class="button primary country-add-toggle" id="countryAddToggle" aria-expanded="false" aria-controls="countryAddForm"><span aria-hidden="true">+</span> Add country</button>
+                                <label class="option-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" data-option-search placeholder="Search customers…" aria-label="Search customers" autocomplete="off"></label>
+                                <button type="button" class="button primary country-add-toggle" id="countryAddToggle" aria-expanded="false" aria-controls="countryAddForm"><span aria-hidden="true">+</span> Add customer</button>
                             </div>
                         </header>
                         <form class="option-add country-add" id="countryAddForm" data-option-add hidden>
                             <span class="country-add-flag" id="countryAddFlag" aria-hidden="true"></span>
-                            <input type="text" maxlength="80" list="countryNameList" placeholder="Type a country, e.g. Japan" aria-label="New country" autocomplete="off">
+                            <input type="text" maxlength="80" placeholder="Customer name, e.g. Sinodis" aria-label="New customer" autocomplete="off">
+                            <span class="ml-select is-filled customer-add-level"><select id="countryAddLevel" aria-label="Price level of the new customer"></select><svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
                             <button type="submit" class="button primary">Add</button>
                             <button type="button" class="option-icon country-add-close" id="countryAddClose" aria-label="Close" title="Close">×</button>
-                            <datalist id="countryNameList"></datalist>
-                        </form>
-                        <div class="country-tabs" role="tablist" aria-label="Show countries">
-                            <button type="button" class="country-tab is-active" data-country-tab="all" role="tab" aria-selected="true">All countries</button>
-                            <button type="button" class="country-tab" data-country-tab="used" role="tab" aria-selected="false">In use</button>
-                        </div>
+                                                    </form>
+                        <div class="country-tabs" id="customerTabs" role="tablist" aria-label="Show customers by price level"></div>
                         <div class="country-body">
                             <div class="option-rows" data-option-rows></div>
                         </div>
-                        <footer class="country-foot"><span data-country-showing></span><span class="country-foot-hint">Hover a country to remove it</span></footer>
+                        <footer class="country-foot"><span data-country-showing></span><span class="country-foot-hint">Each customer buys at one price level · hover a customer to remove it</span></footer>
                     </section>
                     <section class="option-list" data-option-type="priceLevels" aria-labelledby="levelsTitle">
                         <header class="option-list-head">
                             <div><h2 id="levelsTitle">Price levels</h2><p class="option-list-sub" data-option-summary></p></div>
                         </header>
-                        <p class="option-note">Shown in this order in every price level dropdown. Add a short description so everyone knows what each level is for.</p>
+                        <p class="option-note">Shown in this order in every price level dropdown. All customers on a level share its prices. Add a short description so everyone knows what each level is for.</p>
                         <div class="option-rows" data-option-rows></div>
                         <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a price level…" aria-label="New price level" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
                     </section>
@@ -902,6 +947,15 @@ if ($required !== null && !user_can($user, $required)) {
         </div>
         <div id="mlUploadChoose" class="ml-upload-step">
             <p class="muted ml-upload-intro" id="mlUploadIntro"></p>
+            <!-- Requirements 17Oct2026: choose the price level first, then the customer. -->
+            <div class="ml-upload-target" id="mlUploadTarget">
+                <p class="ml-upload-target-title">These prices are for</p>
+                <div class="ml-upload-target-row">
+                    <label class="ml-select is-filled"><span class="ml-select-lead" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span><select id="mlTargetLevel" aria-label="Price level"></select><svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></label>
+                    <label class="ml-select is-filled" id="mlTargetCustomerWrap"><span class="ml-select-lead" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><select id="mlTargetCustomer" aria-label="Customer"></select><svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></label>
+                </div>
+                <p class="ml-upload-target-hint" id="mlTargetHint"></p>
+            </div>
             <div class="upload-template-tools">
                 <span>Use the official workbook.</span>
                 <button type="button" id="mlDownloadTemplate" class="upload-text-button">
@@ -927,6 +981,17 @@ if ($required !== null && !user_can($user, $required)) {
             <button type="button" class="button primary" id="mlUploadNext" disabled>Check file</button>
         </div>
     </div>
+</dialog>
+
+<!-- Export: the letterhead on top and the bank details at the bottom (Requirements 17Oct2026 › header & footer selection). -->
+<dialog id="exportDialog" class="export-dialog" aria-labelledby="exportDialogTitle">
+    <form method="dialog" class="dialog-card export-card" id="exportForm">
+        <div class="dialog-heading"><div><p class="kicker" id="exportDialogKicker">Export</p><h2 id="exportDialogTitle">Export</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted export-intro" id="exportDialogIntro"></p>
+        <fieldset class="export-choice"><legend>Letterhead <small>at the top</small></legend><div class="export-options" id="exportLetterheads"></div></fieldset>
+        <fieldset class="export-choice"><legend>Bank details <small>at the bottom</small></legend><div class="export-options" id="exportBanks"></div></fieldset>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button value="default" class="button primary" id="exportDialogGo">Export</button></div>
+    </form>
 </dialog>
 
 <dialog id="logoutDialog">
@@ -1000,7 +1065,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=217"></script>
+<script src="../scripts/app.js?v=224"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

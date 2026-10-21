@@ -1,16 +1,24 @@
 <?php
 declare(strict_types=1);
 /**
- * The price masterlist: one list of products with base prices, from which every country + price
- * level list is worked out. A price in a list is
- *   1. the price set for that product in that list (PLA_PriceOverrides), when there is one;
- *   2. otherwise the base price × every matching % rule (PLA_PriceRules: per price level, country
- *      and/or category; rules that match together multiply, e.g. +5% and +3% = +8.15%).
- * Only prices are set per list; descriptions, sizes and the rest always come from the masterlist.
+ * The price masterlist: one list of products with standard (base) prices, from which every price
+ * level and customer is worked out (Requirements 17Oct2026: each customer buys at one price level).
  *
+ * A price level's price for a product is
+ *   1. the price set for that product in that level (PLA_PriceOverrides, country_id NULL), or
+ *   2. the standard price × every matching % rule (PLA_PriceRules: per price level, customer and/or
+ *      category; rules that match together multiply, e.g. +5% and +3% = +8.15%).
+ * A customer's price is
+ *   1. the price set for that product for that customer (PLA_PriceOverrides), or
+ *   2. its price level's own price × the customer's own % rules, or
+ *   3. the standard price × every matching % rule (the level's and the customer's).
+ * Only prices are set per level or customer; descriptions, sizes and the rest come from the masterlist.
+ *
+ * Customers are the old "countries" (country_id, the version field 'country'): see constants.php.
  * In the app a list is a "version" like an uploaded file (same rows, editor and export), with the id
- * list-<countryId>-<priceLevelId>; the masterlist itself is the id 'masterlist'. Saving price changes
- * to either makes a normal pending version (rows + the edits it makes); approving it applies the edits.
+ * list-<customerId>-<priceLevelId>, where customer 0 = the price level itself (all its customers);
+ * the masterlist is the id 'masterlist'. Saving price changes makes a normal pending version (rows +
+ * the edits it makes); approving it applies the edits.
  * SQL Server only (conn/config.php › PLA_STORAGE_DRIVER = 'sqlserver').
  */
 
@@ -59,17 +67,33 @@ function masterlist_same_price(mixed $a, mixed $b): bool
     return is_numeric($a) && is_numeric($b) && abs((float) $a - (float) $b) < 0.00005;
 }
 
-/** The combined rule multiplier for one product category in one list. */
-function masterlist_factor(array $rules, int $countryId, int $levelId, string $category): float
+/**
+ * The combined rule multiplier for one product category in one list (customer 0 = the price level:
+ * only rules for every customer count). $customerOnly: just the rules made for this one customer.
+ */
+function masterlist_factor(array $rules, int $countryId, int $levelId, string $category, bool $customerOnly = false): float
 {
     $factor = 1.0;
     foreach ($rules as $rule) {
+        if ($customerOnly && $rule['countryId'] === null) continue;
         if ($rule['countryId'] !== null && $rule['countryId'] !== $countryId) continue;
         if ($rule['levelId'] !== null && $rule['levelId'] !== $levelId) continue;
         if ($rule['category'] !== null && mb_strtolower($rule['category']) !== mb_strtolower($category)) continue;
         $factor *= 1 + $rule['percent'] / 100;
     }
     return $factor;
+}
+
+/** "Chefs Warehouse" or "All customers": who a list's prices are for. */
+function masterlist_list_label(array $list): string
+{
+    return trim((string) ($list['country'] ?? '')) !== '' ? (string) $list['country'] : 'All customers';
+}
+
+/** "Chefs Warehouse · CW Price" or "CW Price (all customers)": a list in words. */
+function masterlist_list_name(array $list): string
+{
+    return trim((string) ($list['country'] ?? '')) !== '' ? "{$list['country']} · {$list['priceLevel']}" : "{$list['priceLevel']} (all customers)";
 }
 
 /** A product as a normalized price list row, with the given prices for a country and level. */
@@ -82,9 +106,11 @@ function masterlist_row(array $product, ?float $pricePc, ?float $priceBox, strin
     $row[8] = $pricePc ?? '';
     $row[9] = $priceBox ?? '';
     // The MOQ total is price/box × MOQ in the template: it moves with the price/box.
+    // (Against the Price/box the row was saved with: the level's file, or the product list.)
     $total = $product['row'][MASTERLIST_MOQ_TOTAL_COLUMN] ?? '';
-    if (is_numeric($total) && $priceBox !== null && ($product['priceBox'] ?? 0) > 0) {
-        $row[MASTERLIST_MOQ_TOTAL_COLUMN] = round((float) $total * $priceBox / $product['priceBox'], 2);
+    $savedBox = is_numeric($product['row'][9] ?? null) ? (float) $product['row'][9] : (float) ($product['priceBox'] ?? 0);
+    if (is_numeric($total) && $priceBox !== null && $savedBox > 0) {
+        $row[MASTERLIST_MOQ_TOTAL_COLUMN] = round((float) $total * $priceBox / $savedBox, 2);
     }
     $row[19] = $level;
     $row[20] = $country;
@@ -141,52 +167,84 @@ function masterlist_base_version(): array
 
 /**
  * Every product's price in one list: ['product', 'rulePc', 'ruleBox', 'pricePc', 'priceBox', 'own'].
- * 'own' is the override record when the list has its own price for the product.
+ * 'rule…' is the price the list follows when it has none of its own (for a customer: its price
+ * level's); 'own' is the override record when the list has its own price for the product.
  */
-function masterlist_list_prices(int $countryId, int $levelId): array
+function masterlist_list_prices(int $countryId, int $levelId, bool $all = false): array
 {
+    // $all: every product, also the ones not in this list (to add one through a customer's own price).
     $rules = masterlist_db_rules();
     $overrides = masterlist_db_overrides($countryId, $levelId);
+    // A price level's list is exactly its uploaded file (its rows); a customer has its level's
+    // products at the level's prices, with its own % on top, plus any prices of its own.
+    $levelPrices = $countryId === 0 ? $overrides : masterlist_db_overrides(0, $levelId);
     $prices = [];
     foreach (masterlist_db_products() as $p) {
+        $level = $levelPrices[$p['id']] ?? null;
+        if (!$all && $level === null && !isset($overrides[$p['id']])) continue; // not in this level's file
+        if ($level !== null && $level['row']) {
+            // The product as this level's file has it.
+            $p['row'] = $level['row'];
+            $p['category'] = (string) ($level['row'][0] ?? '') ?: $p['category'];
+            $p['description'] = (string) ($level['row'][2] ?? '') ?: $p['description'];
+            $p['group'] = (string) ($level['row'][18] ?? '') ?: $p['group'];
+        }
+        $p['levelSort'] = $level['sort'] ?? (1000000 + $p['sort']);
         $factor = masterlist_factor($rules, $countryId, $levelId, $p['category']);
-        $rulePc = $p['pricePc'] === null ? null : masterlist_round($p['pricePc'] * $factor);
-        $ruleBox = $p['priceBox'] === null ? null : masterlist_round($p['priceBox'] * $factor);
-        $own = $overrides[$p['id']] ?? null;
+        $customerFactor = $countryId === 0 ? 1.0 : masterlist_factor($rules, $countryId, $levelId, $p['category'], true);
+        $follow = function (string $field) use ($p, $level, $factor, $customerFactor): ?float {
+            if ($level !== null && $level[$field] !== null) return masterlist_round($level[$field] * $customerFactor);
+            return $p[$field] === null ? null : masterlist_round($p[$field] * $factor);
+        };
+        $rulePc = $follow('pricePc');
+        $ruleBox = $follow('priceBox');
+        $own = $countryId === 0 ? $level : ($overrides[$p['id']] ?? null);
         $prices[$p['code']] = [
             'product' => $p, 'rulePc' => $rulePc, 'ruleBox' => $ruleBox,
             'pricePc' => $own['pricePc'] ?? $rulePc, 'priceBox' => $own['priceBox'] ?? $ruleBox, 'own' => $own,
+            'inLevel' => $level !== null,
         ];
     }
+    // In the order of the level's file.
+    uasort($prices, fn($a, $b) => $a['product']['levelSort'] <=> $b['product']['levelSort']);
     return $prices;
 }
 
-/** One country + price level list, or null when that country or level doesn't exist. */
+/**
+ * One price level (customer 0) or one customer on its price level, or null when either doesn't exist
+ * or the customer buys at another level.
+ */
 function masterlist_list_version(int $countryId, int $levelId): ?array
 {
-    $countries = masterlist_db_option_ids('countries');
     $levels = masterlist_db_option_ids('priceLevels');
-    if (!isset($countries[$countryId], $levels[$levelId])) return null;
+    if (!isset($levels[$levelId])) return null;
+    $customer = '';
+    if ($countryId !== 0) {
+        $entry = null;
+        foreach (database_get_list_options('countries') ?? [] as $option) if ($option['id'] === $countryId) $entry = $option;
+        if (!$entry || $entry['levelId'] !== $levelId) return null;
+        $customer = $entry['name'];
+    }
     $rows = [];
     $own = [];
     $latest = masterlist_last_saved();
     foreach (masterlist_list_prices($countryId, $levelId) as $code => $price) {
-        $rows[] = masterlist_row($price['product'], $price['pricePc'], $price['priceBox'], $countries[$countryId], $levels[$levelId]);
-        if ($price['own']) {
-            $p = $price['product'];
+        $rows[] = masterlist_row($price['product'], $price['pricePc'], $price['priceBox'], $customer, $levels[$levelId]);
+        if (!$price['own']) continue;
+        if ($price['own']['setAt'] > $latest['at']) $latest = ['at' => $price['own']['setAt'], 'by' => $price['own']['setBy']];
+        // A customer's own prices are marked in its list (the level's are simply its file).
+        if ($countryId !== 0) {
             $own[$code] = [
                 'pc' => $price['own']['pricePc'] !== null, 'box' => $price['own']['priceBox'] !== null,
                 'rulePc' => $price['rulePc'], 'ruleBox' => $price['ruleBox'],
-                'setAt' => $price['own']['setAt'], 'setBy' => $price['own']['setBy'],
-                // The masterlist price moved since this price was set: worth a second look.
-                'baseChanged' => !masterlist_same_price($price['own']['basePcWhenSet'], $p['pricePc']) || !masterlist_same_price($price['own']['baseBoxWhenSet'], $p['priceBox']),
+                'setAt' => $price['own']['setAt'], 'setBy' => $price['own']['setBy'], 'baseChanged' => false,
             ];
-            if ($price['own']['setAt'] > $latest['at']) $latest = ['at' => $price['own']['setAt'], 'by' => $price['own']['setBy']];
         }
     }
-    $version = masterlist_version_shell(masterlist_list_id($countryId, $levelId), 'list', MASTERLIST_LIST_NAME, $countries[$countryId], $levels[$levelId], $rows, $latest['at'], $latest['by']);
+    $version = masterlist_version_shell(masterlist_list_id($countryId, $levelId), 'list', MASTERLIST_LIST_NAME, $customer, $levels[$levelId], $rows, $latest['at'], $latest['by']);
     $version['ownPrices'] = $own;
     $version['priceOnly'] = true;
+    $version['levelWide'] = $countryId === 0;
     return $version;
 }
 
@@ -215,8 +273,8 @@ function masterlist_option_id(string $type, string $name): ?int
 }
 
 /**
- * Light summaries of the masterlist and every switched-on country × price level list, for the Files
- * page, the list switcher and the navigator (the rows are fetched when a list is opened).
+ * Light summaries of the masterlist, every switched-on price level and every customer on it, for the
+ * Files page and the list switcher (the rows are fetched when a list is opened).
  */
 function masterlist_summaries(): array
 {
@@ -226,8 +284,8 @@ function masterlist_summaries(): array
     $categories = array_values(array_unique(array_map(fn($p) => $p['category'], $products)));
     $last = masterlist_last_saved();
     $counts = masterlist_db_override_counts();
-    // Each country + price level list carries only what the page uses (there can be hundreds); the
-    // rows come when one is opened.
+    $changed = masterlist_db_last_changes();
+    // Each list carries only what the page uses; the rows come when one is opened.
     $base = fn(string $id, string $kind, string $name, string $country, string $level) => [
         'id' => $id, 'source' => 'masterlist', 'kind' => $kind, 'name' => $name, 'country' => $country, 'priceLevel' => $level,
         'status' => 'approved', 'savedAt' => $last['at'],
@@ -235,13 +293,20 @@ function masterlist_summaries(): array
     $summaries = [$base(MASTERLIST_ID, 'masterlist', MASTERLIST_NAME, '', '') + [
         'productCount' => $count, 'categories' => $categories, 'savedBy' => $last['by'], 'approvedAt' => $last['at'], 'approvedBy' => $last['by'],
     ]];
-    if (!$count) return $summaries;
-    $levels = array_filter(database_get_list_options('priceLevels') ?? [], fn($o) => $o['active']);
-    foreach (database_get_list_options('countries') ?? [] as $country) {
-        if (!$country['active']) continue;
-        foreach ($levels as $level) {
-            $summary = $base(masterlist_list_id($country['id'], $level['id']), 'list', MASTERLIST_LIST_NAME, $country['name'], $level['name']);
-            if (!empty($counts[$country['id'] . '-' . $level['id']])) $summary['ownPriceCount'] = $counts[$country['id'] . '-' . $level['id']];
+    $customers = array_filter(database_get_list_options('countries') ?? [], fn($o) => $o['active'] && $o['levelId'] !== null);
+    foreach (database_get_list_options('priceLevels') ?? [] as $level) {
+        if (!$level['active']) continue;
+        // The price level itself (every customer on it), then its customers.
+        $onLevel = array_filter($customers, fn($c) => $c['levelId'] === $level['id']);
+        $summary = $base(masterlist_list_id(0, $level['id']), 'list', MASTERLIST_LIST_NAME, '', $level['name']) + ['levelWide' => true, 'customerCount' => count($onLevel)];
+        if (!empty($counts['0-' . $level['id']])) $summary['ownPriceCount'] = $counts['0-' . $level['id']];
+        // When this level's file last changed, and by whom.
+        if (isset($changed['0-' . $level['id']])) $summary = ['savedAt' => $changed['0-' . $level['id']]['at'], 'savedBy' => $changed['0-' . $level['id']]['by']] + $summary;
+        $summaries[] = $summary;
+        foreach ($onLevel as $customer) {
+            $summary = $base(masterlist_list_id($customer['id'], $level['id']), 'list', MASTERLIST_LIST_NAME, $customer['name'], $level['name']);
+            if (!empty($counts[$customer['id'] . '-' . $level['id']])) $summary['ownPriceCount'] = $counts[$customer['id'] . '-' . $level['id']];
+            if (isset($changed[$customer['id'] . '-' . $level['id']])) $summary = ['savedAt' => $changed[$customer['id'] . '-' . $level['id']]['at'], 'savedBy' => $changed[$customer['id'] . '-' . $level['id']]['by']] + $summary;
             $summaries[] = $summary;
         }
     }
@@ -302,7 +367,7 @@ function masterlist_edits(array $live, array $rows): array
             $newValue = $row[$col] ?? '';
             if (trim((string) $newValue) === trim((string) $oldValue)) continue;
             if ($live['kind'] !== 'masterlist') {
-                return ['edits' => [], 'error' => "Only prices can be changed for a country. '" . masterlist_column_name($col) . "' of {$old[1]} is the same everywhere: change it in Standard prices."];
+                return ['edits' => [], 'error' => "Only prices can be changed for a price level or customer. '" . masterlist_column_name($col) . "' of {$old[1]} is shared by every price level: it comes from the uploaded workbook."];
             }
             $edit['fields'][] = ['col' => $col, 'name' => masterlist_column_name($col), 'old' => $oldValue, 'new' => $newValue];
         }
@@ -375,9 +440,12 @@ function masterlist_apply_base_edits(array $edits, string $versionId, string $by
  * (a missing key leaves that price as it is). A price equal to the masterlist + rules price is not
  * stored, so the product follows the masterlist again. Returns the change records written.
  */
-function masterlist_set_list_prices(int $countryId, int $levelId, array $prices, string $versionId, string $by): array
+function masterlist_set_list_prices(int $countryId, int $levelId, array $prices, string $versionId, string $by, bool $keepAll = false): array
 {
-    $current = masterlist_list_prices($countryId, $levelId);
+    // A price level's prices are its file's: kept as they are, even one equal to the reference price
+    // (dropping it would take the product out of the level's list). $keepAll does the same for others.
+    $keepAll = $keepAll || $countryId === 0;
+    $current = masterlist_list_prices($countryId, $levelId, $countryId !== 0);
     $index = [];
     foreach ($current as $code => $entry) $index[mb_strtolower($code)] = $entry;
     $writes = [];
@@ -390,18 +458,21 @@ function masterlist_set_list_prices(int $countryId, int $levelId, array $prices,
         foreach (['pricePc', 'priceBox'] as $field) {
             if (!array_key_exists($field, $set)) continue;
             if (!masterlist_same_price($set[$field], $entry[$field])) {
-                $changes[] = ['kind' => 'override', 'code' => $p['code'], 'countryId' => $countryId, 'levelId' => $levelId, 'category' => $p['category'],
+                $changes[] = ['kind' => 'override', 'code' => $p['code'], 'countryId' => $countryId ?: null, 'levelId' => $levelId, 'category' => $p['category'],
                     'field' => $field === 'pricePc' ? 'price_pc' : 'price_box', 'old' => $entry[$field], 'new' => $set[$field]];
             }
             $next[$field] = $set[$field];
         }
+        // (A customer's product that isn't in its level's file stays only through its own price.)
+        $keep = $keepAll || empty($entry['inLevel']);
         $own = [
-            'pricePc' => masterlist_same_price($next['pricePc'], $entry['rulePc']) ? null : $next['pricePc'],
-            'priceBox' => masterlist_same_price($next['priceBox'], $entry['ruleBox']) ? null : $next['priceBox'],
+            'pricePc' => !$keep && masterlist_same_price($next['pricePc'], $entry['rulePc']) ? null : $next['pricePc'],
+            'priceBox' => !$keep && masterlist_same_price($next['priceBox'], $entry['ruleBox']) ? null : $next['priceBox'],
             'basePc' => $p['pricePc'], 'baseBox' => $p['priceBox'],
         ];
         $had = $entry['own'] !== null;
         if ($own['pricePc'] === null && $own['priceBox'] === null && !$had) continue;
+        if ($keep && $had && masterlist_same_price($own['pricePc'], $entry['own']['pricePc']) && masterlist_same_price($own['priceBox'], $entry['own']['priceBox'])) continue;
         $writes[$p['id']] = $own;
     }
     masterlist_db_transaction(function (PDO $db) use ($countryId, $levelId, $writes, $changes, $versionId, $by) {
@@ -412,20 +483,20 @@ function masterlist_set_list_prices(int $countryId, int $levelId, array $prices,
 }
 
 // ---------------------------------------------------------------------------
-// The masterlist as one file: edits to its base prices and to any number of country + price level
+// The masterlist as one file: edits to its base prices and to any number of price level and customer
 // lists, plus % changes for many lists at once, saved together as one change (one approval).
-//   - a % (on a list, or on every country of a level, or on picked countries) becomes a price rule,
-//     so those lists keep following the masterlist; prices set by hand there move by the same %;
+//   - a % (on a list, on a whole price level, or on picked customers) becomes a price rule, so those
+//     lists keep following the masterlist; prices set by hand there move by the same %;
 //   - a price typed in a list becomes that list's own price.
 // ---------------------------------------------------------------------------
 
-/** "Every country · Price Level 2 · Breads": a rule scope in words. */
+/** "Every customer · FOB Price · Breads": a rule scope in words. */
 function masterlist_scope_label(?int $countryId, ?int $levelId, ?string $category): string
 {
     $countries = masterlist_db_option_ids('countries');
     $levels = masterlist_db_option_ids('priceLevels');
     return implode(' · ', [
-        $countryId === null ? 'Every country' : ($countries[$countryId] ?? '?'),
+        $countryId === null ? 'Every customer' : ($countries[$countryId] ?? '?'),
         $levelId === null ? 'every price level' : ($levels[$levelId] ?? '?'),
         $category ?? 'all categories',
     ]);
@@ -482,11 +553,12 @@ function masterlist_build_batch(array $input): array
         $pair = is_array($draft) ? masterlist_parse_list_id((string) ($draft['id'] ?? '')) : null;
         if (!$pair || !is_array($draft['rows'] ?? null)) continue;
         $live = masterlist_list_version($pair[0], $pair[1]);
-        if (!$live) return $fail('One of the lists is no longer in Config (country or price level). Refresh and try again.');
+        if (!$live) return $fail('One of the lists is no longer in Config (customer or price level), or the customer moved to another price level. Refresh and try again.');
         $lists[] = ['pair' => $pair, 'live' => $live, 'rows' => $clean($draft['rows'])];
         foreach (array_unique(array_map(fn($row) => (string) $row[0], $live['rows'])) as $category) {
             $percent = $rate($draft, $category);
-            if ($percent !== 0.0) $ops[] = ['countryId' => $pair[0], 'levelId' => $pair[1], 'category' => $category, 'percent' => round($percent, 4)];
+            // A % on a price level (customer 0) is for every customer on it.
+            if ($percent !== 0.0) $ops[] = ['countryId' => $pair[0] ?: null, 'levelId' => $pair[1], 'category' => $category, 'percent' => round($percent, 4)];
         }
     }
     foreach (array_slice(is_array($input['scoped'] ?? null) ? $input['scoped'] : [], 0, 200) as $entry) {
@@ -514,15 +586,16 @@ function masterlist_build_batch(array $input): array
     foreach ($lists as ['pair' => [$countryId, $levelId], 'live' => $live, 'rows' => $rows]) {
         $before = [];
         foreach ($live['rows'] as $row) $before[mb_strtolower((string) $row[1])] = $row;
-        if (count($rows) !== count($before)) return $fail("{$live['country']} · {$live['priceLevel']}: products cannot be added or removed in the editor.");
+        $where = masterlist_list_name($live);
+        if (count($rows) !== count($before)) return $fail("{$where}: products cannot be added or removed in the editor.");
         $edits = [];
         foreach ($rows as $row) {
             $old = $before[mb_strtolower((string) $row[1])] ?? null;
-            if (!$old) return $fail("{$live['country']} · {$live['priceLevel']}: product '{$row[1]}' is not in the price list.");
+            if (!$old) return $fail("{$where}: product '{$row[1]}' is not in the price list.");
             foreach ($old as $col => $value) {
                 if (in_array($col, [0, 1, 8, 9, MASTERLIST_MOQ_TOTAL_COLUMN, 19, 20], true)) continue;
                 if (trim((string) ($row[$col] ?? '')) !== trim((string) $value)) {
-                    return $fail("{$live['country']} · {$live['priceLevel']}: only prices can be changed for a country. '" . masterlist_column_name($col) . "' of {$old[1]} is the same everywhere: change it in Standard prices.");
+                    return $fail("{$where}: only prices can be changed for a price level or customer. '" . masterlist_column_name($col) . "' of {$old[1]} is shared by every price level: it comes from the uploaded workbook.");
                 }
             }
             $factor = masterlist_ops_factor($ops, $countryId, $levelId, (string) $old[0]);
@@ -545,7 +618,7 @@ function masterlist_build_batch(array $input): array
 
 /**
  * A one-file save in plain words, for messages, notifications and the audit log:
- *   'parts' – short phrases ("+10% for every country · Price Level 2", "2 prices for Japan · Price Level 2",
+ *   'parts' – short phrases ("+10% for every FOB Price customer", "2 prices for Sinodis · FOB Price",
  *             "Classic Baguette standard price"), and 'text' – them joined;
  *   'lines' – one line per change, with product names and prices before → after (capped).
  */
@@ -560,7 +633,7 @@ function masterlist_batch_description(array $batch): array
     };
     $parts = [];
     $lines = [];
-    // % changes: one phrase per country / price level / % (its categories together).
+    // % changes: one phrase per customer / price level / % (its categories together).
     $countries = masterlist_db_option_ids('countries');
     $levels = masterlist_db_option_ids('priceLevels');
     $groups = [];
@@ -572,21 +645,23 @@ function masterlist_batch_description(array $batch): array
     }
     foreach ($groups as $group) {
         $op = $group['op'];
-        $where = ($op['countryId'] === null ? 'every country' : ($countries[$op['countryId']] ?? '?')) . ' · ' . ($op['levelId'] === null ? 'every price level' : ($levels[$op['levelId']] ?? '?'));
+        $level = $op['levelId'] === null ? null : ($levels[$op['levelId']] ?? '?');
+        $where = $op['countryId'] !== null ? ($countries[$op['countryId']] ?? '?') . ($level ? " · {$level}" : '')
+            : ($level ? "every {$level} customer" : 'every price level');
         $categories = empty($group['all']) && $group['categories'] ? ' (' . implode(', ', $group['categories']) . ')' : '';
         $phrase = ($op['percent'] > 0 ? '+' : '') . rtrim(rtrim(number_format((float) $op['percent'], 4, '.', ''), '0'), '.') . "% for {$where}{$categories}";
         $parts[] = $phrase;
         $lines[] = ucfirst($phrase);
     }
-    // Prices typed for a country + price level.
+    // Prices typed for a price level or a customer.
     foreach ($batch['lists'] ?? [] as $list) {
         $count = count($list['edits']);
-        $name = "{$list['country']} · {$list['priceLevel']}";
+        $name = masterlist_list_name($list);
         $parts[] = $count === 1 ? "{$list['edits'][0]['description']} price for {$name}" : "{$count} prices for {$name}";
         foreach (array_slice($list['edits'], 0, 20) as $edit) $lines[] = "{$name}: " . $priceLine($edit);
         if ($count > 20) $lines[] = "{$name}: and " . ($count - 20) . ' more';
     }
-    // Standard prices (every country follows them).
+    // Standard prices (every price level follows them).
     $base = $batch['baseEdits'] ?? [];
     if ($base) {
         $parts[] = count($base) <= 2 ? implode(' and ', array_map(fn($edit) => $edit['description'], $base)) . ' standard price' . (count($base) === 1 ? '' : 's') : count($base) . ' standard prices';
@@ -721,6 +796,121 @@ function masterlist_apply_masterlist(array $import, string $versionId): array
         masterlist_db_record_changes($db, $versionId, $changes);
     });
     return $changes;
+}
+
+/** Product details (not prices) that differ between a product in the price list and an uploaded row. */
+function masterlist_detail_changes(array $old, array $new): array
+{
+    $fields = [];
+    if ($old['category'] !== $new['category']) $fields[] = ['col' => 0, 'name' => 'Category', 'old' => $old['category'], 'new' => $new['category']];
+    foreach ($new['row'] as $col => $value) {
+        if (in_array($col, [0, 1, 8, 9, MASTERLIST_MOQ_TOTAL_COLUMN, 19, 20], true)) continue;
+        if (trim((string) $value) !== trim((string) ($old['row'][$col] ?? ''))) $fields[] = ['col' => $col, 'name' => masterlist_column_name($col), 'old' => $old['row'][$col] ?? '', 'new' => $value];
+    }
+    return $fields;
+}
+
+/**
+ * What uploading a workbook would change.
+ *   - A price level (customer 0): its list becomes exactly the file: its products (in its order, with
+ *     its descriptions and details) at its prices. Products not in the file leave the level.
+ *   - A customer: the file's prices become the customer's own; its other products keep the level's.
+ * Products new to the system are added to the product records kept in the background.
+ */
+function masterlist_preview_list(array $import, int $countryId, int $levelId): ?array
+{
+    $live = masterlist_list_version($countryId, $levelId);
+    if (!$live) return null;
+    $current = [];
+    foreach (masterlist_list_prices($countryId, $levelId) as $code => $entry) $current[mb_strtolower($code)] = $entry;
+    $added = $priceChanges = $notInFile = $detailChanges = [];
+    $unchanged = 0;
+    $seen = [];
+    foreach (masterlist_products_from_import($import) as $p) {
+        $key = mb_strtolower($p['code']);
+        $seen[$key] = true;
+        $old = $current[$key] ?? null;
+        if (!$old) { $added[] = masterlist_preview_item($p, ['pricePc' => $p['pricePc'], 'priceBox' => $p['priceBox']]); continue; }
+        if ($countryId === 0) {
+            $fields = masterlist_detail_changes($old['product'], $p);
+            if ($fields) $detailChanges[] = masterlist_preview_item($p, ['fields' => $fields]);
+        }
+        if (masterlist_same_price($old['pricePc'], $p['pricePc']) && masterlist_same_price($old['priceBox'], $p['priceBox'])) { $unchanged++; continue; }
+        $priceChanges[] = masterlist_preview_item($p, ['pcOld' => $old['pricePc'], 'pcNew' => $p['pricePc'], 'boxOld' => $old['priceBox'], 'boxNew' => $p['priceBox']]);
+    }
+    foreach ($current as $key => $entry) if (!isset($seen[$key])) $notInFile[] = masterlist_preview_item($entry['product']);
+    // A level's file also sets its order: a new order alone is a change too.
+    $reordered = $countryId === 0 && !$added && !$notInFile && array_keys($current) !== array_keys($seen);
+    $limit = fn(array $items) => array_slice($items, 0, MASTERLIST_PREVIEW_LIMIT);
+    return [
+        'mode' => 'list', 'listId' => $live['id'], 'customer' => $live['country'], 'priceLevel' => $live['priceLevel'],
+        'products' => count($seen), 'first' => !$current, 'replaces' => $countryId === 0,
+        'counts' => [
+            'added' => count($added), 'priceChanges' => count($priceChanges), 'detailChanges' => count($detailChanges), 'unchanged' => $unchanged,
+            // Leaving the level (level file), or keeping the level's price (customer file).
+            'removed' => $countryId === 0 ? count($notInFile) : 0, 'notInFile' => count($notInFile), 'reordered' => $reordered ? 1 : 0,
+        ],
+        'added' => $limit($added), 'priceChanges' => $limit($priceChanges), 'detailChanges' => $limit($detailChanges), 'notInFile' => $limit($notInFile),
+    ];
+}
+
+/** Applies a price level / customer upload (see masterlist_preview_list); returns the change records. */
+function masterlist_apply_list(array $import, int $countryId, int $levelId, string $versionId, string $by): array
+{
+    $catalog = [];
+    $lastSort = 0;
+    foreach (masterlist_db_products(true) as $p) {
+        $catalog[mb_strtolower($p['code'])] = $p;
+        $lastSort = max($lastSort, $p['sort']);
+    }
+    // Products new to the system first (their reference prices are this file's).
+    $incoming = masterlist_products_from_import($import);
+    $new = [];
+    foreach ($incoming as $p) {
+        $old = $catalog[mb_strtolower($p['code'])] ?? null;
+        if (!$old || !$old['active']) $new[] = ['sort' => $old['sort'] ?? ++$lastSort] + $p;
+    }
+    if ($new) {
+        masterlist_db_transaction(fn(PDO $db) => masterlist_db_write_products($db, $new, [], $versionId));
+        $catalog = [];
+        foreach (masterlist_db_products(true) as $p) $catalog[mb_strtolower($p['code'])] = $p;
+    }
+
+    if ($countryId !== 0) {
+        // A customer: the file's prices become its own.
+        $records = array_map(fn($p) => ['kind' => 'product_add', 'code' => $p['code'], 'category' => $p['category'], 'new' => $p['description']], $new);
+        if ($records) masterlist_db_transaction(fn(PDO $db) => masterlist_db_record_changes($db, $versionId, $records));
+        $prices = [];
+        foreach ($incoming as $p) $prices[$p['code']] = ['pricePc' => $p['pricePc'], 'priceBox' => $p['priceBox']];
+        return array_merge($records, masterlist_set_list_prices($countryId, $levelId, $prices, $versionId, $by));
+    }
+
+    // A price level: its list becomes the file.
+    $current = [];
+    foreach (masterlist_list_prices(0, $levelId) as $code => $entry) $current[mb_strtolower($code)] = $entry;
+    $rows = [];
+    $records = [];
+    foreach ($incoming as $i => $p) {
+        $key = mb_strtolower($p['code']);
+        $product = $catalog[$key];
+        $old = $current[$key] ?? null;
+        $rows[$product['id']] = ['pricePc' => $p['pricePc'], 'priceBox' => $p['priceBox'], 'basePc' => $product['pricePc'], 'baseBox' => $product['priceBox'], 'row' => $p['row'], 'sort' => $i + 1];
+        if (!$old) { $records[] = ['kind' => 'product_add', 'code' => $p['code'], 'levelId' => $levelId, 'category' => $p['category'], 'new' => $p['description']]; continue; }
+        foreach (['pricePc' => 'price_pc', 'priceBox' => 'price_box'] as $field => $name) {
+            if (!masterlist_same_price($old[$field], $p[$field])) $records[] = ['kind' => 'override', 'code' => $p['code'], 'levelId' => $levelId, 'category' => $p['category'], 'field' => $name, 'old' => $old[$field], 'new' => $p[$field]];
+        }
+        foreach (masterlist_detail_changes($old['product'], $p) as $field) {
+            $records[] = ['kind' => 'field', 'code' => $p['code'], 'levelId' => $levelId, 'category' => $p['category'], 'field' => $field['name'], 'old' => $field['old'], 'new' => $field['new']];
+        }
+    }
+    foreach ($current as $key => $entry) {
+        if (!isset($rows[$entry['product']['id']])) $records[] = ['kind' => 'product_remove', 'code' => $entry['product']['code'], 'levelId' => $levelId, 'category' => $entry['product']['category'], 'old' => $entry['product']['description']];
+    }
+    masterlist_db_transaction(function (PDO $db) use ($levelId, $rows, $records, $versionId, $by) {
+        masterlist_db_replace_level($db, $levelId, $rows, $versionId, $by);
+        masterlist_db_record_changes($db, $versionId, $records);
+    });
+    return $records;
 }
 
 /** Everything the page needs about the masterlist (null when it's off). */

@@ -14,7 +14,7 @@ const XLSX = require(path.join(root, 'assets/vendor/xlsx.full.min.js'));
 const template = JSON.parse(fs.readFileSync(path.join(root, 'rules/price_list_template.json'), 'utf8'));
 const source = fs.readFileSync(path.join(root, 'scripts/app.js'), 'utf8');
 const downloader = source.slice(source.indexOf('  function downloadExcelTemplate() {'), source.indexOf('  /** Send the original workbook'));
-const exporter = source.slice(source.indexOf('  function exportExcel(version, rows) {'), source.indexOf('  const pdfImageCache'));
+const exporter = source.slice(source.indexOf('  /** Pallet cells read'), source.indexOf('  const pdfImageCache'));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-workbook-tests-'));
 const php = process.env.PLA_TEST_PHP || 'C:/xampp/php/php.exe';
 let captured;
@@ -177,20 +177,30 @@ async function apiChecks() {
       ...context, inputRows: result.rows, adjustmentFor: () => () => 5,
       adjustedWith: (rate, value) => value * (1 + rate / 100),
       isNumeric: value => value !== '' && Number.isFinite(Number(value)), numeric: Number,
-      exportFileName: () => 'test-export.xlsx'
+      exportFileName: () => 'test-export.xlsx',
+      exportTitle: () => 'Test Price List', exportFacts: () => [['Customer', 'Test'], ['Price level', 'FOB Price']]
     });
+    // The export follows the final layout (Requirements 17Oct2026 › Excel Header Template): its own
+    // column names, pallets under "PALLET PER CONTAINER", and each product group as a title row.
+    const finalHeaders = ['Code', 'Description', 'Shelf Life', 'Weight per Pc (g)', 'Pcs/Box', 'Box Size', 'Price/pc USD', 'Price/box USD', 'PALLET PER CONTAINER', '', ''];
+    const pallet = value => (typeof value === 'number' ? `${value} Boxes/Pallet` : value);
     template.categories.forEach(category => {
-      const layout = template.layouts[category.layout], sheet = captured.Sheets[category.name];
+      const sheet = captured.Sheets[category.name];
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      assert.deepEqual(data.slice(0, layout.headerRows.length), layout.headerRows, 'export headers match the corrected layout');
-      const expected = [...category.samples[0]];
-      layout.columns.forEach((column, index) => {
-        if ([8, 9].includes(column.target)) expected[index] = Number((expected[index] * 1.05).toFixed(2));
-      });
-      assert.deepEqual(data[layout.headerRows.length], expected, 'export preserves values and price adjustments');
-      if (category.layout === 'standard') assert.deepEqual(Array.from(sheet['!merges'], range => XLSX.utils.encode_range(range)), layout.merges);
+      const sample = category.samples[0];
+      const adjusted = value => Number((value * 1.05).toFixed(2));
+      const head = data.findIndex(row => row[0] === (category.layout === 'standard' ? 'Code' : 'LRN code'));
+      assert.ok(head > 0, 'export has a title block above the headers');
+      if (category.layout === 'standard') {
+        assert.deepEqual(data[head], finalHeaders, 'export headers follow the final template');
+        assert.deepEqual(data[head + 2].slice(8), ['Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)']);
+        assert.equal(data[head + 3][0], sample[11], 'product group title row');
+        assert.deepEqual(data[head + 4], [...sample.slice(0, 6), adjusted(sample[6]), adjusted(sample[7]), ...sample.slice(8, 11).map(pallet)], 'export preserves values and price adjustments');
+      } else {
+        assert.deepEqual(data[head + 2], [sample[0], sample[1], sample[2], adjusted(sample[3]), adjusted(sample[4]), sample[5], sample[6], sample[7], sample[8], sample[9]], 'stand values and price adjustments');
+      }
     });
-    checks++; console.log('PASS Excel exports match corrected products and unchanged stands');
+    checks++; console.log('PASS Excel exports follow the final header template');
   });
   check('Presentation Stands omitted', changed(wb => deleteSheet(wb, 'Presentation Stands')), result => assert.equal(result.rows.length, 5));
   check('Presentation Stands empty', changed(wb => emptySheet(wb, 'Presentation Stands')), result => assert.equal(result.rows.length, 5));

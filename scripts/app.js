@@ -185,7 +185,7 @@
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
     'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
-    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch',
+    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch', 'dashboard': 'dashboard/summary',
     'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
@@ -381,16 +381,25 @@
   const draftKey = (list = state.active) => (state.user ? `draft_${state.user.username}_${tabKeyOf(list) || 'current'}` : 'draft_current');
   const legacyDraftKey = () => (state.user ? `draft_${state.user.username}` : 'draft_current'); // the one draft of earlier builds
 
-  // --- The price masterlist is ONE file. Its base prices and every country + price level list are
-  // views of it, picked with "Prices for" in the file header. Each view keeps its unsaved edits (its
-  // own draft, as above); a % for many lists at once is kept with the file. One Save sends all of it
-  // as one change. ---
+  // --- The price masterlist is ONE file. Its standard prices, every price level and every customer
+  // are views of it, picked with "Prices for" in the file header. Each view keeps its unsaved edits
+  // (its own draft, as above); a % for many lists at once is kept with the file. One Save sends all
+  // of it as one change.
+  // Customers are the old "countries": a list's `country` field holds its customer ('' on a price
+  // level's own view, which is for all its customers). ---
   const MASTERLIST_ID = 'masterlist';
   const MASTERLIST_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></svg>';
   const inMasterlistFile = list => list?.source === 'masterlist';
   /** The tab / file a list belongs to: every view of the masterlist is the one masterlist file. */
   const fileKeyOf = list => (inMasterlistFile(list) ? MASTERLIST_ID : tabKeyOf(list));
-  const viewLabel = list => (list?.kind === 'masterlist' ? 'Standard prices' : [list?.country, list?.priceLevel].filter(Boolean).join(' · '));
+  /** A price level's own view (all its customers), not one customer's. */
+  const isLevelView = list => list?.kind === 'list' && !String(list?.country || '').trim();
+  const viewLabel = list => (list?.kind === 'masterlist' ? 'Standard prices'
+    : isLevelView(list) ? `${list.priceLevel} · all customers` : [list?.country, list?.priceLevel].filter(Boolean).join(' · '));
+  /** The open file's name: its price level ("FOB Price") or customer ("Sinodis"). */
+  const fileTitleOf = list => (list?.kind === 'list' ? (String(list.country || '').trim() || list.priceLevel) : 'Price list');
+  /** The price level a customer buys at (Config), or ''. */
+  const levelOfCustomer = name => state.customerLevels?.[name] || '';
   let masterlistPendingCache = null;
   const masterlistPendingKey = () => `pla_ml_pending_${state.user?.username || 'user'}`;
   /** Unsaved work in the masterlist file: {views: {id: {name, country, priceLevel, kind}}, scoped: [{countries, levels, categories, percent}]}. */
@@ -431,13 +440,14 @@
     });
     return (factor - 1) * 100;
   }
-  /** "+5% every country · Price Level 2 (Breads)": a % for many lists, in words. */
+  /** "+5% · every FOB Price customer (Breads)": a % for many lists, in words. */
   function scopedLabel(entry) {
     const few = (items, noun) => (items.length > 2 ? `${items.length} ${noun}` : items.join(', '));
-    const countries = entry.countries?.length ? few(entry.countries, 'countries') : 'every country';
-    const levels = entry.levels?.length ? few(entry.levels, 'price levels') : 'every price level';
+    const levels = entry.levels?.length ? few(entry.levels, 'price levels') : '';
+    const who = entry.countries?.length ? few(entry.countries, 'customers')
+      : levels ? `every ${levels} customer` : 'every price level';
     const categories = entry.categories?.length ? ` (${few(entry.categories, 'categories')})` : '';
-    return `${entry.percent > 0 ? '+' : ''}${entry.percent}% · ${countries} · ${levels}${categories}`;
+    return `${entry.percent > 0 ? '+' : ''}${entry.percent}% · ${who}${categories}`;
   }
   /** Everything unsaved in the masterlist file, in a few words. */
   function masterlistPendingSummary() {
@@ -519,7 +529,7 @@
   const TAB_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
   function tabInnerMarkup(tab) {
     const name = escapeHtml(tab.name || 'Price list');
-    const mark = tab.master && !tab.country ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>`;
+    const mark = tab.master ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>`;
     return `<button type="button" class="file-tab-open" role="tab">
         ${mark}
         <span class="file-tab-name">${name}</span>
@@ -543,7 +553,7 @@
     // masterlist is one file whichever view is shown; its tab names the view.
     const masterFile = inMasterlistFile(state.active);
     openTabs = state.active ? [masterFile
-      ? { key: activeKey, id: state.active.id || '', name: 'Price list', country: state.active.country, priceLevel: state.active.priceLevel, meta: viewLabel(state.active), master: true, dirty: masterlistUnsavedCount() > 0 }
+      ? { key: activeKey, id: state.active.id || '', name: fileTitleOf(state.active), country: state.active.country, priceLevel: state.active.priceLevel, meta: isLevelView(state.active) ? 'all customers' : state.active.kind === 'list' ? state.active.priceLevel : '', master: true, dirty: masterlistUnsavedCount() > 0 }
       : { key: activeKey, id: state.active.id || '', name: state.active.name, country: state.active.country, priceLevel: state.active.priceLevel, dirty: Boolean(state.active.isDraft) }] : [];
     saveTabs();
     const inEditor = !$('#workspacePanel')?.hidden;
@@ -877,12 +887,12 @@
   function applyStatePayload(data) {
     Object.assign(state, {
       user: data.user, csrf: data.csrf, permissions: data.permissions || [], directory: data.directory || [],
-      approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], priceLevels: data.priceLevels || [],
+      approvers: data.approvers || [], approvalMode: data.approvalMode || 'any', autoApprove: Boolean(data.autoApprove), countries: data.countries || [], customerLevels: data.customerLevels || {}, priceLevels: data.priceLevels || [],
       versions: data.versions || [], productImages: data.productImages || [], auditLogs: data.auditLogs || state.auditLogs || null, photoLibrary: data.photoLibrary || [],
       photoFolders: data.photoFolders || [],
       searchKeywords: data.searchKeywords || [],
       listOptions: data.listOptions || null, priceLevelInfo: data.priceLevelInfo || [],
-      importTemplate: data.importTemplate || null, masterlist: data.masterlist || null,
+      importTemplate: data.importTemplate || null, masterlist: data.masterlist || null, exportBranding: data.exportBranding || null,
       notifications: data.notifications || [], unreadCount: Number(data.unreadCount || 0),
       devTools: Boolean(data.devTools)
     });
@@ -1089,7 +1099,7 @@
     if (dom.codeFilterOptions) dom.codeFilterOptions.innerHTML = uniqueValues(state.rows.map(row => row[COL.code])).slice(0, 2000).map(code => `<option value="${escapeHtml(code)}"></option>`).join('');
 
     // The masterlist is one file: its title stays, and the chip beside it says which prices are shown.
-    const fileName = inMasterlistFile(active) ? 'Price list' : active.name;
+    const fileName = inMasterlistFile(active) ? fileTitleOf(active) : active.name;
     dom.emptyState.hidden = true; dom.dataView.hidden = false; dom.listTitle.textContent = fileName; dom.listMeta.textContent = fileName;
     dom.listTitle.title = ''; // the switcher's tooltip shows the full Country › Level › List path
     dom.listMeta.title = fileName;
@@ -1097,11 +1107,12 @@
     $('#workspacePanel')?.classList.toggle('is-masterlist-file', inMasterlistFile(active));
     if (dom.listTagsRow) {
       dom.listTagsRow.hidden = false;
+      // Price level first, then who: "FOB Price › Sinodis", "FOB Price › All customers".
       const base = active.kind === 'masterlist';
-      dom.listPriceLevel.textContent = base ? 'all countries' : (active.priceLevel || 'Not set');
-      dom.listCountry.textContent = base ? 'Standard prices' : (active.country || 'Not set');
+      dom.listCountry.textContent = base ? 'Standard prices' : (active.priceLevel || 'Not set');
+      dom.listPriceLevel.textContent = base ? 'every price level' : (active.country || (inMasterlistFile(active) ? 'All customers' : 'Not set'));
     }
-    $('.list-context')?.setAttribute('title', inMasterlistFile(active) ? 'Switch to another country or price level, or to the standard prices' : 'Change country, price level or price list');
+    $('.list-context')?.setAttribute('title', inMasterlistFile(active) ? 'Switch to another price level or customer, or to the standard prices' : 'Change customer, price level or price list');
     if (!active.isDraft && active.id) rememberOpenVersion(active.id);
     // In the editor, the address follows the open list (a save makes a new version).
     if (state.booted && !$('#workspacePanel')?.hidden && active.id) {
@@ -1136,8 +1147,10 @@
     } else if (settled && active.source === 'masterlist') {
       // Worked out from the masterlist: say so, and how many prices are this list's own.
       const own = Object.keys(active.ownPrices || {}).length;
-      setSavedMeta(active.kind === 'masterlist' ? 'The prices every country and price level starts from'
-        : (own ? `${own} price${own === 1 ? '' : 's'} set by hand for ${active.country} · ${active.priceLevel}` : `Standard prices for ${active.country} · ${active.priceLevel}`));
+      const who = isLevelView(active) ? `every ${active.priceLevel} customer` : `${active.country} (${active.priceLevel})`;
+      setSavedMeta(active.kind === 'masterlist' ? 'The prices every price level and customer starts from'
+        : isLevelView(active) ? (active.rows?.length ? `The uploaded ${active.priceLevel} file · shared by ${who}` : `No file uploaded for ${active.priceLevel} yet`)
+        : (own ? `${own} price${own === 1 ? '' : 's'} set just for ${who}` : `${active.priceLevel} prices for ${active.country}`));
     } else if (settled) {
       setSavedMeta('');
     } else if (status === 'draft') {
@@ -1630,6 +1643,12 @@
       return `${groupHeader}${rowsHtml}`;
     }).join('');
     dom.noResults.hidden = visible.length > 0;
+    // A price level with no file yet says so, with the way to add one.
+    const noFile = !state.rows.length && inMasterlistFile(state.active) && state.active.kind === 'list';
+    dom.noResults.classList.toggle('is-no-file', noFile);
+    dom.noResults.innerHTML = noFile
+      ? `<strong>No file for ${escapeHtml(state.active.priceLevel)} yet.</strong><span>Its list is exactly the workbook uploaded for it.</span>${can('upload') ? '<button type="button" class="button primary" data-no-file-upload>Upload its workbook</button>' : ''}`
+      : 'No matching items.';
     // "6 products", or "2 of 6 products" while searching or filtering.
     const countNote = $('#productCountNote');
     if (countNote) {
@@ -2730,9 +2749,9 @@
       (!query || [version.name, version.savedBy, version.country, version.priceLevel].some(value => String(value || '').toLowerCase().includes(query))));
     const board = masterlistMode ? masterlistBoardMarkup() : null;
     const uploadLabel = $('#filesUploadBtn span');
-    if (uploadLabel) uploadLabel.textContent = masterlistMode ? 'Upload price list' : 'Upload files';
+    if (uploadLabel) uploadLabel.textContent = masterlistMode ? 'Upload a file' : 'Upload files';
     $('#filesCount').textContent = board
-      ? 'Price list'
+      ? 'Price level files'
       : `${visible.length} file${visible.length === 1 ? '' : 's'}`;
     const filtering = Boolean(query || filesView.country || filesView.level);
     const showUpload = can('upload') && !filtering && !masterlistMode;
@@ -2890,6 +2909,7 @@
     // The search / country / level bar only ever filtered separate files: with the price list it goes.
     const tools = $('#filesPanel .history-tools');
     if (tools) tools.hidden = Boolean(board);
+    if (board) filterFileCards();
   }
   // The blank sheet opens the upload dialog (same as the "Upload files" button).
   $('#filesTable')?.addEventListener('click', event => {
@@ -2897,12 +2917,12 @@
     // Opening a list from its sheet (or slip): remember where, so the editor unfolds out of it.
     // (Capture phase: this runs before the shared handler that opens the list.)
     const opener = event.target.closest('.row-primary[data-action="open"]');
-    if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip') || opener).getBoundingClientRect();
+    if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip, .mf-card') || opener).getBoundingClientRect();
   }, true);
   $('#filesTable')?.addEventListener('click', event => {
-    const receipt = event.target.closest('.file-sheet');
+    const receipt = event.target.closest('.file-sheet, .mf-card:not(.is-empty)');
     if (!receipt || event.target.closest('button, a, input, select, [role="menu"]')) return;
-    receipt.querySelector('.sheet-open')?.click();
+    receipt.querySelector('.sheet-open, .mf-actions [data-action="open"]')?.click();
   });
   const searchFiles = searchAfterPause(() => renderFiles());
   $('#filesSearchInput')?.addEventListener('input', event => { filesView.search = event.target.value; searchFiles(); });
@@ -2910,9 +2930,203 @@
   $('#filesLevelFilter')?.addEventListener('change', event => { filesView.level = event.target.value; renderFiles(); });
   $('#filesUploadBtn')?.addEventListener('click', () => openUploadModal());
 
-  // --- Price masterlist: one list of products and base prices. Every country + price level list is
-  // worked out from it (with the price rules), and can have prices of its own. On the Files page the
-  // masterlist is a ledger card, and its lists are a board of countries × price levels. ---
+  // --- Dashboard (the home page): the price levels as a staircase (a step is higher the dearer the
+  // level is than the cheapest one), the price ladder (one product's price in every level, on one
+  // line), what needs attention, and the last 30 days of uploads, price changes and exports. ---
+  const LEVEL_COLORS = ['#b52042', '#d97706', '#0f766e', '#2563eb', '#7c3aed', '#be185d', '#4d7c0f', '#0e7490'];
+  const dash = { data: null, loading: null, product: '', unit: 'pc' };
+  async function loadDashboard() {
+    if (!$('#dashboardPanel')) return;
+    renderDashboardHeading();
+    if (dash.data) renderDashboard(); // the last numbers at once; fresh ones follow
+    if (dash.loading) return dash.loading;
+    dash.loading = api('dashboard').then(res => {
+      dash.data = res.dashboard;
+      if (!$('#dashboardPanel').hidden) renderDashboard();
+    }).catch(error => {
+      if (!dash.data) $('#dashSummary').textContent = `Could not load the dashboard: ${error.message}`;
+    }).finally(() => { dash.loading = null; });
+    return dash.loading;
+  }
+  function renderDashboardHeading() {
+    const hour = new Date().getHours();
+    const first = String(state.user?.name || '').trim().split(/\s+/)[0];
+    $('#dashGreeting').textContent = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}`;
+    $('#dashDate').textContent = new Intl.DateTimeFormat('en-PH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+    $('#dashUploadBtn').hidden = !can('upload');
+  }
+  function renderDashboard() {
+    const data = dash.data;
+    if (!data) return;
+    renderDashboardHeading();
+    const uploadedLevels = data.levels.filter(level => level.uploaded > 0).length;
+    $('#dashSummary').textContent = data.levels.length
+      ? `${uploadedLevels} of ${data.levels.length} price levels uploaded · ${data.customers} customers · ${data.products.toLocaleString()} products`
+      : 'No price levels yet. Add them in Config › Customers & price levels.';
+    renderDashStairs(data);
+    renderDashLadder(data);
+    renderDashAttention(data);
+    renderDashPulse(data);
+  }
+  /** The staircase: every level a step, raised by how much dearer it is than the cheapest level. */
+  function renderDashStairs(data) {
+    const max = Math.max(1, ...data.levels.map(level => Number(level.aboveLowest) || 0));
+    const total = Math.max(1, data.products);
+    $('#dashStairs').innerHTML = data.levels.map((level, index) => {
+      const color = LEVEL_COLORS[index % LEVEL_COLORS.length];
+      const has = level.uploaded > 0;
+      const above = Number(level.aboveLowest);
+      const lift = has && Number.isFinite(above) ? Math.round((above / max) * 100) : 0;
+      const share = Math.min(1, level.uploaded / total);
+      const ring = 2 * Math.PI * 15;
+      const when = level.lastChange?.at ? `${formatRelativeTime(level.lastChange.at)}${level.lastChange.by ? ` · ${level.lastChange.by}` : ''}` : 'No file yet';
+      const customers = level.customers.length;
+      return `<button type="button" class="dash-step ${has ? '' : 'is-empty'}" data-open="${escapeHtml(level.id)}" style="--level: ${color}; --lift: ${lift}; --i: ${index}" title="${escapeHtml(`${level.name}: ${customers} customer${customers === 1 ? '' : 's'}${customers ? ` (${level.customers.slice(0, 8).join(', ')}${customers > 8 ? '…' : ''})` : ''}`)}">
+        <span class="dash-step-card">
+          <span class="dash-step-top">
+            <svg class="dash-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="dash-ring-track"/><circle cx="18" cy="18" r="15" class="dash-ring-fill" style="stroke-dasharray: ${(share * ring).toFixed(1)} ${ring.toFixed(1)}"/></svg>
+            <span class="dash-step-name"><strong>${escapeHtml(level.name)}</strong><small>${customers} customer${customers === 1 ? '' : 's'}</small></span>
+          </span>
+          <span class="dash-step-figure">${!has ? 'No file yet' : above === 0 ? 'Lowest' : Number.isFinite(above) && level.aboveLowest !== null ? `+${above}%` : '—'}</span>
+          <span class="dash-step-meta">${has ? `${level.uploaded.toLocaleString()} product${level.uploaded === 1 ? '' : 's'}${level.customerPrices ? ` · ${level.customerPrices} customer price${level.customerPrices === 1 ? '' : 's'}` : ''}` : 'Upload its workbook'}</span>
+          <span class="dash-step-when">${escapeHtml(when)}</span>
+        </span>
+        <span class="dash-step-riser" aria-hidden="true"></span>
+      </button>`;
+    }).join('');
+  }
+  /** One product on a line: a marker per level at its price, cheapest on the left. */
+  function renderDashLadder(data) {
+    const select = $('#dashLadderProduct');
+    const products = data.ladder;
+    if (!products.length) {
+      select.innerHTML = '<option value="">No products yet</option>';
+      $('#dashLadder').innerHTML = '<p class="dash-empty">Upload a price level’s workbook to see its prices here.</p>';
+      $('#dashLadderNote').textContent = '';
+      return;
+    }
+    if (!products.some(item => item.code === dash.product)) {
+      // Start with the product whose prices differ the most between levels.
+      const spread = item => { const v = item.pc.filter(x => x !== null && x > 0); return v.length > 1 ? Math.max(...v) / Math.min(...v) : 1; };
+      dash.product = products.reduce((best, item) => (spread(item) > spread(best) ? item : best), products[0]).code;
+    }
+    select.innerHTML = products.map(item => `<option value="${escapeHtml(item.code)}"${item.code === dash.product ? ' selected' : ''}>${escapeHtml(`${item.name} · ${item.code}`)}</option>`).join('');
+    const item = products.find(entry => entry.code === dash.product);
+    const values = (dash.unit === 'box' ? item.box : item.pc);
+    const marks = data.levels.map((level, index) => ({ level, index, value: values[index] })).filter(mark => mark.value !== null && mark.value !== undefined);
+    const missing = data.levels.filter((level, index) => values[index] === null || values[index] === undefined).map(level => level.name);
+    if (!marks.length) {
+      $('#dashLadder').innerHTML = '<p class="dash-empty">No price level has this product.</p>';
+      $('#dashLadderNote').textContent = '';
+      return;
+    }
+    const low = Math.min(...marks.map(mark => mark.value)), high = Math.max(...marks.map(mark => mark.value));
+    const span = high - low;
+    // Markers spread over the rail; equal prices share a spot and stack their labels.
+    const sorted = [...marks].sort((a, b) => a.value - b.value);
+    const placed = sorted.map((mark, order) => ({ ...mark, x: span > 0 ? 6 + ((mark.value - low) / span) * 88 : 50, row: order % 2 }));
+    const stacks = new Map();
+    placed.forEach(mark => { const key = mark.value.toFixed(4); stacks.set(key, (stacks.get(key) || 0) + 1); mark.stack = stacks.get(key) - 1; });
+    const money = value => `$${Number(value).toFixed(String(value).split('.')[1]?.length > 2 ? 3 : 2)}`;
+    // The rail and its markers stay; switching products moves the markers along it.
+    let rail = $('#dashLadder .dash-rail');
+    if (!rail) {
+      $('#dashLadder').innerHTML = '<div class="dash-rail"><span class="dash-rail-line" aria-hidden="true"></span><span class="dash-rail-end is-low">lowest</span><span class="dash-rail-end is-high">highest</span></div>';
+      rail = $('#dashLadder .dash-rail');
+    }
+    data.levels.forEach((level, index) => {
+      let mark = rail.querySelector(`.dash-mark[data-li="${index}"]`);
+      if (!mark) {
+        mark = document.createElement('span');
+        mark.className = 'dash-mark';
+        mark.dataset.li = index;
+        mark.style.setProperty('--level', LEVEL_COLORS[index % LEVEL_COLORS.length]);
+        mark.innerHTML = '<span class="dash-mark-dot" aria-hidden="true"></span><span class="dash-mark-label"><strong></strong><small></small></span>';
+        rail.append(mark);
+      }
+      const spot = placed.find(entry => entry.index === index);
+      mark.classList.toggle('is-gone', !spot);
+      if (!spot) return;
+      mark.classList.toggle('is-below', Boolean(spot.row));
+      mark.style.setProperty('--x', `${spot.x}%`);
+      mark.style.setProperty('--stack', spot.stack);
+      mark.querySelector('strong').textContent = money(spot.value);
+      mark.querySelector('small').textContent = level.name;
+    });
+    const money4 = money;
+    const word = dash.unit === 'box' ? 'per box' : 'per piece';
+    $('#dashLadderNote').textContent = (span > 0
+      ? `${money4(low)} to ${money4(high)} ${word}: the dearest level is ${Math.round((high / low - 1) * 100)}% above the cheapest.`
+      : `Every level that has it charges ${money4(low)} ${word}.`) + (missing.length ? ` Not in ${missing.join(', ')}.` : '');
+  }
+  function renderDashAttention(data) {
+    const items = [];
+    const approvals = (state.versions || []).filter(version => version.canApprove);
+    const mine = (state.versions || []).filter(version => version.status === 'pending' && version.savedByUser === state.user?.username);
+    const unsaved = masterlistUnsavedCount();
+    const empty = data.levels.filter(level => !level.uploaded);
+    if (approvals.length) items.push({ tone: 'rose', icon: '✓', text: `<strong>${approvals.length} price change${approvals.length === 1 ? '' : 's'}</strong> waiting for your approval`, action: 'files' });
+    if (mine.length) items.push({ tone: 'amber', icon: '⏳', text: `Your change${mine.length === 1 ? ' is' : 's are'} waiting for approval (${mine.length})`, action: 'files' });
+    if (unsaved) items.push({ tone: 'rose', icon: '✎', text: `<strong>Unsaved changes</strong> in the price list: ${escapeHtml(masterlistPendingSummary())}`, action: 'open' });
+    if (empty.length) items.push({ tone: 'muted', icon: '↑', text: `<strong>${empty.length} price level${empty.length === 1 ? ' has' : 's have'} no file yet:</strong> ${escapeHtml(empty.map(level => level.name).join(', '))}`, action: can('upload') ? 'upload' : '' , open: empty[0]?.id });
+    if (data.customersWithoutLevel.length) items.push({ tone: 'amber', icon: '!', text: `<strong>${data.customersWithoutLevel.length} customer${data.customersWithoutLevel.length === 1 ? ' has' : 's have'} no price level:</strong> ${escapeHtml(data.customersWithoutLevel.slice(0, 5).join(', '))}`, action: can('manageImages') ? 'config' : '' });
+    $('#dashAttention').innerHTML = items.length
+      ? items.map(item => `<li class="dash-attention-item is-${item.tone}"><span class="dash-attention-icon" aria-hidden="true">${item.icon}</span><span class="dash-attention-text">${item.text}</span>${item.action ? `<button type="button" class="dash-attention-go" data-dash-go="${item.action}"${item.open ? ` data-open-id="${escapeHtml(item.open)}"` : ''} aria-label="Go">›</button>` : ''}</li>`).join('')
+      : '<li class="dash-attention-clear"><span aria-hidden="true">✓</span>All clear. Every level has its file and nothing is waiting.</li>';
+  }
+  /** 30 small columns, one per day: uploads, price changes and exports stacked. */
+  function renderDashPulse(data) {
+    const days = data.activity.days;
+    const top = Math.max(1, ...days.map(day => day.uploads + day.changes + day.exports));
+    const sum = key => days.reduce((total, day) => total + day[key], 0);
+    $('#dashPulseSummary').textContent = `${sum('uploads')} upload${sum('uploads') === 1 ? '' : 's'}, ${sum('changes')} price change${sum('changes') === 1 ? '' : 's'} and ${sum('exports')} export${sum('exports') === 1 ? '' : 's'} in the last 30 days.`;
+    const label = date => new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00`));
+    $('#dashPulse').innerHTML = days.map((day, index) => {
+      const total = day.uploads + day.changes + day.exports;
+      const part = (key, cls) => (day[key] ? `<span class="${cls}" style="flex-grow: ${day[key]}"></span>` : '');
+      return `<span class="dash-day ${total ? '' : 'is-quiet'} ${index === days.length - 1 ? 'is-today' : ''}" title="${escapeHtml(`${label(day.date)}: ${day.uploads} upload(s), ${day.changes} price change(s), ${day.exports} export(s)`)}" style="--h: ${total ? Math.max(10, Math.round((total / top) * 100)) : 4}%; --i: ${index}">
+        <span class="dash-day-bar">${part('exports', 'is-exports')}${part('changes', 'is-changes')}${part('uploads', 'is-uploads')}</span>
+        ${index % 7 === 0 || index === days.length - 1 ? `<small>${escapeHtml(index === days.length - 1 ? 'Today' : label(day.date))}</small>` : ''}
+      </span>`;
+    }).join('');
+    $('#dashRecent').innerHTML = (data.activity.recent || []).map(item => `<li class="is-${item.group}"><span class="dash-recent-dot" aria-hidden="true"></span><span class="dash-recent-text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.actor)} · ${escapeHtml(formatRelativeTime(item.at))}</small></span></li>`).join('');
+    $('#dashRecent').hidden = !(data.activity.recent || []).length;
+  }
+  $('#dashStairs')?.addEventListener('click', event => {
+    const step = event.target.closest('[data-open]');
+    if (!step) return;
+    openOriginRect = step.getBoundingClientRect();
+    runListAction('open', step.dataset.open);
+  });
+  $('#dashLadderProduct')?.addEventListener('change', event => { dash.product = event.target.value; renderDashLadder(dash.data); });
+  [['#dashLadderPrev', -1], ['#dashLadderNext', 1]].forEach(([selector, step]) => $(selector)?.addEventListener('click', () => {
+    const list = dash.data?.ladder || [];
+    if (!list.length) return;
+    const index = list.findIndex(item => item.code === dash.product);
+    dash.product = list[(index + step + list.length) % list.length].code;
+    renderDashLadder(dash.data);
+  }));
+  $$('[data-ladder-unit]').forEach(button => button.addEventListener('click', () => {
+    dash.unit = button.dataset.ladderUnit;
+    $$('[data-ladder-unit]').forEach(other => other.classList.toggle('is-on', other === button));
+    if (dash.data) renderDashLadder(dash.data);
+  }));
+  $('#dashAttention')?.addEventListener('click', event => {
+    const go = event.target.closest('[data-dash-go]');
+    if (!go) return;
+    const where = go.dataset.dashGo;
+    if (where === 'files') switchPanel('filesPanel', true);
+    else if (where === 'config') { state.configTab = 'lists'; switchPanel('settingsPanel', true); }
+    else if (where === 'upload') openMasterlistUpload({ target: go.dataset.openId || null });
+    else if (where === 'open') runListAction('open', state.active?.id || dash.data?.levels.find(level => level.uploaded)?.id || dash.data?.levels[0]?.id);
+  });
+  $('#dashUploadBtn')?.addEventListener('click', () => openMasterlistUpload());
+  $('#noResults')?.addEventListener('click', event => { if (event.target.closest('[data-no-file-upload]')) openMasterlistUpload(); });
+  $('#dashOpenBtn')?.addEventListener('click', () => switchPanel('filesPanel', true));
+
+  // --- Price masterlist: one list of products and standard prices. Every price level and customer
+  // is worked out from it (with the % changes), and can have prices of its own. On the Files page it
+  // is one card with a price level › customer shortcut. ---
   // Saving the masterlist file: one dialog listing every view with changes (and each % for many
   // lists); any of them can be dropped there. One Save sends them all as one change.
   /**
@@ -2977,7 +3191,7 @@
       const pct = Number(entry.percent);
       sections.push(`<section class="ml-save-section">
         <header class="ml-save-head"><strong>${escapeHtml(scopedLabel(entry).replace(/^[^·]+·\s*/, '').replace(/^./, letter => letter.toUpperCase()))}</strong><span class="adjustment-pill ${pct > 0 ? 'pos' : 'neg'}">${pct > 0 ? '+' : ''}${pct}%</span>${remove(`data-scoped="${index}"`, scopedLabel(entry))}</header>
-        <p class="ml-save-note">Every price in ${entry.countries?.length ? (entry.countries.length > 3 ? `${entry.countries.length} countries` : entry.countries.join(', ')) : 'every country'} · ${entry.levels?.length ? entry.levels.join(', ') : 'every price level'}${entry.categories?.length ? ` (${entry.categories.join(', ')})` : ''} moves by ${pct > 0 ? '+' : ''}${pct}%.</p>
+        <p class="ml-save-note">Every price for ${entry.countries?.length ? (entry.countries.length > 3 ? `${entry.countries.length} customers` : entry.countries.join(', ')) : entry.levels?.length ? `every ${entry.levels.join(', ')} customer` : 'every price level'}${entry.categories?.length ? ` (${entry.categories.join(', ')})` : ''} moves by ${pct > 0 ? '+' : ''}${pct}%.</p>
       </section>`);
     });
     for (const [id, view] of Object.entries(pending.views)) {
@@ -3019,7 +3233,8 @@
       }
       sections.push(`<section class="ml-save-section">
         <header class="ml-save-head"><strong>${escapeHtml(viewLabel(view))}</strong><span class="save-summary-badge">${total.toLocaleString()} product${total === 1 ? '' : 's'}</span>${remove(`data-view="${escapeHtml(id)}"`, viewLabel(view))}</header>
-        ${view.kind === 'masterlist' ? '<p class="ml-save-note">Every country and price level follows these, except prices set by hand for one country.</p>' : ''}
+        ${view.kind === 'masterlist' ? '<p class="ml-save-note">Every price level and customer follows these, except prices set just for one of them.</p>'
+          : isLevelView(view) ? `<p class="ml-save-note">Shared by every ${escapeHtml(view.priceLevel)} customer, except prices set just for one of them.</p>` : ''}
         ${detail}
       </section>`);
     }
@@ -3027,9 +3242,9 @@
     box.innerHTML = sections.join('');
   }
   function openMasterlistSave() {
-    if (!masterlistUnsavedCount()) return toast('No changes to save. Change prices for any country, then save them all at once.');
+    if (!masterlistUnsavedCount()) return toast('No changes to save. Change prices for any price level or customer, then save them all at once.');
     dom.versionNameInput.closest('label').hidden = true;
-    dom.saveForm.noValidate = true; // its hidden name / country / level fields don't apply here
+    dom.saveForm.noValidate = true; // its hidden name / customer / level fields don't apply here
     $('#saveDialog h2').textContent = 'Save price changes';
     $('#saveMetaReadonly').hidden = true;
     $('#saveMetaEdit').hidden = true;
@@ -3084,98 +3299,137 @@
   }
 
   /**
-   * The price list on Files, for people who just want prices: what it is, a big "Open price list",
-   * a shortcut straight to one country + price level, and how it works in three steps.
+   * Files: the files that were uploaded, one card per price level (its workbook, products, customers,
+   * who uploaded it and when), with Open and "Upload new version". A level with no file yet is an
+   * empty card with its upload button. Customers with prices of their own are listed on their level's
+   * card, and any customer can be opened from it.
    */
-  const pricePick = { country: '', level: '' };
+  /** The latest upload record of a level's file (or a customer's), for its workbook name. */
+  function latestUploadOf(level, customer = '') {
+    return (state.versions || []).filter(version => version.source === 'upload' && version.kind === 'list'
+      && sameText(version.priceLevel, level) && sameText(version.country || '', customer))
+      .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0] || null;
+  }
   function masterlistBoardMarkup() {
-    const master = versionSummaryById(MASTERLIST_ID);
-    const products = Number(master?.productCount || 0);
-    const lists = (state.versions || []).filter(version => version.source === 'masterlist' && version.kind === 'list');
+    const levels = masterlistLevels();
     const waiting = (state.versions || []).some(version => version.status === 'pending' && ['batch', 'masterlist', 'list', 'rules'].includes(version.kind));
     const unsaved = masterlistUnsavedCount();
-    const isOpen = inMasterlistFile(state.active);
-    const openId = isOpen ? state.active.id : MASTERLIST_ID; // back to the view that is open
-    const chevron = '<svg class="ml-select-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
-    if (!products) {
-      return { markup: `<section class="ml-section"><article class="ml-home is-empty" data-key="masterlist" aria-label="Price list">
-          <span class="ml-home-mark" aria-hidden="true">${MASTERLIST_ICON}</span>
-          <div class="ml-home-main">
-            <h2>No price list yet</h2>
-            <p>${can('upload') ? 'Upload one workbook with every product. Every country and price level is then ready to open, change and export.' : 'Once an admin uploads the price list, every country and price level will be here to open and export.'}</p>
-            ${can('upload') ? '<div class="ml-home-actions"><button type="button" class="button primary" data-ml="upload">Upload the price list</button></div>' : ''}
+    const openId = inMasterlistFile(state.active) ? String(state.active.id) : '';
+    const uploaded = levels.filter(entry => entry.view.ownPriceCount).length;
+    const customerCount = levels.reduce((sum, entry) => sum + entry.customers.length, 0);
+    const fileIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h8M11 13v4"/></svg>';
+    const status = unsaved ? `<p class="mf-status is-unsaved" title="${escapeHtml(masterlistPendingSummary())}">You have unsaved changes: ${escapeHtml(masterlistPendingSummary())}</p>`
+      : waiting ? '<p class="mf-status is-waiting">A price change is waiting for approval (see above).</p>' : '';
+    const cards = levels.map((entry, index) => {
+      const view = entry.view;
+      const color = LEVEL_COLORS[index % LEVEL_COLORS.length];
+      const has = Boolean(view.ownPriceCount);
+      const record = latestUploadOf(entry.level);
+      const isOpen = openId && (openId === String(view.id) || entry.customers.some(customer => String(customer.id) === openId));
+      const changed = Object.values(masterlistPending().views).filter(item => item.kind === 'list' && sameText(item.priceLevel, entry.level)).length;
+      const ownCustomers = entry.customers.filter(customer => customer.ownPriceCount);
+      const searchText = [entry.level, record?.sourceFile || '', ...entry.customers.map(customer => customer.country)].join('\n').toLowerCase();
+      const upload = can('upload') ? `<button type="button" class="button ${has ? 'secondary' : 'primary'}" data-ml-upload="${escapeHtml(view.id)}">${has ? 'Upload new version' : `Upload ${escapeHtml(entry.level)} workbook`}</button>` : '';
+      if (!has) {
+        return `<article class="mf-card is-empty" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
+          <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
+          <div class="mf-body">
+            <h3>${escapeHtml(entry.level)}</h3>
+            <p class="mf-file">No file yet</p>
+            <p class="mf-meta">${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} waiting for its prices</p>
           </div>
-        </article></section>` };
-    }
-    const countries = uniqueValues(lists.map(list => list.country));
-    const levelOrder = state.priceLevels || [];
-    const levels = uniqueValues(lists.map(list => list.priceLevel)).sort((a, b) => (levelOrder.indexOf(a) + 1 || 999) - (levelOrder.indexOf(b) + 1 || 999));
-    if (!countries.includes(pricePick.country)) pricePick.country = '';
-    if (!levels.includes(pricePick.level)) pricePick.level = levels[0] || '';
-    const option = (value, label, selected) => `<option value="${escapeHtml(value)}"${selected ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-    const updated = master.savedAt ? `Updated ${formatRelativeTime(master.savedAt)}${master.savedBy ? ` by ${master.savedBy}` : ''}` : '';
-    const status = unsaved ? `<p class="ml-home-status is-unsaved" title="${escapeHtml(masterlistPendingSummary())}">You have unsaved changes in the price list.</p>`
-      : waiting ? '<p class="ml-home-status is-waiting">A price change is waiting for approval (see above).</p>' : '';
-    const markup = `<section class="ml-section">
-      <article class="ml-home ${isOpen ? 'is-open' : ''}" data-key="masterlist" aria-label="Price list">
-        <div class="ml-home-main">
-          <span class="ml-home-mark" aria-hidden="true">${MASTERLIST_ICON}</span>
-          <div class="ml-home-text">
-            <p class="ml-home-kicker">Price list${isOpen ? ' · <span>open in the editor</span>' : ''}</p>
-            <h2>Prices for every country and price level</h2>
-            <p class="ml-home-meta">${products.toLocaleString()} products · ${countries.length} countries · ${levels.length} price levels${updated ? ` · <span title="${escapeHtml(displayDate(master.savedAt))}">${escapeHtml(updated)}</span>` : ''}</p>
-            ${status}
-            <div class="ml-home-actions">
-              <button type="button" class="button primary row-primary ml-home-open" data-action="open" data-id="${escapeHtml(openId)}">${isOpen ? 'Back to the price list' : 'Open price list'}</button>
-              ${can('upload') ? '<button type="button" class="button secondary" data-ml="upload">Upload updated workbook</button>' : ''}
-            </div>
-          </div>
+          <div class="mf-actions">${upload}</div>
+        </article>`;
+      }
+      const when = view.savedAt ? `${formatRelativeTime(view.savedAt)}${view.savedBy ? ` by ${view.savedBy}` : ''}` : '';
+      return `<article class="mf-card ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
+        <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
+        <div class="mf-body">
+          <h3>${escapeHtml(entry.level)}${isOpen ? ' <span class="mf-tag">Open</span>' : ''}${changed ? ` <span class="mf-tag is-unsaved">${changed} unsaved</span>` : ''}</h3>
+          <p class="mf-file" title="${escapeHtml(record?.sourceFile || '')}">${escapeHtml(record?.sourceFile || `${entry.level} workbook`)}</p>
+          <p class="mf-meta">${Number(view.ownPriceCount).toLocaleString()} product${view.ownPriceCount === 1 ? '' : 's'} · ${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'}</p>
+          ${when ? `<p class="mf-when" title="${escapeHtml(displayDate(view.savedAt))}">Updated ${escapeHtml(when)}</p>` : ''}
         </div>
-        <form class="ml-home-pick" data-ml-pick onsubmit="return false;">
-          <p class="ml-home-pick-title">See prices for</p>
-          <label class="ml-select ml-home-select ${pricePick.country ? 'is-filled' : ''}">
-            <span class="ml-select-lead" aria-hidden="true">${pricePick.country ? flagMarkup(pricePick.country, countryCodeOf(pricePick.country)) : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'}</span>
-            <select data-pick="country" aria-label="Country">${option('', 'Choose a country…', !pricePick.country)}${countries.map(country => option(country, country, country === pricePick.country)).join('')}</select>${chevron}
-          </label>
-          <label class="ml-select ml-home-select is-filled">
-            <span class="ml-select-lead ml-home-level" aria-hidden="true">${escapeHtml((String(pricePick.level).match(/\d+/) || ['#'])[0])}</span>
-            <select data-pick="level" aria-label="Price level">${levels.map(level => option(level, level, level === pricePick.level)).join('')}</select>${chevron}
-          </label>
-          <button type="button" class="button secondary ml-home-go" data-ml="open-country" ${pricePick.country ? '' : 'disabled'}>Open<span aria-hidden="true">›</span></button>
-          <p class="ml-home-hint">View, change or export one country's prices.</p>
-        </form>
-      </article>
+        <div class="mf-actions">
+          <button type="button" class="button primary row-primary" data-action="open" data-id="${escapeHtml(view.id)}">Open</button>
+          ${upload}
+        </div>
+        ${entry.customers.length ? `<div class="mf-customers">
+          ${ownCustomers.length ? `<span class="mf-customers-label">Own prices:</span>${ownCustomers.map(customer => `<button type="button" class="mf-chip" data-action="open" data-id="${escapeHtml(customer.id)}" title="${escapeHtml(`${customer.ownPriceCount} price(s) just for ${customer.country}`)}">${escapeHtml(customer.country)}</button>`).join('')}` : ''}
+          <span class="ml-select mf-customer-pick"><select data-ml-customer aria-label="Open for a customer of ${escapeHtml(entry.level)}"><option value="">Open for a customer…</option>${entry.customers.map(customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.country)}</option>`).join('')}</select><svg class="ml-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>` : ''}
+      </article>`;
+    }).join('');
+    const markup = `<section class="ml-section mf-section">
+      <header class="mf-head">
+        <div>
+          <h2>Price level files</h2>
+          <p>${uploaded} of ${levels.length} price levels uploaded · ${customerCount} customers · each price level has its own workbook</p>
+          ${status}
+        </div>
+        <div class="mf-head-tools">
+          <label class="mf-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" id="mfSearch" placeholder="Search price level, customer or file…" aria-label="Search files" autocomplete="off" value="${escapeHtml(filesView.mfQuery || '')}"></label>
+          ${can('upload') ? '<button type="button" class="button primary" data-ml="upload">Upload a file</button>' : ''}
+        </div>
+      </header>
+      <div class="mf-grid">${cards || '<p class="mf-empty">No price levels yet. Add them in Config › Customers &amp; price levels.</p>'}</div>
+      <p class="mf-empty mf-no-match" hidden>No files match your search.</p>
       <ol class="ml-steps" aria-label="How it works">
-        <li><b>1</b><span><strong>Standard prices</strong> Every country and price level starts from these.</span></li>
-        <li><b>2</b><span><strong>Each country</strong> Open it to change its prices, or export it to Excel or PDF.</span></li>
+        <li><b>1</b><span><strong>Upload</strong> Each price level’s workbook (or one customer’s). Choose the level first, then the customer.</span></li>
+        <li><b>2</b><span><strong>Open and change</strong> Every customer gets its level’s prices. Change them, or export them to Excel or PDF.</span></li>
         <li><b>3</b><span><strong>Save</strong> All your changes go together for approval.</span></li>
       </ol>
     </section>`;
     return { markup };
   }
-  // The country / price level shortcut on the price list card.
+  /** Shows only the file cards that match the search; a match on a customer names the customer. */
+  function filterFileCards() {
+    const query = String(filesView.mfQuery || '').trim().toLowerCase();
+    let shown = 0;
+    $$('#filesTable .mf-card').forEach(card => {
+      const [level, file, ...customers] = card.dataset.search.split('\n');
+      const match = !query || card.dataset.search.includes(query);
+      card.hidden = !match;
+      if (match) shown++;
+      // Found by a customer (not the level or file name): say which one.
+      const index = query && match && !level.includes(query) && !file.includes(query) ? customers.findIndex(name => name.includes(query)) : -1;
+      const name = index >= 0 ? card.querySelectorAll('[data-ml-customer] option:not([value=""])')[index]?.textContent : '';
+      let hint = card.querySelector('.mf-match');
+      if (name && !hint) { card.querySelector('.mf-body').insertAdjacentHTML('beforeend', '<p class="mf-match"></p>'); hint = card.querySelector('.mf-match'); }
+      if (name) hint.textContent = `Customer: ${name}`; else hint?.remove();
+    });
+    const none = $('#filesTable .mf-no-match');
+    if (none) none.hidden = shown > 0 || !$$('#filesTable .mf-card').length;
+  }
+  $('#filesTable')?.addEventListener('input', event => {
+    if (event.target.id !== 'mfSearch') return;
+    filesView.mfQuery = event.target.value;
+    filterFileCards();
+  });
+  // A file card: upload a new version for that level, or open it for one customer.
   $('#filesTable')?.addEventListener('change', event => {
-    const select = event.target.closest('[data-ml-pick] select');
-    if (!select) return;
-    pricePick[select.dataset.pick] = select.value;
-    renderFiles();
+    const select = event.target.closest('[data-ml-customer]');
+    if (!select?.value) return;
+    openOriginRect = select.closest('.mf-card')?.getBoundingClientRect() || null;
+    runListAction('open', select.value);
   });
   $('#filesTable')?.addEventListener('click', async event => {
-    const action = event.target.closest('[data-ml]');
-    if (action?.dataset.ml === 'upload') openMasterlistUpload();
-    else if (action?.dataset.ml === 'open-country') {
-      const list = (state.versions || []).find(version => version.source === 'masterlist' && version.kind === 'list' && version.country === pricePick.country && version.priceLevel === pricePick.level);
-      if (list) { openOriginRect = action.closest('.ml-home')?.getBoundingClientRect() || null; runListAction('open', list.id); }
-    }
+    const action = event.target.closest('[data-ml], [data-ml-upload]');
+    if (!action) return;
+    if (action.dataset.mlUpload) openMasterlistUpload({ target: action.dataset.mlUpload });
+    else if (action.dataset.ml === 'upload') openMasterlistUpload();
   });
 
-  // Upload: the price list workbook → check it → see exactly what it changes → apply.
-  const mlUpload = { file: null, fingerprint: '', step: 'choose', busy: false };
+  // Upload: choose what the prices are for (the price level, then the customer) → the workbook →
+  // check it → see exactly what it changes → apply.
+  const mlUpload = { file: null, fingerprint: '', step: 'choose', busy: false, target: MASTERLIST_ID };
   const mlDialog = $('#masterlistUploadDialog');
-  function openMasterlistUpload({ file = null } = {}) {
+  function openMasterlistUpload({ file = null, target = null } = {}) {
     if (!mlDialog) return;
     if (!can('upload')) return toast('Your role cannot upload price lists.');
-    Object.assign(mlUpload, { file, fingerprint: '', busy: false });
+    // From a price level or customer that is open, its prices are the likely ones.
+    const open = inMasterlistFile(state.active) && state.active.kind === 'list' ? state.active.id : '';
+    Object.assign(mlUpload, { file, fingerprint: '', busy: false, target: target || open });
     $('#mlFileInput').value = '';
     mlUpload.step = '';
     showMlStep('choose');
@@ -3197,12 +3451,40 @@
     if (step === 'choose') { $('#mlUploadErrors').hidden = true; renderMlChoose(); }
     if (changed && mlDialog?.open) easeIn(step === 'choose' ? $('#mlUploadChoose') : $('#mlUploadPreview'));
   }
+  /** The upload's "These prices are for": price level first, then its customers (or all of them). */
+  /**
+   * Prices come from uploads: every file is for a price level (all its customers) or one customer on
+   * it. The product list (codes, descriptions, sizes…) updates from the files in the background.
+   */
+  function renderMlTarget() {
+    const levels = masterlistLevels();
+    const view = versionSummaryById(mlUpload.target);
+    const level = (view && levels.find(entry => sameText(entry.level, view.priceLevel))) || levels[0] || null;
+    if (level && !(view && sameText(view.priceLevel, level.level))) mlUpload.target = level.view.id;
+    const option = (value, label, selected) => `<option value="${escapeHtml(value)}"${selected ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    $('#mlTargetLevel').innerHTML = levels.map(entry => option(entry.view.id, entry.level, entry === level)).join('') || option('', 'No price levels in Config', true);
+    $('#mlTargetCustomer').innerHTML = level
+      ? option(level.view.id, `All ${level.level} customers (${level.customers.length})`, mlUpload.target === level.view.id) + level.customers.map(customer => option(customer.id, customer.country, customer.id === mlUpload.target)).join('')
+      : option('', 'Every customer', true);
+    $('#mlTargetCustomer').disabled = !level;
+    $('#mlTargetCustomerWrap').classList.toggle('is-off', !level);
+    const customer = level && view && !isLevelView(view) && view.id === mlUpload.target ? view.country : '';
+    $('#mlTargetHint').innerHTML = !level
+      ? 'Add a price level in Config › Customers & price levels first.'
+      : customer ? `Prices <strong>just for ${escapeHtml(customer)}</strong>. The other ${escapeHtml(level.level)} customers keep the level’s prices.`
+        : `The <strong>${escapeHtml(level.level)}</strong> list becomes exactly this file: its products and prices, for its ${level.customers.length} customer${level.customers.length === 1 ? '' : 's'}.`;
+    return { level, customer };
+  }
+  $('#mlTargetLevel')?.addEventListener('change', event => { mlUpload.target = event.target.value; renderMlChoose(); });
+  $('#mlTargetCustomer')?.addEventListener('change', event => { mlUpload.target = event.target.value || mlUpload.target; renderMlChoose(); });
   function renderMlChoose() {
     const first = !Number(versionSummaryById(MASTERLIST_ID)?.productCount || 0);
-    $('#mlUploadTitle').textContent = first ? 'Upload the price list' : 'Upload an updated price list';
+    const { level, customer } = renderMlTarget();
+    $('#mlUploadKicker').textContent = level ? (customer ? `${level.level} · ${customer}` : `${level.level} · all customers`) : 'Price list';
+    $('#mlUploadTitle').textContent = level ? `Upload ${customer || level.level} prices` : 'Upload prices';
     $('#mlUploadIntro').textContent = first
-      ? 'One workbook with every product. Each country and price level starts from these prices.'
-      : 'You’ll see exactly what changes before anything is saved.';
+      ? 'Each price level has its own workbook. Upload one to start; the others are added the same way.'
+      : 'Choose the price level first, then the customer. You’ll see exactly what changes before anything is saved.';
     const fileName = mlUpload.file ? mlUpload.file.name : 'Drop the workbook here';
     if ($('#mlFileName').textContent !== fileName && mlUpload.file && !reducedMotion()) {
       $('#mlFileName').animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
@@ -3210,7 +3492,7 @@
     $('#mlFileName').textContent = fileName;
     $('#mlDropZone').classList.toggle('has-file', Boolean(mlUpload.file));
     const next = $('#mlUploadNext');
-    next.disabled = !mlUpload.file || mlUpload.busy;
+    next.disabled = !mlUpload.file || mlUpload.busy || !String(mlUpload.target || '').startsWith('list-');
     next.textContent = mlUpload.busy ? 'Checking…' : 'Check file';
   }
   function setMlFile(file) {
@@ -3223,6 +3505,7 @@
   async function sendMlUpload(confirm = '') {
     const form = new FormData();
     if (confirm) form.append('confirm', confirm);
+    form.append('target', mlUpload.target || MASTERLIST_ID);
     form.append('workbook', mlUpload.file, mlUpload.file.name);
     const response = await fetch('../api/masterlist/upload.php', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
     if (response.status === 401) { window.location.href = 'login.php'; throw new Error('Please sign in again.'); }
@@ -3249,13 +3532,28 @@
     const simpleList = (title, note, items, total, extra = () => '') => items.length ? `<section class="review-section"><h3>${title} <small>${note}</small></h3>
         <ul class="review-edits">${items.map(item => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>${extra(item)}</li>`).join('')}</ul>${more(items.length, total)}</section>` : '';
     const head = stale ? '<p class="review-note is-rejected">Prices changed since this file was checked. This is what it would change now.</p>' : '';
+    if (preview.mode === 'list') {
+      // A price level: its list becomes the file. A customer: the file's prices become its own.
+      const level = escapeHtml(preview.priceLevel);
+      const details = Number(c.detailChanges || 0);
+      const intro = preview.replaces
+        ? (preview.first ? `The <strong>${level}</strong> list is empty: it becomes this file.` : `The <strong>${level}</strong> list becomes exactly this file.`)
+        : `Prices just for <strong>${escapeHtml(preview.customer)}</strong> (${level}). Its other products keep the level’s prices.`;
+      return head + `<p class="review-note">${preview.fileName ? `<strong>${escapeHtml(preview.fileName)}</strong> · ` : ''}${preview.products.toLocaleString()} products. ${intro}</p>`
+        + `<div class="review-stats">${stat(c.priceChanges, plural(c.priceChanges, 'new price', 'new prices'))}${stat(c.added, plural(c.added, 'product added', 'products added'))}${preview.replaces ? stat(c.removed, plural(c.removed, 'product removed', 'products removed')) : stat(c.notInFile, 'keep the level’s price')}${stat(c.unchanged, 'the same')}</div>`
+        + (preview.first ? '' : priceTable('New prices', `${c.priceChanges.toLocaleString()} product${c.priceChanges === 1 ? '' : 's'}`, preview.priceChanges, c.priceChanges)
+          + simpleList('Added', preview.replaces ? `new in ${level}` : 'just for this customer', preview.added, c.added, item => `<strong>${priceText(item.pricePc)}</strong>`)
+          + (preview.replaces ? simpleList('Removed', `not in this file, so they leave ${level} (and its customers)`, preview.notInFile, c.removed) : '')
+          + (details ? `<section class="review-section"><h3>New details <small>${details.toLocaleString()} product${details === 1 ? '' : 's'}</small></h3><ul class="review-edits">${(preview.detailChanges || []).flatMap(item => item.fields.map(field => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(field.name)}</span><span class="review-before">${escapeHtml(String(field.old ?? '') || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(String(field.new ?? '') || '(empty)')}</strong></li>`)).join('')}</ul>${more((preview.detailChanges || []).length, details)}</section>` : '')
+          + (c.reordered ? '<p class="review-note">Same products and prices, in a new order.</p>' : ''));
+    }
     const intro = preview.first
-      ? `<p class="review-note">${preview.products.toLocaleString()} products. Every country and price level starts at these prices.</p>`
-      : `<p class="review-note">${preview.fileName ? `<strong>${escapeHtml(preview.fileName)}</strong> · ` : ''}${preview.products.toLocaleString()} products. Every country and price level gets the new prices, except prices someone set by hand for one country.</p>`;
+      ? `<p class="review-note">${preview.products.toLocaleString()} products. Every price level and customer starts at these prices.</p>`
+      : `<p class="review-note">${preview.fileName ? `<strong>${escapeHtml(preview.fileName)}</strong> · ` : ''}${preview.products.toLocaleString()} standard prices. Every price level and customer gets the new prices, except prices set just for one of them.</p>`;
     return head + intro + `<div class="review-stats">${stat(c.added, plural(c.added, 'product added', 'products added'))}${stat(c.removed, plural(c.removed, 'product removed', 'products removed'))}${stat(c.priceChanges, plural(c.priceChanges, 'new price', 'new prices'))}${stat(c.detailChanges, 'with new details')}</div>`
       + (preview.first ? '' : priceTable('New prices', `${c.priceChanges.toLocaleString()} product${c.priceChanges === 1 ? '' : 's'}`, preview.priceChanges, c.priceChanges)
         + simpleList('Added', `${c.added.toLocaleString()} new`, preview.added, c.added, item => `<strong>${priceText(item.pricePc)}</strong>`)
-        + simpleList('Removed', 'not in this file, so they leave every country', preview.removed, c.removed)
+        + simpleList('Removed', 'not in this file, so they leave every price level', preview.removed, c.removed)
         + (preview.detailChanges.length ? `<section class="review-section"><h3>New details <small>${c.detailChanges.toLocaleString()} product${c.detailChanges === 1 ? '' : 's'}</small></h3><ul class="review-edits">${preview.detailChanges.flatMap(item => item.fields.map(field => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(field.name)}</span><span class="review-before">${escapeHtml(String(field.old ?? '') || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(String(field.new ?? '') || '(empty)')}</strong></li>`)).join('')}</ul>${more(preview.detailChanges.length, c.detailChanges)}</section>` : '')
         + (c.unchanged ? `<p class="review-note">${c.unchanged.toLocaleString()} product${c.unchanged === 1 ? ' is' : 's are'} the same.</p>` : ''));
   }
@@ -3290,7 +3588,13 @@
       if (data.preview) return showMlPreview(data); // checked (or prices moved since: checked again)
       mlDialog.close();
       toast(data.message);
+      versionCache.clear();
       await refreshState();
+      // The file that was just uploaded opens in the editor (with its new prices, when it was open).
+      if (mlUpload.target && String(state.active?.id) === String(mlUpload.target) && !state.active.isDraft) {
+        loadActive((await api('open', { method: 'POST', body: JSON.stringify({ id: mlUpload.target }) })).active);
+        switchPanel('workspacePanel', true);
+      } else if (mlUpload.target) await runListAction('open', mlUpload.target);
     } catch (error) {
       mlUpload.busy = false;
       showMlStep('choose');
@@ -3335,8 +3639,57 @@
     switcherButton.title = active ? `${country} › ${level} › ${list}. Click to switch price list.` : '';
     switcherButton.setAttribute('aria-label', active ? `${active.name}: switch price list` : 'No price list open');
   }
+  /** The price list's own views: [{level, view (the level's, for all customers), customers: [views]}]. */
+  function masterlistLevels() {
+    const lists = (state.versions || []).filter(version => inMasterlistFile(version) && version.kind === 'list');
+    return lists.filter(isLevelView).map(view => ({
+      level: view.priceLevel, view,
+      customers: lists.filter(list => !isLevelView(list) && sameText(list.priceLevel, view.priceLevel)).sort((a, b) => a.country.localeCompare(b.country))
+    }));
+  }
+  /**
+   * In the price list file: Price level › Customer. Clicking a price level opens
+   * its prices (for all its customers); hovering it shows its customers to pick one.
+   */
+  function renderMasterlistSwitcher() {
+    const active = state.active;
+    const query = switcher.query.trim().toLowerCase();
+    const has = value => String(value || '').toLowerCase().includes(query);
+    const levels = masterlistLevels().map(entry => ({ ...entry, customers: query && !has(entry.level) ? entry.customers.filter(view => has(view.country)) : entry.customers }))
+      .filter(entry => !query || has(entry.level) || entry.customers.length);
+    if (!levels.some(entry => sameText(entry.level, switcher.level))) switcher.level = levels[0]?.level || '';
+    const unsaved = Object.values(masterlistPending().views);
+    const unsavedIn = test => unsaved.filter(test).length;
+    const item = (kind, value, label, { meta = '', highlight = false, current = false, arrow = false, cls = '' } = {}) =>
+      `<button type="button" class="lsm-item ${cls} ${highlight ? 'is-highlight' : ''} ${current ? 'is-current' : ''}" data-kind="${kind}" data-value="${escapeHtml(value)}" role="option" aria-selected="${highlight || current}">
+        <span class="lsm-label">${escapeHtml(label)}</span>${meta ? `<span class="lsm-meta">${escapeHtml(meta)}</span>` : ''}${arrow ? '<span class="lsm-arrow" aria-hidden="true">›</span>' : ''}</button>`;
+    // (The reference prices behind the levels are not a list of their own: prices come from uploads.)
+    $('#lsmCountries').innerHTML = (levels.map(entry => {
+      const changed = unsavedIn(view => view.kind === 'list' && sameText(view.priceLevel, entry.level));
+      return item('mlevel', entry.view.id, entry.level, {
+        meta: changed ? `• ${changed} unsaved` : !entry.view.ownPriceCount ? 'no file yet' : `${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'}`,
+        highlight: sameText(entry.level, switcher.level), current: active.kind === 'list' && sameText(entry.level, active.priceLevel), arrow: true
+      });
+    }).join('') || '<p class="lsm-empty">No matches</p>');
+    const chosen = levels.find(entry => sameText(entry.level, switcher.level));
+    $('#lsmLevels').innerHTML = chosen
+      ? item('list', chosen.view.id, 'All customers', { cls: 'lsm-all', meta: unsaved.some(view => isLevelView(view) && sameText(view.priceLevel, chosen.level)) ? '• unsaved' : 'the level’s prices', current: String(active.id) === String(chosen.view.id) })
+        + chosen.customers.map(view => item('list', view.id, view.country, {
+          meta: unsaved.some(entry => sameText(entry.country, view.country) && sameText(entry.priceLevel, view.priceLevel)) ? '• unsaved' : (view.ownPriceCount ? `${view.ownPriceCount} own price${view.ownPriceCount === 1 ? '' : 's'}` : ''),
+          current: String(active.id) === String(view.id)
+        })).join('')
+      : '<p class="lsm-empty">—</p>';
+    $('#lsmLists').innerHTML = '';
+  }
   function renderSwitcherMenu() {
     if (!switcherMenu) return;
+    const master = inMasterlistFile(state.active);
+    switcherMenu.classList.toggle('is-masterlist', master);
+    const [firstHeading, secondHeading] = $$('#listSwitcherMenu .lsm-heading');
+    if (firstHeading) firstHeading.textContent = master ? 'Price level' : 'Country';
+    if (secondHeading) secondHeading.textContent = master ? 'Customer' : 'Price level';
+    $('#lsmSearch').placeholder = master ? 'Search price level or customer…' : 'Search country or price list…';
+    if (master) return renderMasterlistSwitcher();
     const lists = navigableVersions();
     const query = switcher.query.trim().toLowerCase();
     // Search matches the country name, a price level, or a price list name.
@@ -3352,10 +3705,7 @@
     const item = (kind, value, label, { meta = '', highlight = false, current = false, arrow = false } = {}) =>
       `<button type="button" class="lsm-item ${highlight ? 'is-highlight' : ''} ${current ? 'is-current' : ''}" data-kind="${kind}" data-value="${escapeHtml(value)}" role="option" aria-selected="${highlight || current}">
         <span class="lsm-label">${escapeHtml(label)}</span>${meta ? `<span class="lsm-meta">${escapeHtml(meta)}</span>` : ''}${arrow ? '<span class="lsm-arrow" aria-hidden="true">›</span>' : ''}</button>`;
-    // The masterlist file: "Base prices" first, then country › price level, which opens that view
-    // (one list per pair, so no third column). A dot marks views with unsaved changes.
-    const master = inMasterlistFile(active);
-    switcherMenu.classList.toggle('is-masterlist', master);
+    // (Separate files only: the price list file has its own menu, renderMasterlistSwitcher.)
     const unsaved = master ? Object.values(masterlistPending().views) : [];
     const dot = count => (count ? `• ${count} unsaved` : '');
     const baseItem = master && (!query || 'standard prices'.includes(query))
@@ -3423,6 +3773,13 @@
   const pickSwitcherItem = (button, fromHover) => {
     const { kind, value } = button.dataset;
     if (kind === 'base' && !fromHover) { toggleSwitcher(false); openFromNavigator(value); return; }
+    // The price list file: hovering a price level shows its customers; clicking it opens its prices.
+    if (kind === 'mlevel') {
+      const level = button.querySelector('.lsm-label')?.textContent || '';
+      if (!fromHover) { toggleSwitcher(false); openFromNavigator(value); return; }
+      if (!sameText(switcher.level, level)) { switcher.level = level; renderSwitcherMenu(); }
+      return;
+    }
     // In the masterlist file a price level opens that country's list straight away.
     if (kind === 'level' && !fromHover && inMasterlistFile(state.active)) {
       const list = navigableVersions().find(version => sameText(version.country, switcher.country) && sameText(version.priceLevel, value));
@@ -4275,18 +4632,84 @@
     if (!rate || !Number.isFinite(rate)) return rawNum;
     return Math.max(0, Math.round(rawNum * (1 + rate / 100) * 10000) / 10000);
   }
+  /** An export's title: "Sinodis Price List", "FOB Price Price List", or the file's name. */
+  function exportTitle(version) {
+    if (!inMasterlistFile(version)) return version.name || 'LRN Price List';
+    if (version.kind === 'masterlist') return 'Standard Price List';
+    return `${version.country || version.priceLevel} Price List`;
+  }
+  /** Who and what an export is for, as [label, value] pairs. */
+  function exportFacts(version) {
+    const asOf = version.approvedAt || version.savedAt;
+    const date = asOf ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(asOf)) : '—';
+    if (inMasterlistFile(version)) {
+      if (version.kind === 'masterlist') return [['Prices', 'Standard prices'], ['Prices as of', date]];
+      return [['Customer', version.country || `All ${version.priceLevel} customers`], ['Price level', version.priceLevel || '—'], ['Prices as of', date]];
+    }
+    return [['Customer', version.country || '—'], ['Price level', version.priceLevel || '—'], ['Prices as of', date]];
+  }
   function exportFileName(version, extension) {
-    // Named by the date its prices are from (approval, or upload), e.g. "… - 2026-10-08.pdf".
-    const parts = [version.name || 'LRN Price List'];
+    // Named by who it is for and the date its prices are from, e.g. "Sinodis Price List - FOB Price - 2026-10-21.pdf".
+    const parts = [exportTitle(version)];
+    if (inMasterlistFile(version) && version.country) parts.push(version.priceLevel);
     const asOf = version.approvedAt || version.savedAt;
     if (asOf) parts.push(new Intl.DateTimeFormat('en-CA').format(new Date(asOf)));
     return `${parts.join(' - ').replace(/[\\/:*?"<>|%]/g, '_')}.${extension}`;
   }
+
+  // --- Export choices (Requirements 17Oct2026 › header & footer selection): the letterhead on top
+  // and the bank details at the bottom. The last choice is remembered per customer / price level. ---
+  const exportChoice = { format: 'excel', versionId: null };
+  const brandingKey = summary => `pla_export_brand_${String(summary?.country || summary?.priceLevel || 'standard').trim().toLowerCase()}`;
+  function rememberedBranding(summary) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(brandingKey(summary)) || 'null');
+      if (saved && typeof saved === 'object') return saved;
+    } catch { }
+    return { letterhead: 'LRNPH', bank: 'LRNPH USD' };
+  }
+  /** Opens the export window (letterhead + bank details), then exports with what was picked. */
+  function openExportDialog(format, versionId = null) {
+    const branding = state.exportBranding;
+    const dialog = $('#exportDialog');
+    if (!branding || !dialog) return requestExport(format, versionId);
+    Object.assign(exportChoice, { format, versionId });
+    const summary = versionId ? versionSummaryById(versionId) : state.active;
+    const picked = rememberedBranding(summary);
+    const card = (name, value, title, detail, checked) => `<label class="export-option"><input type="radio" name="${name}" value="${escapeHtml(value)}"${checked ? ' checked' : ''}><span class="export-option-card"><strong>${escapeHtml(title)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</span></label>`;
+    const letterheads = Object.entries(branding.letterheads || {});
+    const banks = Object.entries(branding.banks || {});
+    const hasLetterhead = letterheads.some(([key]) => key === picked.letterhead);
+    const hasBank = banks.some(([key]) => key === picked.bank);
+    $('#exportLetterheads').innerHTML = letterheads.map(([key, item]) => card('letterhead', key, item.label, item.lines?.[1] || '', key === picked.letterhead)).join('')
+      + card('letterhead', '', 'No letterhead', 'Just the price list title', !hasLetterhead);
+    $('#exportBanks').innerHTML = banks.map(([key, item]) => card('bank', key, item.label, (item.rows || []).find(([label]) => /bank/i.test(label) && !/address|swift|account/i.test(label))?.[1] || '', key === picked.bank)).join('')
+      + card('bank', '', 'No bank details', 'Leave them out', !hasBank);
+    const facts = summary ? exportFacts(summary) : [];
+    $('#exportDialogKicker').textContent = `Export · ${format === 'pdf' ? 'PDF' : 'Excel'}`;
+    $('#exportDialogTitle').textContent = summary ? exportTitle(summary) : 'Export';
+    $('#exportDialogIntro').textContent = facts.filter(([label]) => label !== 'Prices as of').map(([, value]) => value).join(' · ') || 'Choose what goes on the file.';
+    $('#exportDialogGo').textContent = `Export ${format === 'pdf' ? 'PDF' : 'Excel'}`;
+    dialog.showModal();
+  }
+  $('#exportForm')?.addEventListener('submit', event => {
+    if (event.submitter?.value === 'cancel') return;
+    const form = event.currentTarget;
+    const letterhead = form.querySelector('input[name="letterhead"]:checked')?.value || '';
+    const bank = form.querySelector('input[name="bank"]:checked')?.value || '';
+    const summary = exportChoice.versionId ? versionSummaryById(exportChoice.versionId) : state.active;
+    try { localStorage.setItem(brandingKey(summary), JSON.stringify({ letterhead, bank })); } catch { }
+    requestExport(exportChoice.format, exportChoice.versionId, {
+      letterhead: state.exportBranding?.letterheads?.[letterhead] || null,
+      bank: state.exportBranding?.banks?.[bank] || null,
+    });
+  });
   /**
    * Asks the server for the approved version (which logs the export), then builds the file from it.
-   * From the editor, the active filters limit the exported rows.
+   * From the editor, the active filters limit the exported rows. $branding: the letterhead and bank
+   * details picked in the export window (either can be null).
    */
-  async function requestExport(format, versionId = null) {
+  async function requestExport(format, versionId = null, branding = null) {
     const fromEditor = !versionId;
     const id = versionId || state.active?.id;
     if (!id) return toast('Open an approved price list first.');
@@ -4304,15 +4727,27 @@
       rows = filteredRows().map(item => item.row);
       if (!rows.length) return toast('No products match the current filters.');
     }
-    if (format === 'excel') exportExcel(version, rows);
-    else await exportPdf(version, rows, scope);
+    if (format === 'excel') exportExcel(version, rows, branding);
+    else await exportPdf(version, rows, scope, branding);
     if (can('viewAudit')) api('audit-logs').then(res => { state.auditLogs = res.auditLogs || []; renderHistory(); }).catch(() => { });
   }
-  function exportExcel(version, rows) {
+  /** Pallet cells read "168 Boxes/Pallet" in exports (a plain number gets the unit). */
+  function formatPallet(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    if (/pallet|box/i.test(text)) return text;
+    return isNumeric(text) ? `${text} Boxes/Pallet` : text;
+  }
+  // The final Excel layout (Requirements 17Oct2026 › Excel Header Template): these column names, the
+  // pallets under "PALLET PER CONTAINER", and each product group as a title row above its products.
+  const EXPORT_HEADERS = ['Code', 'Description', 'Shelf Life', 'Weight per Pc (g)', 'Pcs/Box', 'Box Size', 'Price/pc USD', 'Price/box USD'];
+  const EXPORT_PALLETS = ['Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)'];
+  function exportExcel(version, rows, branding = null) {
     if (!window.XLSX) return toast('Excel tools are unavailable.');
     const wb = XLSX.utils.book_new();
     const rateFor = adjustmentFor(version);
-    const adjusted = (value, category) => adjustedWith(rateFor(category), value);
+    const price = (value, category) => (isNumeric(value) ? Number(adjustedWith(rateFor(category), numeric(value)).toFixed(2)) : value);
+    const asOf = version.approvedAt || version.savedAt;
 
     const categoryMap = new Map();
     rows.forEach(row => {
@@ -4321,74 +4756,64 @@
       categoryMap.get(cat).push(row);
     });
 
-    const standardHeaderRow1 = ['Code No', 'Description', 'Expiry Date', 'Weight gr/pc', 'Pcs /box', 'Box Size', 'Price/pc USD', 'Price/box In USD', 'PALLET PER CONTAINER', '', '', 'Product Group'];
-    const standardHeaderRow2 = ['', '', '', '', '', '', '', '', '40ft Container', '', '20ft Container', ''];
-    const standardHeaderRow3 = ['', '', '', '', '', '', '', '', 'Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)', ''];
-    const standardMerges = [
-      { s: { r: 0, c: 0 }, e: { r: 2, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 2, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 2, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 2, c: 3 } },
-      { s: { r: 0, c: 4 }, e: { r: 2, c: 4 } },
-      { s: { r: 0, c: 5 }, e: { r: 2, c: 5 } },
-      { s: { r: 0, c: 6 }, e: { r: 2, c: 6 } },
-      { s: { r: 0, c: 7 }, e: { r: 2, c: 7 } },
-      { s: { r: 0, c: 8 }, e: { r: 0, c: 10 } },
-      { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
-      { s: { r: 0, c: 11 }, e: { r: 2, c: 11 } }
-    ];
-
-    const presentationHeaders = ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ', 'Product Group'];
+    const presentationHeaders = ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ'];
 
     categoryMap.forEach((catRows, catName) => {
       const isPresentation = /presentation stands/i.test(catName);
-      const wsData = [];
+      const width = isPresentation ? presentationHeaders.length : EXPORT_HEADERS.length + EXPORT_PALLETS.length;
+      const data = [];
+      const merges = [];
+      const across = (r, from = 0, to = width - 1) => merges.push({ s: { r, c: from }, e: { r, c: to } });
+
+      // Letterhead, then who the prices are for.
+      (branding?.letterhead?.lines || []).forEach(line => { across(data.length); data.push([line]); });
+      if (branding?.letterhead) data.push([]);
+      data.push([exportTitle(version)]);
+      across(data.length - 1);
+      exportFacts(version).forEach(([label, value]) => { data.push([label, value]); across(data.length - 1, 1); });
+      if (version.status === 'approved' && version.approvedBy) { data.push(['Approved by', version.approvedBy]); across(data.length - 1, 1); }
+      data.push([]);
+      data.push([catName.toUpperCase()]);
+      across(data.length - 1);
+
+      // Column headers.
+      const head = data.length;
       if (isPresentation) {
-        wsData.push(presentationHeaders);
-        catRows.forEach(row => {
-          const itemName = [row[2], row[3]].filter(Boolean).join(' ');
-          const moq = [row[15], row[16]].filter(Boolean).join(' ');
-          wsData.push([
-            row[1],
-            itemName,
-            row[6],
-            isNumeric(row[8]) ? Number(adjusted(numeric(row[8]), catName).toFixed(2)) : row[8],
-            isNumeric(row[9]) ? Number(adjusted(numeric(row[9]), catName).toFixed(2)) : row[9],
-            row[13],
-            row[14],
-            row[7],
-            moq,
-            isNumeric(row[17]) ? Number(row[17]) : row[17],
-            row[18] || catName
-          ]);
-        });
+        data.push(presentationHeaders);
       } else {
-        wsData.push(standardHeaderRow1, standardHeaderRow2, standardHeaderRow3);
-        catRows.forEach(row => {
-          wsData.push([
-            row[1],
-            row[2],
-            row[4],
-            row[5],
-            row[6],
-            row[7],
-            isNumeric(row[8]) ? Number(adjusted(numeric(row[8]), catName).toFixed(2)) : row[8],
-            isNumeric(row[9]) ? Number(adjusted(numeric(row[9]), catName).toFixed(2)) : row[9],
-            row[10],
-            row[11],
-            row[12],
-            row[18] || catName
-          ]);
-        });
+        data.push([...EXPORT_HEADERS, 'PALLET PER CONTAINER', '', '']);
+        data.push([...EXPORT_HEADERS.map(() => ''), '40ft Container', '', '20ft Container']);
+        data.push([...EXPORT_HEADERS.map(() => ''), ...EXPORT_PALLETS]);
+        EXPORT_HEADERS.forEach((_, c) => merges.push({ s: { r: head, c }, e: { r: head + 2, c } }));
+        merges.push({ s: { r: head, c: 8 }, e: { r: head, c: 10 } }, { s: { r: head + 1, c: 8 }, e: { r: head + 1, c: 9 } });
       }
 
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      if (!isPresentation) {
-        ws['!merges'] = standardMerges;
-        ws['!freeze'] = { xSplit: 0, ySplit: 3 };
-      } else {
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      // Products, under a title row for each product group.
+      const groups = new Map();
+      catRows.forEach(row => {
+        const group = String(row[18] || catName).trim();
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(row);
+      });
+      groups.forEach((groupRows, group) => {
+        if (groups.size > 1 || group !== catName) { data.push([group]); across(data.length - 1); }
+        groupRows.forEach(row => data.push(isPresentation
+          ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName), price(row[9], catName), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), isNumeric(row[17]) ? Number(row[17]) : row[17]]
+          : [row[1], row[2], row[4], row[5], row[6], row[7], price(row[8], catName), price(row[9], catName), formatPallet(row[10]), formatPallet(row[11]), formatPallet(row[12])]));
+      });
+
+      // Bank details.
+      if (branding?.bank) {
+        data.push([]);
+        data.push(['Bank details']);
+        across(data.length - 1);
+        (branding.bank.rows || []).forEach(([label, value]) => { data.push([`${label}:`, value]); across(data.length - 1, 1); });
       }
+      if (asOf) data.push([], [`Prices as of ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'long' }).format(new Date(asOf))} · All prices in USD`]);
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!merges'] = merges;
+      ws['!cols'] = (isPresentation ? [16, 40, 14, 14, 14, 12, 12, 14, 12, 18] : [16, 44, 14, 16, 10, 14, 13, 14, 22, 22, 22]).map(wch => ({ wch }));
       const safeSheetName = catName.substring(0, 31).replace(/[\\/?*[\]]/g, '');
       XLSX.utils.book_append_sheet(wb, ws, safeSheetName || 'Sheet');
     });
@@ -4440,7 +4865,7 @@
     return custom?.key ? `custom:${custom.key}` : null;
   }
 
-  async function exportPdf(version, targetRows, scope = '') {
+  async function exportPdf(version, targetRows, scope = '', branding = null) {
     try {
       if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
       if (!targetRows.length) return toast('No products to export.');
@@ -4457,7 +4882,11 @@
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 22;
-      const TOP = 60;
+      const letterhead = branding?.letterhead?.lines || [];
+      const bank = branding?.bank || null;
+      // The page header: the letterhead (name, address, contacts) or the list title, then a rose line.
+      const HEAD_LINE = letterhead.length > 2 ? 60 : 49;
+      const TOP = HEAD_LINE + 11;
       const BOTTOM = 36;
       const printableWidth = pageWidth - margin * 2;
       const INK = [23, 20, 23], MUTED = [113, 98, 103], ROSE = [181, 32, 66];
@@ -4520,14 +4949,15 @@
         const standardHead = [
           [
             { content: 'Photo', rowSpan: 3 },
-            { content: 'Code No', rowSpan: 3 },
+            // Requirements 17Oct2026 › Excel Header Template.
+            { content: 'Code', rowSpan: 3 },
             { content: 'Description', rowSpan: 3 },
-            { content: 'Expiry\nDate', rowSpan: 3 },
-            { content: 'Weight\ngr/pc', rowSpan: 3 },
-            { content: 'Pcs\n/box', rowSpan: 3 },
+            { content: 'Shelf\nLife', rowSpan: 3 },
+            { content: 'Weight per\nPc (g)', rowSpan: 3 },
+            { content: 'Pcs/Box', rowSpan: 3 },
             { content: 'Box Size', rowSpan: 3 },
             { content: 'Price/pc\nUSD', rowSpan: 3 },
-            { content: 'Price/box\nIn USD', rowSpan: 3 },
+            { content: 'Price/box\nUSD', rowSpan: 3 },
             { content: 'PALLET PER CONTAINER', colSpan: 3, styles: { halign: 'center' } }
           ],
           [
@@ -4694,34 +5124,78 @@
         currentY = (doc.lastAutoTable?.finalY || currentY) + 18;
       }
 
+      if (bank) {
+        const rows = bank.rows || [];
+        const labelWidth = 150;
+        doc.setFontSize(7.5);
+        const lines = rows.map(([, value]) => doc.splitTextToSize(String(value), printableWidth - labelWidth - 28));
+        const height = 30 + lines.reduce((sum, wrapped) => sum + wrapped.length * 10 + 3, 0);
+        if (currentY + height > pageHeight - BOTTOM) { doc.addPage(); currentY = TOP; }
+        doc.setFillColor(253, 246, 248);
+        doc.setDrawColor(232, 210, 216);
+        doc.setLineWidth(0.6);
+        doc.roundedRect(margin, currentY, printableWidth, height, 6, 6, 'FD');
+        doc.setFillColor(...ROSE);
+        doc.rect(margin, currentY + 6, 3, height - 12, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...INK);
+        doc.text('BANK DETAILS', margin + 14, currentY + 17, { charSpace: 0.6 });
+        let y = currentY + 30;
+        rows.forEach(([label], index) => {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(...MUTED);
+          doc.text(`${label}:`, margin + 14, y);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...INK);
+          doc.text(lines[index], margin + 14 + labelWidth, y);
+          y += lines[index].length * 10 + 3;
+        });
+        currentY += height + 12;
+      }
+
       // Header and footer on every page.
       const exported = `Exported ${displayDate(new Date().toISOString())} by ${state.user?.name || ''}`;
       const approved = version.status === 'approved';
-      const asOf = version.approvedAt || version.savedAt;
       const facts = [
-        ['Country', version.country || '—'],
-        ['Price level', version.priceLevel || '—'],
-        ['Prices as of', asOf ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(asOf)) : '—'],
+        ...exportFacts(version),
         approved ? ['Approved by', version.approvedBy || '—'] : ['Prices', 'Original upload'],
       ];
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
 
-        // Brand mark, title and subtitle.
-        doc.setFillColor(...INK);
-        doc.roundedRect(margin, 14, 28, 28, 5, 5, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.text('LRN', margin + 14, 31, { align: 'center' });
-        doc.setTextColor(...INK);
-        doc.setFontSize(13);
-        doc.text(doc.splitTextToSize(version.name || 'Price List', pageWidth * 0.42)[0], margin + 38, 27);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...MUTED);
-        doc.text(`La Rose Noire · Export price list${scope ? `  ·  Filtered: ${scope}` : ''}`, margin + 38, 38);
+        if (letterhead.length) {
+          // The chosen letterhead: company name, then its address and contacts; the list title under it.
+          doc.setTextColor(...INK);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11.5);
+          doc.text(letterhead[0], margin, 24);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.8);
+          doc.setTextColor(...MUTED);
+          letterhead.slice(1).forEach((line, index) => doc.text(doc.splitTextToSize(line, pageWidth * 0.5)[0], margin, 33 + index * 8.5));
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7.5);
+          doc.setTextColor(...ROSE);
+          doc.text(`${exportTitle(version).toUpperCase()}${scope ? `  ·  Filtered: ${scope}` : ''}`, margin, HEAD_LINE - 5, { charSpace: 0.4 });
+        } else {
+          // Brand mark, title and subtitle.
+          doc.setFillColor(...INK);
+          doc.roundedRect(margin, 14, 28, 28, 5, 5, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.text('LRN', margin + 14, 31, { align: 'center' });
+          doc.setTextColor(...INK);
+          doc.setFontSize(13);
+          doc.text(doc.splitTextToSize(exportTitle(version), pageWidth * 0.42)[0], margin + 38, 27);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(...MUTED);
+          doc.text(`La Rose Noire · Export price list${scope ? `  ·  Filtered: ${scope}` : ''}`, margin + 38, 38);
+        }
 
         // Facts on the right, right to left: label above, value below.
         let right = pageWidth - margin;
@@ -4742,7 +5216,7 @@
         }
         doc.setDrawColor(...ROSE);
         doc.setLineWidth(1.1);
-        doc.line(margin, 49, pageWidth - margin, 49);
+        doc.line(margin, HEAD_LINE, pageWidth - margin, HEAD_LINE);
 
         // Footer.
         doc.setDrawColor(232, 210, 216);
@@ -4902,7 +5376,8 @@
     if (rolled.length) rollTimer = setTimeout(() => rolled.forEach(({ td, to }) => { if (td.isConnected && td.querySelector('.odo')) td.textContent = money.format(to); }), longest + 80);
   }
 
-  // In a country + price level list of the masterlist, the % can cover more lists than this one.
+  // In a price level or customer of the price list, the % can cover more lists than this one: the
+  // level's customers (all or picked) or every price level.
   function renderAdjustScope() {
     const box = $('#adjScope');
     if (!box) return;
@@ -4911,28 +5386,27 @@
     box.hidden = !show;
     if (!show) return;
     const select = $('#adjScopeSelect');
-    select.innerHTML = [
-      ['list', `${active.country} · ${active.priceLevel} only`],
-      ['level', `Every country · ${active.priceLevel}`],
-      ['country', `${active.country} · every price level`],
-      ['pick', `Pick countries · ${active.priceLevel}…`],
-      ['all', 'Every country and price level'],
-    ].map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+    const level = active.priceLevel;
+    select.innerHTML = (isLevelView(active)
+      ? [['list', `Every ${level} customer`], ['pick', `Pick ${level} customers…`], ['all', 'Every price level']]
+      : [['list', `${active.country} only`], ['level', `Every ${level} customer`], ['pick', `Pick ${level} customers…`], ['all', 'Every price level']]
+    ).map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
     select.value = 'list';
     renderScopeCountries();
   }
   function renderScopeCountries() {
     const box = $('#adjScopeCountries');
     const pick = $('#adjScopeSelect')?.value === 'pick';
-    // The country checklist slides open under the dropdown.
+    // The customer checklist (customers on this price level) slides open under the dropdown.
     const wrap = $('#adjScopeCountriesWrap');
     wrap.classList.toggle('is-open', pick);
     wrap.setAttribute('aria-hidden', String(!pick));
     box.querySelectorAll('input').forEach(input => { input.tabIndex = pick ? 0 : -1; });
     if (!pick || box.dataset.ready === `${state.active?.country}|${state.active?.priceLevel}`) return;
     box.dataset.ready = `${state.active?.country}|${state.active?.priceLevel}`;
-    box.innerHTML = `<label class="adj-cat-row adj-cat-all adj-scope-all"><input type="checkbox" data-all-countries><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name">All countries</span><span class="cat-count" id="adjScopeCount"></span></label>`
-      + `<div class="adj-scope-grid">${(state.countries || []).map(country => `<label class="adj-cat-row adj-scope-country${country === state.active?.country ? ' checked' : ''}"><input type="checkbox" value="${escapeHtml(country)}"${country === state.active?.country ? ' checked' : ''}><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name" title="${escapeHtml(country)}">${escapeHtml(country)}</span></label>`).join('')}</div>`;
+    const customers = (masterlistLevels().find(entry => sameText(entry.level, state.active?.priceLevel))?.customers || []).map(view => view.country);
+    box.innerHTML = `<label class="adj-cat-row adj-cat-all adj-scope-all"><input type="checkbox" data-all-countries><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name">All ${escapeHtml(state.active?.priceLevel || '')} customers</span><span class="cat-count" id="adjScopeCount"></span></label>`
+      + `<div class="adj-scope-grid">${customers.map(country => `<label class="adj-cat-row adj-scope-country${country === state.active?.country ? ' checked' : ''}"><input type="checkbox" value="${escapeHtml(country)}"${country === state.active?.country ? ' checked' : ''}><span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="cat-name" title="${escapeHtml(country)}">${escapeHtml(country)}</span></label>`).join('')}</div>`;
     syncScopeCountries();
   }
   $('#adjScopeSelect')?.addEventListener('change', renderScopeCountries);
@@ -4955,14 +5429,13 @@
     if ($('#adjScope')?.hidden || !inMasterlistFile(active)) return null;
     const value = $('#adjScopeSelect').value;
     if (value === 'level') return { countries: [], levels: [active.priceLevel] };
-    if (value === 'country') return { countries: [active.country], levels: [] };
     if (value === 'all') return { countries: [], levels: [] };
     if (value === 'pick') return { countries: [...$$('#adjScopeCountries .adj-scope-country input:checked')].map(input => input.value), levels: [active.priceLevel] };
     return null;
   }
   /** A % for many lists: kept with the masterlist file (shown in every list it covers) until saved. */
   function applyScopedAdjustment(scope, value, selectedCats, allCategories) {
-    if (scope.countries && !scope.countries.length && $('#adjScopeSelect').value === 'pick') return toast('Pick at least one country.');
+    if (scope.countries && !scope.countries.length && $('#adjScopeSelect').value === 'pick') return toast('Pick at least one customer.');
     const isAll = selectedCats.length === allCategories.length;
     const entry = { countries: scope.countries, levels: scope.levels, categories: isAll ? [] : selectedCats, percent: value };
     const pending = masterlistPending();
@@ -5240,8 +5713,8 @@
     toast(`${button.dataset.lockReason || 'Only approved price lists can be exported'}.`);
     return true;
   }
-  $('#excelButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) requestExport('excel'); });
-  $('#pdfButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) requestExport('pdf'); });
+  $('#excelButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) openExportDialog('excel'); });
+  $('#pdfButton').addEventListener('click', event => { closeExportMenu(); if (!lockedExport(event.currentTarget)) openExportDialog('pdf'); });
 
   // --- Export menu: one "Export" button opens Excel / PDF ---
   function closeExportMenu(refocus = false) {
@@ -5696,7 +6169,7 @@
       ? `<p class="review-note is-rejected">Rejected by ${escapeHtml(change.rejectedBy || 'an approver')}${change.rejectionRemarks ? `: “${escapeHtml(change.rejectionRemarks)}”` : ''}</p>` : '';
     const listPrices = batch.lists.reduce((sum, list) => sum + list.edits.length, 0);
     const stat = (value, label) => `<div class="review-stat"><strong>${value}</strong><span>${label}</span></div>`;
-    const stats = `<div class="review-stats">${stat(batch.baseEdits.length, 'standard prices')}${stat(batch.ruleOps.length, '% changes')}${stat(listPrices, `prices in ${batch.lists.length} countr${batch.lists.length === 1 ? 'y' : 'ies'}`)}</div>`;
+    const stats = `<div class="review-stats">${stat(batch.baseEdits.length, 'standard prices')}${stat(batch.ruleOps.length, '% changes')}${stat(listPrices, `prices in ${batch.lists.length} list${batch.lists.length === 1 ? '' : 's'}`)}</div>`;
     const table = (title, note, edits) => {
       const diff = compareMasterlistEdits({ headers: [], rows: [], masterlistEdits: edits });
       return `<section class="review-section"><h3>${escapeHtml(title)} <small>${escapeHtml(note)}</small></h3>
@@ -5707,9 +6180,9 @@
     };
     const rules = batch.ruleOps.length ? `<section class="review-section"><h3>% changes <small>every price there moves by this %</small></h3><div class="review-chips">${batch.ruleOps.map(op => `<span class="adj-chip ${op.percent > 0 ? 'up' : 'down'}">${escapeHtml(op.label)} <b>${op.percent > 0 ? '▲ +' : '▼ '}${op.percent}%</b></span>`).join('')}</div></section>` : '';
     return status + stats
-      + (batch.baseEdits.length ? table('Standard prices', 'every country and price level follows these', batch.baseEdits) : '')
+      + (batch.baseEdits.length ? table('Standard prices', 'every price level and customer follows these', batch.baseEdits) : '')
       + rules
-      + batch.lists.map(list => table(`${list.country} · ${list.priceLevel}`, 'prices set by hand', list.edits)).join('');
+      + batch.lists.map(list => table(list.country ? `${list.country} · ${list.priceLevel}` : `${list.priceLevel} · all customers`, list.country ? 'prices just for this customer' : 'the level’s prices', list.edits)).join('');
   }
   function reviewMarkup(change, diff, base) {
     if (change.kind === 'batch') return batchReviewMarkup(change);
@@ -5803,7 +6276,7 @@
         if (!set || !td) return;
         td.classList.add('is-own-price');
         td.classList.toggle('is-own-stale', Boolean(mark.baseChanged));
-        td.title = `Set by hand for this country${mark.setBy ? ` by ${mark.setBy}` : ''}${mark.setAt ? ` · ${displayDate(mark.setAt)}` : ''}. The standard price would be ${isNumeric(rule) ? money.format(numeric(rule)) : '—'}.${mark.baseChanged ? ' The standard price changed since.' : ''}`;
+        td.title = `Set just for ${isLevelView(state.active) ? `this price level (all its customers)` : `this customer`}${mark.setBy ? ` by ${mark.setBy}` : ''}${mark.setAt ? ` · ${displayDate(mark.setAt)}` : ''}. Without it, the price would be ${isNumeric(rule) ? money.format(numeric(rule)) : '—'}.${mark.baseChanged ? ' The standard price changed since.' : ''}`;
       });
     });
   }
@@ -5843,7 +6316,7 @@
     } else if (action === 'approve' || action === 'reject') {
       openDecisionDialog(action, id);
     } else if (action === 'export-excel' || action === 'export-pdf') {
-      await requestExport(action === 'export-pdf' ? 'pdf' : 'excel', id);
+      openExportDialog(action === 'export-pdf' ? 'pdf' : 'excel', id);
     } else if (action === 'delete') {
       if (!version.canDelete) return toast('Approved price lists are kept as the record of published prices.');
       const withdraw = version.status === 'pending';
@@ -5971,6 +6444,7 @@
   // The editor has no menu tab of its own: it opens from Files, like a workbook from Excel's start
   // screen, at files.php?list=<id> (prices.php still works and opens the last list).
   const PANEL_PAGES = {
+    dashboardPanel: 'dashboard.php',
     workspacePanel: 'files.php',
     filesPanel: 'files.php',
     historyPanel: 'audit_logs.php',
@@ -6031,6 +6505,7 @@
     if (finalPanelId === 'historyPanel') { renderHistory(); loadAuditLogs(); }
     if (finalPanelId === 'listsPanel') renderLists();
     if (finalPanelId === 'filesPanel') renderFiles();
+    if (finalPanelId === 'dashboardPanel') loadDashboard();
 
     // Show the page's own address, so a refresh or bookmark opens this page (and this list), and the
     // browser's Back button steps between Files and the editor.
@@ -6068,11 +6543,11 @@
   $('.topbar .brand')?.addEventListener('click', event => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    if (!$('#filesPanel')?.hidden) {
-      $('#filesPanel .history-table-frame')?.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+    if (!$('#dashboardPanel')?.hidden) {
+      $('#dashboardPanel')?.scrollTo?.({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
       return;
     }
-    switchPanel('filesPanel', true);
+    switchPanel('dashboardPanel', true);
   });
   /** The editor opens out of the sheet you clicked: its outline grows from that sheet to the full page. */
   function unfoldEditor(rect) {
@@ -7262,7 +7737,7 @@
   const CONFIG_SECTIONS = {
     library: { title: 'Photo library', subtitle: 'Category folders of product photos, ready to pick for each product type.', card: '#libraryCard' },
     types: { title: 'Product type photos', subtitle: 'The photo shown for each product type in the price list and the PDF.', card: '#typesCard' },
-    lists: { title: 'Countries & price levels', subtitle: 'The choices offered when uploading and saving price lists.', card: '#listsCard' },
+    lists: { title: 'Customers & price levels', subtitle: 'Every customer buys at one price level, and shares its prices.', card: '#listsCard' },
   };
   function switchConfigTab(tab) {
     if (!CONFIG_SECTIONS[tab]) tab = 'library';
@@ -7373,7 +7848,12 @@
   // Countries are floating tiles, each tinted with its own color (from the name).
   const countryHue = name => [...name].reduce((hue, char) => (hue * 31 + char.charCodeAt(0)) % 360, 7);
   const optionSwitch = item => `<button type="button" class="option-toggle" role="switch" aria-checked="${item.active}" data-option-action="toggle" aria-label="${item.active ? 'Switch off' : 'Switch on'} ${escapeHtml(item.name)}" title="${item.active ? 'Offered for new price lists. Click to switch off.' : 'Switched off. Click to offer it again.'}">${SWITCH_PARTS}</button>`;
-  const optionUsage = item => `<span class="option-usage ${item.usedBy > 0 ? 'is-used' : ''}">${item.usedBy > 0 ? `${item.usedBy} list${item.usedBy === 1 ? '' : 's'}` : 'Not used'}</span>`;
+  const optionUsage = item => {
+    // A price level is in use by its customers (and by prices set for it).
+    const customers = Number(item.customers || 0);
+    const used = customers > 0 || item.usedBy > 0;
+    return `<span class="option-usage ${used ? 'is-used' : ''}">${customers ? `${customers} customer${customers === 1 ? '' : 's'}` : item.usedBy > 0 ? `${item.usedBy} list${item.usedBy === 1 ? '' : 's'}` : 'No customers'}</span>`;
+  };
   function optionText(item, levels, editing) {
     const used = item.usedBy > 0;
     return editing
@@ -7394,16 +7874,33 @@
   const flagMarkup = (name, code) => code
     ? `<img src="../assets/flags/${code}.svg" alt="" loading="lazy">`
     : `<span class="flag-fallback" style="--tile-hue: ${countryHue(name)}">${escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase())}</span>`;
+  /** The price level names from Config, in their order. */
+  const configLevelNames = () => (state.listOptions?.priceLevels || []).map(level => level.name);
+  // Customers (the 'countries' list) are cards: a tile with their initials, the name, and the price
+  // level they buy at, which can be changed right there.
   function countryCard(item, index) {
     const name = escapeHtml(item.name);
-    const code = countryCodeOf(item.name);
     const used = item.usedBy > 0;
-    const uses = `${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}`;
-    return `<div class="option-row country-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" ${used ? `title="Used by ${uses}, so it stays"` : ''}>
-      <span class="country-flag" aria-hidden="true">${flagMarkup(item.name, code)}</span>
-      <span class="country-text"><strong title="${name}">${name}</strong><small>${code ? code.toUpperCase() : 'No flag'}${used ? ` · <em>${uses}</em>` : ''}</small></span>
+    const uses = `${item.usedBy} price setting${item.usedBy === 1 ? '' : 's'}`;
+    const levels = configLevelNames();
+    return `<div class="option-row country-card customer-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" ${used ? `title="Has prices or % changes of its own, so it stays"` : ''}>
+      <span class="country-flag" aria-hidden="true">${flagMarkup(item.name, '')}</span>
+      <span class="country-text"><strong title="${name}">${name}</strong>
+        <span class="customer-level ${item.level ? '' : 'is-missing'}"><select data-option-change="level" aria-label="Price level of ${name}">${item.level ? '' : '<option value="" selected>Choose price level…</option>'}${levels.map(level => `<option value="${escapeHtml(level)}"${level === item.level ? ' selected' : ''}>${escapeHtml(level)}</option>`).join('')}</select></span>
+        ${used ? `<small><em>${uses}</em></small>` : ''}</span>
       ${used ? '' : `<button type="button" class="country-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
     </div>`;
+  }
+  /** "All 42" and one tab per price level with its customer count. */
+  function renderCustomerTabs(items) {
+    const box = $('#customerTabs');
+    if (!box) return;
+    const levels = configLevelNames();
+    if (countryView.tab !== 'all' && !levels.includes(countryView.tab)) countryView.tab = 'all';
+    const tab = (value, label, count) => `<button type="button" class="country-tab ${countryView.tab === value ? 'is-active' : ''}" data-country-tab="${escapeHtml(value)}" role="tab" aria-selected="${countryView.tab === value}">${escapeHtml(label)} <span class="country-tab-count">${count}</span></button>`;
+    const missing = items.filter(item => !item.level).length;
+    box.innerHTML = tab('all', 'All', items.length) + levels.map(level => tab(level, level, items.filter(item => item.level === level).length)).join('')
+      + (missing ? tab('', 'No price level', missing) : '');
   }
   // Price levels are a ladder: numbered rungs in a straight column, in the order the dropdowns show them.
   function levelStep(item, index, count, editing) {
@@ -7423,32 +7920,44 @@
     $$('#listsCard .option-list').forEach(section => {
       const type = section.dataset.optionType;
       const items = options[type] || [];
-      const countries = type === 'countries';
+      const countries = type === 'countries'; // the customers
       const off = countries ? 0 : items.filter(item => !item.active).length;
-      section.querySelector('[data-option-summary]').textContent = `${items.length} ${countries ? 'countr' + (items.length === 1 ? 'y' : 'ies') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
+      section.querySelector('[data-option-summary]').textContent = `${items.length} ${countries ? 'customer' + (items.length === 1 ? '' : 's') : 'level' + (items.length === 1 ? '' : 's')}${off ? ` · ${off} switched off` : ''}`;
       const query = (optionSearch[type] || '').trim().toLowerCase();
       const rows = section.querySelector('[data-option-rows]');
+      if (countries) renderCustomerTabs(items);
       const visible = items.map((item, index) => ({ item, index })).filter(({ item }) =>
-        (!query || item.name.toLowerCase().includes(query) || countryCodeOf(item.name) === query) &&
-        (!countries || countryView.tab !== 'used' || item.usedBy > 0));
+        (!query || item.name.toLowerCase().includes(query) || (countries && String(item.level || '').toLowerCase().includes(query))) &&
+        (!countries || countryView.tab === 'all' || (item.level || '') === countryView.tab));
       flipMove(rows, () => {
         rows.innerHTML = (countries
           ? visible.map(({ item, index }) => countryCard(item, index)).join('')
           : visible.map(({ item, index }) => levelStep(item, index, items.length, optionEditing === `${type}|${index}`)).join(''))
-          || `<p class="option-empty">${query ? 'No matches.' : countries && countryView.tab === 'used' ? 'No country is used by a price list yet.' : 'Nothing here yet.'}</p>`;
+          || `<p class="option-empty">${query ? 'No matches.' : 'Nothing here yet.'}</p>`;
       });
       if (countries) {
         const showing = section.querySelector('[data-country-showing]');
-        if (showing) showing.textContent = visible.length === items.length ? `${items.length} countr${items.length === 1 ? 'y' : 'ies'}` : `Showing ${visible.length} of ${items.length} countries`;
+        if (showing) showing.textContent = visible.length === items.length ? `${items.length} customer${items.length === 1 ? '' : 's'}` : `Showing ${visible.length} of ${items.length} customers`;
+        // The add form offers the price levels, starting at the tab you are on.
+        const addLevel = $('#countryAddLevel');
+        if (addLevel && document.activeElement !== addLevel) {
+          const keep = addLevel.value || (countryView.tab !== 'all' ? countryView.tab : '');
+          addLevel.innerHTML = `<option value="">Price level…</option>` + configLevelNames().map(level => `<option value="${escapeHtml(level)}"${level === keep ? ' selected' : ''}>${escapeHtml(level)}</option>`).join('');
+        }
       }
       if (optionEditing?.startsWith(`${type}|`)) requestAnimationFrame(() => { const input = rows.querySelector('.is-editing input:not([disabled])'); input?.focus(); input?.select(); });
     });
   }
   async function saveListOptions(type, items, message, trash) {
-    // Countries have no on/off any more: every country in the list is offered.
-    const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active }) => ({ name, description, active: type === 'countries' ? true : active })) }) });
+    // Customers have no on/off: every customer in the list is offered. Each has its price level.
+    const data = await api('list-options', { method: 'POST', body: JSON.stringify({ type, items: items.map(({ name, description, active, level }) => (type === 'countries' ? { name, description, active: true, level } : { name, description, active })) }) });
     state.listOptions = { ...state.listOptions, [type]: data.items };
-    if (type === 'countries') state.countries = data.active; else state.priceLevels = data.active;
+    if (type === 'countries') {
+      state.countries = data.active;
+      state.customerLevels = Object.fromEntries(data.items.filter(item => item.level).map(item => [item.name, item.level]));
+    } else state.priceLevels = data.active;
+    // Price levels and customers are views of the price list: its switcher and Files card follow.
+    refreshState().catch(() => { });
     if (type === 'priceLevels') state.priceLevelInfo = data.items.map(({ name, description }) => ({ name, description }));
     optionEditing = null;
     renderListOptions();
@@ -7488,25 +7997,36 @@
       return changeListOptions(section, items => { items[index] = { ...items[index], name, description }; }, `${name} saved.`);
     }
   });
+  // A customer's price level, changed on its card.
+  $('#listsCard')?.addEventListener('change', event => {
+    const select = event.target.closest('[data-option-change="level"]');
+    if (!select || !select.value) return;
+    const section = select.closest('.option-list');
+    const index = Number(select.closest('.option-row').dataset.index);
+    const item = state.listOptions.countries[index];
+    if (!item || item.level === select.value) return;
+    changeListOptions(section, items => { items[index].level = select.value; },
+      `${item.name} now buys at ${select.value}.${item.usedBy > 0 && item.level ? ` Prices set just for ${item.name} on ${item.level} stay there.` : ''}`);
+  });
   $('#listsCard')?.addEventListener('keydown', event => {
     if (!event.target.closest('.option-row.is-editing')) return;
     if (event.key === 'Enter') { event.preventDefault(); event.target.closest('.option-row').querySelector('[data-option-action="save"]').click(); }
     if (event.key === 'Escape') { event.preventDefault(); optionEditing = null; renderListOptions(); }
   });
-  // --- Countries: tabs and the "Add country" row (suggests names and shows the flag). ---
-  $$('#listsCard [data-country-tab]').forEach(tab => tab.addEventListener('click', () => {
+  // --- Customers: a tab per price level, and the "Add customer" row (name + price level). ---
+  $('#customerTabs')?.addEventListener('click', event => {
+    const tab = event.target.closest('[data-country-tab]');
+    if (!tab) return;
     countryView.tab = tab.dataset.countryTab;
-    $$('#listsCard [data-country-tab]').forEach(other => { other.classList.toggle('is-active', other === tab); other.setAttribute('aria-selected', String(other === tab)); });
     renderListOptions();
-  }));
+  });
   const countryAddForm = $('#countryAddForm');
   function setCountryAdd(open) {
     if (!countryAddForm) return;
     countryAddForm.hidden = !open;
     $('#countryAddToggle')?.setAttribute('aria-expanded', String(open));
     if (open) {
-      const list = $('#countryNameList');
-      if (list && !list.childElementCount) list.innerHTML = [...COUNTRY_LOOKUP.values()].map(({ name }) => `<option value="${escapeHtml(name)}"></option>`).join('');
+      if ($('#countryAddLevel') && countryView.tab !== 'all') $('#countryAddLevel').value = countryView.tab;
       countryAddForm.querySelector('input').focus();
     } else {
       countryAddForm.querySelector('input').value = '';
@@ -7516,9 +8036,8 @@
   function showCountryAddFlag(name) {
     const holder = $('#countryAddFlag');
     if (!holder) return;
-    const code = countryCodeOf(name);
-    holder.innerHTML = code ? `<img src="../assets/flags/${code}.svg" alt="">` : '';
-    holder.classList.toggle('has-flag', Boolean(code));
+    holder.innerHTML = name.trim() ? flagMarkup(name.trim(), '') : '';
+    holder.classList.toggle('has-flag', Boolean(name.trim()));
   }
   $('#countryAddToggle')?.addEventListener('click', () => setCountryAdd(countryAddForm.hidden));
   $('#countryAddClose')?.addEventListener('click', () => setCountryAdd(false));
@@ -7530,16 +8049,17 @@
     let name = input.value.trim().replace(/\s+/g, ' ');
     if (!name) return;
     const section = form.closest('.option-list');
-    // A known country is saved with its usual spelling (so "japan" becomes "Japan" and gets its flag).
-    if (section.dataset.optionType === 'countries') name = COUNTRY_LOOKUP.get(name.toLowerCase())?.name || name;
+    const customer = section.dataset.optionType === 'countries';
+    const level = customer ? $('#countryAddLevel')?.value || '' : '';
+    if (customer && !level) return toast(`Choose the price level ${name} buys at.`);
     if ((state.listOptions[section.dataset.optionType] || []).some(item => item.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already in the list.`);
     await changeListOptions(section, items => {
-      if (section.dataset.optionType === 'countries') {
-        // Countries stay alphabetical; price levels keep the order you set.
-        items.push({ name, description: '', active: true, usedBy: 0 });
+      if (customer) {
+        // Customers stay alphabetical; price levels keep the order you set.
+        items.push({ name, description: '', active: true, usedBy: 0, level });
         items.sort((a, b) => a.name.localeCompare(b.name));
       } else items.push({ name, description: '', active: true, usedBy: 0 });
-    }, `${name} added.`);
+    }, customer ? `${name} added (${level}).` : `${name} added.`);
     input.value = '';
     if (form === countryAddForm) { showCountryAddFlag(''); input.focus(); } // stays open to add another
   }));
