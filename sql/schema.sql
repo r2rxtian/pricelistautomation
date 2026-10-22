@@ -87,17 +87,7 @@ GO
 -- ============================================================
 -- Storage: product photos
 -- ============================================================
-IF OBJECT_ID(N'dbo.PLA_ProductImages', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.PLA_ProductImages (
-        product_code nvarchar(100) NOT NULL PRIMARY KEY,
-        image_path nvarchar(500) NOT NULL,
-        alt_text nvarchar(250) NULL,
-        updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ImageUpdated DEFAULT SYSUTCDATETIME(),
-        updated_by nvarchar(180) NOT NULL
-    );
-END;
-GO
+-- (PLA_ProductImages, a per-product photo table, was never used and was removed on 2026-10-22.)
 
 IF OBJECT_ID(N'dbo.PLA_GroupImages', N'U') IS NULL
 BEGIN
@@ -150,20 +140,8 @@ BEGIN
 END;
 GO
 
--- Country and price level lists (Config › Countries & price levels). Empty = the defaults in
--- rules/constants.php. Inactive entries stay valid for existing price lists only.
-IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.PLA_ListOptions (
-        option_type varchar(20) NOT NULL,       -- 'countries' or 'priceLevels'
-        option_name nvarchar(120) NOT NULL,
-        description nvarchar(300) NULL,
-        is_active bit NOT NULL CONSTRAINT DF_PLA_ListOptionActive DEFAULT 1,
-        sort_order int NOT NULL,
-        CONSTRAINT PK_PLA_ListOptions PRIMARY KEY (option_type, option_name)
-    );
-END;
-GO
+-- (PLA_ListOptions, the first shared list of countries and price levels, was replaced by PLA_Countries
+-- and PLA_PriceLevels below and removed on 2026-10-22.)
 
 -- Search keywords (Config): admin shortcuts for a product group or one product code.
 IF OBJECT_ID(N'dbo.PLA_SearchKeywords', N'U') IS NULL
@@ -239,8 +217,8 @@ GO
 -- for it there (PLA_PriceOverrides), otherwise the base price × every matching % rule (PLA_PriceRules).
 -- ============================================================
 
--- Countries and price levels (Config). They replace PLA_ListOptions, which is copied in once and then
--- no longer used. Ids are kept when the lists are edited, so prices stay attached.
+-- Customers (PLA_Countries keeps its first name; see CUSTOMERS in rules/constants.php) and price levels
+-- (Config). Ids are kept when the lists are edited, so prices stay attached.
 IF OBJECT_ID(N'dbo.PLA_Countries', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PLA_Countries (

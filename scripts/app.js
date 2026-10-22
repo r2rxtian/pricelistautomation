@@ -3497,11 +3497,37 @@
   }
   function setMlFile(file) {
     if (!file) return;
-    if (!/\.xlsx$/i.test(file.name)) return toast('Choose an official .xlsx workbook.');
+    if (!/\.xlsx$/i.test(file.name)) {
+      // Said in the window itself (a toast is easy to miss), with how to fix it.
+      const type = (file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+      mlUpload.file = null;
+      renderMlChoose();
+      return showMlErrors(Object.assign(new Error(`“${file.name}” is not an .xlsx workbook${type ? ` (it is ${type})` : ''}.`), {
+        problems: ['Open it in Excel, choose File › Save As › “Excel Workbook (*.xlsx)”, then choose the saved copy here.'],
+      }));
+    }
     mlUpload.file = file;
     $('#mlUploadErrors').hidden = true;
     renderMlChoose();
   }
+  // A workbook dropped anywhere on the Files page opens the upload window with it.
+  $('#filesPanel')?.addEventListener('dragover', event => {
+    if (!can('upload') || !event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    $('#filesPanel').classList.add('is-file-over');
+  });
+  $('#filesPanel')?.addEventListener('dragleave', event => {
+    if (!$('#filesPanel').contains(event.relatedTarget)) $('#filesPanel').classList.remove('is-file-over');
+  });
+  $('#filesPanel')?.addEventListener('drop', event => {
+    $('#filesPanel').classList.remove('is-file-over');
+    const file = event.dataTransfer?.files?.[0];
+    if (!file || !can('upload')) return;
+    event.preventDefault();
+    const card = event.target.closest?.('.mf-card');
+    openMasterlistUpload({ target: card?.dataset.key || null });
+    setMlFile(file);
+  });
   async function sendMlUpload(confirm = '') {
     const form = new FormData();
     if (confirm) form.append('confirm', confirm);
@@ -5428,7 +5454,9 @@
     const active = state.active;
     if ($('#adjScope')?.hidden || !inMasterlistFile(active)) return null;
     const value = $('#adjScopeSelect').value;
-    if (value === 'level') return { countries: [], levels: [active.priceLevel] };
+    // On a price level's own file, its % is for every customer on it: kept as such, so each customer's
+    // view shows it before saving too.
+    if (value === 'level' || (value === 'list' && isLevelView(active))) return { countries: [], levels: [active.priceLevel] };
     if (value === 'all') return { countries: [], levels: [] };
     if (value === 'pick') return { countries: [...$$('#adjScopeCountries .adj-scope-country input:checked')].map(input => input.value), levels: [active.priceLevel] };
     return null;

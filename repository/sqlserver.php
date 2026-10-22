@@ -50,14 +50,6 @@ function ensure_database_schema(PDO $connection): void
          ALTER TABLE dbo.PLA_Versions ADD saved_by_user nvarchar(120) NULL",
         "IF COL_LENGTH('dbo.PLA_Versions', 'summary_json') IS NULL
          ALTER TABLE dbo.PLA_Versions ADD summary_json nvarchar(max) NULL",
-        "IF OBJECT_ID(N'dbo.PLA_ProductImages', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ProductImages (
-            product_code nvarchar(100) NOT NULL PRIMARY KEY,
-            image_path nvarchar(500) NOT NULL,
-            alt_text nvarchar(250) NULL,
-            updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_ImageUpdated DEFAULT SYSUTCDATETIME(),
-            updated_by nvarchar(180) NOT NULL
-         )",
         "IF OBJECT_ID(N'dbo.PLA_GroupImages', N'U') IS NULL
          CREATE TABLE dbo.PLA_GroupImages (
             image_key varchar(64) NOT NULL PRIMARY KEY,
@@ -131,18 +123,10 @@ function ensure_database_schema(PDO $connection): void
             updated_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_SearchKeywordsUpdated DEFAULT SYSUTCDATETIME(),
             updated_by nvarchar(180) NOT NULL
          )",
-        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NULL
-         CREATE TABLE dbo.PLA_ListOptions (
-            option_type varchar(20) NOT NULL,
-            option_name nvarchar(120) NOT NULL,
-            description nvarchar(300) NULL,
-            is_active bit NOT NULL CONSTRAINT DF_PLA_ListOptionActive DEFAULT 1,
-            sort_order int NOT NULL,
-            CONSTRAINT PK_PLA_ListOptions PRIMARY KEY (option_type, option_name)
-         )",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_Notifications_Recipient')
          CREATE INDEX IX_PLA_Notifications_Recipient ON dbo.PLA_Notifications (recipient, created_at DESC)",
-        // Countries and price levels (Config). Ids are kept, so masterlist prices stay attached.
+        // Customers (this table keeps its first name, PLA_Countries) and price levels (Config). Ids are
+        // kept when the lists are edited, so prices stay attached.
         "IF OBJECT_ID(N'dbo.PLA_Countries', N'U') IS NULL
          CREATE TABLE dbo.PLA_Countries (
             country_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
@@ -161,14 +145,8 @@ function ensure_database_schema(PDO $connection): void
             sort_order int NOT NULL CONSTRAINT DF_PLA_PriceLevels_sort DEFAULT 0,
             created_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_PriceLevels_created DEFAULT SYSUTCDATETIME()
          )",
-        // Carry over what Config had in the older shared list table (once, while the new tables are empty).
-        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.PLA_Countries)
-         INSERT INTO dbo.PLA_Countries (name, description, is_active, sort_order)
-         SELECT option_name, description, is_active, sort_order FROM dbo.PLA_ListOptions WHERE option_type = 'countries'",
-        "IF OBJECT_ID(N'dbo.PLA_ListOptions', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.PLA_PriceLevels)
-         INSERT INTO dbo.PLA_PriceLevels (name, description, is_active, sort_order)
-         SELECT option_name, description, is_active, sort_order FROM dbo.PLA_ListOptions WHERE option_type = 'priceLevels'",
-        // The price masterlist: one row per product (LRN code) with its base prices.
+        // The product list (in the background): one row per product (LRN code), linking it across the price
+        // levels' files. Its base prices are only a reference for % rules; each level's prices are its file's.
         "IF OBJECT_ID(N'dbo.PLA_Products', N'U') IS NULL
          CREATE TABLE dbo.PLA_Products (
             product_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,

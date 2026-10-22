@@ -12255,3 +12255,5 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 .mf-match { margin: 2px 0 0; color: var(--level); font-size: 0.74rem; font-weight: 700; }
 [data-theme="dark"] .mf-search { border-color: #2c2f37; background: #1b1c21; }
 @media (max-width: 760px) { .mf-head-tools { flex-direction: column; align-items: stretch; } .mf-search { width: auto; } }
+/* Files: a workbook dragged over the page (dropping it opens the upload window with it). */
+#filesPanel.is-file-over .history-card { outline: 2px dashed var(--pink); outline-offset: -6px; background: color-mix(in srgb, var(--pink) 4%, transparent); }

@@ -256,7 +256,7 @@ function masterlist_db_compose_rule(PDO $connection, array $op, string $by): arr
     $scaleParams = [$factor, $factor];
     if ($op['countryId'] !== null) { $scope[] = 'o.country_id = ?'; $scaleParams[] = $op['countryId']; }
     if ($op['levelId'] !== null) { $scope[] = 'o.price_level_id = ?'; $scaleParams[] = $op['levelId']; }
-    if ($op['category'] !== null) { $scope[] = 'p.category = ?'; $scaleParams[] = $op['category']; }
+    if ($op['category'] !== null) { $scope[] = "COALESCE(JSON_VALUE(o.row_json, '$[0]'), p.category) = ?"; $scaleParams[] = $op['category']; }
     $connection->prepare(
         'UPDATE o SET price_pc = ROUND(o.price_pc * ?, 4), price_box = ROUND(o.price_box * ?, 4)
          FROM dbo.PLA_PriceOverrides o JOIN dbo.PLA_Products p ON p.product_id = o.product_id WHERE ' . implode(' AND ', $scope)

@@ -555,10 +555,17 @@ function masterlist_build_batch(array $input): array
         $live = masterlist_list_version($pair[0], $pair[1]);
         if (!$live) return $fail('One of the lists is no longer in Config (customer or price level), or the customer moved to another price level. Refresh and try again.');
         $lists[] = ['pair' => $pair, 'live' => $live, 'rows' => $clean($draft['rows'])];
-        foreach (array_unique(array_map(fn($row) => (string) $row[0], $live['rows'])) as $category) {
-            $percent = $rate($draft, $category);
-            // A % on a price level (customer 0) is for every customer on it.
-            if ($percent !== 0.0) $ops[] = ['countryId' => $pair[0] ?: null, 'levelId' => $pair[1], 'category' => $category, 'percent' => round($percent, 4)];
+        // A % on a price level (customer 0) is for every customer on it. One % for the whole list is one
+        // change (not one per category); a % per category is one change per category.
+        $categories = array_values(array_unique(array_map(fn($row) => (string) $row[0], $live['rows'])));
+        $percents = array_map(fn($category) => round($rate($draft, $category), 4), $categories);
+        $whole = (float) ($draft['adjustment'] ?? 0);
+        if ($whole !== 0.0 && count(array_unique($percents)) === 1 && $percents[0] === round($whole, 4)) {
+            $ops[] = ['countryId' => $pair[0] ?: null, 'levelId' => $pair[1], 'category' => null, 'percent' => round($whole, 4)];
+        } else {
+            foreach ($categories as $i => $category) {
+                if ($percents[$i] !== 0.0) $ops[] = ['countryId' => $pair[0] ?: null, 'levelId' => $pair[1], 'category' => $category, 'percent' => $percents[$i]];
+            }
         }
     }
     foreach (array_slice(is_array($input['scoped'] ?? null) ? $input['scoped'] : [], 0, 200) as $entry) {
