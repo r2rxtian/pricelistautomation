@@ -949,6 +949,8 @@
     let remembered = rememberedId ? versionSummaryById(rememberedId) : null;
     // Reopen the current revision rather than one that has since been replaced.
     if (remembered?.status === 'superseded') remembered = liveRevisionOf(remembered) || remembered;
+    // A saved price change of the price list is not a file to reopen (it has no rows of its own).
+    if (remembered && ['batch', 'rules'].includes(remembered.kind) && remembered.source !== 'masterlist') remembered = null;
     const rememberedList = remembered || legacyDraft;
     if (!skipDraftCheck && can('update') && rememberedList) {
       const draft = await getDraft(draftKey(rememberedList)); // its unsaved changes, if any
@@ -971,6 +973,12 @@
    */
   async function openVersion(id, { silent = false, stay = false, preloaded = null } = {}) {
     const summary = versionSummaryById(id);
+    // A saved price change of the price list has no rows of its own: never open it as a file (it would
+    // show "Not set › Not set" and no products). Show what it changed instead.
+    if (summary && ['batch', 'rules'].includes(summary.kind) && summary.source !== 'masterlist') {
+      if (!silent) openChangeReview(id);
+      throw new Error('That is a saved price change, not a price list.');
+    }
     const sameList = Boolean(summary && state.active && tabKeyOf(summary) === tabKeyOf(state.active));
     if (sameList && String(state.active.id || '') === String(id)) {
       if (!stay) switchPanel('workspacePanel', true); // already open (with any unsaved changes): just show it
@@ -3374,11 +3382,6 @@
       </header>
       <div class="mf-grid">${cards || '<p class="mf-empty">No price levels yet. Add them in Config › Customers &amp; price levels.</p>'}</div>
       <p class="mf-empty mf-no-match" hidden>No files match your search.</p>
-      <ol class="ml-steps" aria-label="How it works">
-        <li><b>1</b><span><strong>Upload</strong> Each price level’s workbook (or one customer’s). Choose the level first, then the customer.</span></li>
-        <li><b>2</b><span><strong>Open and change</strong> Every customer gets its level’s prices. Change them, or export them to Excel or PDF.</span></li>
-        <li><b>3</b><span><strong>Save</strong> All your changes go together for approval.</span></li>
-      </ol>
     </section>`;
     return { markup };
   }
@@ -6999,6 +7002,13 @@
     if (item.classList.contains('is-unread')) markNotificationsRead(item.dataset.id.split(',').filter(Boolean));
     // An approval request opens that list to review; an update opens the list's current prices.
     const summary = item.dataset.versionId ? versionSummaryById(item.dataset.versionId) : null;
+    // A record of the price list (a save or an upload) is not a file to open by itself: a saved change
+    // shows what it changed (with Approve when it waits for you); an upload opens the file it updated.
+    if (summary && ['batch', 'masterlist', 'list', 'rules'].includes(summary.kind) && summary.source !== 'masterlist') {
+      if (summary.source !== 'upload') return openChangeReview(summary.id);
+      const file = summary.kind === 'list' && versionSummaryById(summary.basedOn) ? summary.basedOn : null;
+      return file ? runListAction('open', file) : switchPanel('filesPanel', true);
+    }
     const target = summary ? (item.dataset.type === 'approval_request' ? summary : liveRevisionOf(summary) || summary) : null;
     if (target) {
       try { await openVersion(target.id); } catch (error) { toast(error.message); }
