@@ -289,6 +289,19 @@
     return Math.max(0, Math.round(computed * 10000) / 10000);
   }
   function isNumeric(value) { return value !== '' && value !== null && Number.isFinite(Number(String(value).replace(/,/g, ''))); }
+  /**
+   * Presentation Stands › "Total Price Based on MOQ": the Price/box shown × the MOQ quantity ("10 Sets"
+   * → 10), so it always follows the price. A MOQ without a number keeps the uploaded total, moved by the
+   * same % as the price. boxShown: the Price/box as shown (with any %), or null.
+   */
+  function moqTotal(row, boxShown) {
+    const qty = Number((String(row?.[15] ?? '').match(/\d+(?:\.\d+)?/) || [''])[0]);
+    if (boxShown !== null && Number.isFinite(boxShown) && qty > 0) return Math.round(boxShown * qty * 100) / 100;
+    if (!isNumeric(row?.[17])) return row?.[17] ?? '';
+    const stored = numeric(row[17]);
+    const raw = isNumeric(row?.[9]) ? numeric(row[9]) : 0;
+    return raw > 0 && boxShown !== null && Number.isFinite(boxShown) ? Math.round((stored * boxShown / raw) * 100) / 100 : stored;
+  }
   function numeric(value) { return Number(String(value).replace(/,/g, '')); }
   function productVisual(row) {
     const category = String(row[0] || '').toLowerCase();
@@ -1275,7 +1288,18 @@
   }
   function hasPriceAdjustments() {
     if (Number(state.adjustment || 0) !== 0) return true;
-    return Object.values(state.categoryAdjustments || {}).some(v => Number(v || 0) !== 0);
+    if (Object.values(state.categoryAdjustments || {}).some(v => Number(v || 0) !== 0)) return true;
+    return coveringScoped().length > 0;
+  }
+  /** Unsaved % changes for several lists at once (a whole level, picked customers, every level) that
+   *  cover the open list, so Reset prices can take them back too. */
+  function coveringScoped() {
+    const active = state.active;
+    if (!inMasterlistFile(active) || active.kind !== 'list') return [];
+    const categories = new Set(state.rows.map(row => String(row[0] ?? '').trim()));
+    return masterlistPending().scoped.filter(entry => (!entry.levels?.length || entry.levels.includes(active.priceLevel))
+      && (!entry.countries?.length || entry.countries.includes(active.country))
+      && (!entry.categories?.length || entry.categories.some(category => categories.has(category))));
   }
   function updateMetrics() {
     // The current adjustment shows on "Edit prices": one percentage when every category has the
@@ -1587,7 +1611,7 @@
         <td class="excel-cell" data-row="${actualIndex}" data-col="14" tabindex="0">${valueMarkup(row, 14)}</td>
         <td class="excel-cell" data-row="${actualIndex}" data-col="7" tabindex="0">${valueMarkup(row, 7)}</td>
         <td class="excel-cell" data-row="${actualIndex}" data-col="15" tabindex="0">${moq}</td>
-        <td class="excel-cell" data-row="${actualIndex}" data-col="17" tabindex="0">${valueMarkup(row, 17)}</td>
+        <td class="excel-cell is-computed" data-row="${actualIndex}" data-col="17" tabindex="0" title="Worked out: Price/box × MOQ">${(total => (isNumeric(total) ? money.format(total) : escapeHtml(total)))(moqTotal(row, isNumeric(row[9]) ? adjusted(numeric(row[9]), category) : null))}</td>
       </tr>`;
     };
 
@@ -1852,14 +1876,18 @@
     }
   }
 
-  /** A country + price level list from the masterlist only sets prices: other cells come from the masterlist. */
+  /** A price level's or customer's list only sets prices (its other cells come from the uploaded file),
+   *  and the MOQ total is always worked out from the price. */
   function cellLocked(colIdx) {
+    if (Number(colIdx) === 17) return true;
     return Boolean(state.active?.priceOnly) && !state.priceColumns.includes(Number(colIdx));
   }
   function startCellEdit(td, initialChar = null, selectAll = false) {
     if (!state.canEdit || !td || state.isEditing) return;
     if (cellLocked(td.dataset.col)) {
-      toast('Only prices can be changed here. Change descriptions and sizes in Standard prices.');
+      toast(Number(td.dataset.col) === 17
+        ? 'Total Price Based on MOQ is worked out: Price/box × MOQ. Change the price or the MOQ instead.'
+        : 'Only prices can be changed here. Descriptions, sizes and the rest come from the uploaded workbook.');
       return;
     }
     state.isEditing = true;
@@ -4936,7 +4964,7 @@
       groups.forEach((groupRows, group) => {
         if (groups.size > 1 || group !== catName) { data.push([group]); across(data.length - 1); }
         groupRows.forEach(row => data.push(isPresentation
-          ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName), price(row[9], catName), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), isNumeric(row[17]) ? Number(row[17]) : row[17]]
+          ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName), price(row[9], catName), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), moqTotal(row, isNumeric(row[9]) ? adjustedWith(rateFor(catName), numeric(row[9])) : null)]
           : [row[1], row[2], row[4], row[5], row[6], row[7], price(row[8], catName), price(row[9], catName), formatPallet(row[10]), formatPallet(row[11]), formatPallet(row[12])]));
       });
 
@@ -5161,7 +5189,7 @@
                 { content: String(row[14] ?? ''), styles: { halign: 'center' } },
                 { content: String(row[7] ?? ''), styles: { halign: 'center' } },
                 { content: moq, styles: { halign: 'center' } },
-                { content: isNumeric(row[17]) ? Number(numeric(row[17])).toFixed(2) : String(row[17] ?? ''), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal' } }
+                { content: (total => (isNumeric(total) ? Number(total).toFixed(2) : String(total ?? '')))(moqTotal(row, isNumeric(row[9]) ? adjusted(numeric(row[9]), category) : null)), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal' } }
               );
             } else {
               rowCells.push(
@@ -5578,12 +5606,14 @@
     if (scope.countries && !scope.countries.length && $('#adjScopeSelect').value === 'pick') return toast('Pick at least one customer.');
     const isAll = selectedCats.length === allCategories.length;
     const entry = { countries: scope.countries, levels: scope.levels, categories: isAll ? [] : selectedCats, percent: value };
+    // The prices on screen before the change (taken first: the pending list below is the one the prices
+    // are worked out from, so changing it changes them), so they can roll to their new values.
+    const pricesBefore = capturePrices();
     const pending = masterlistPending();
     // The same lists and categories again: the new % replaces the earlier one.
     const same = item => JSON.stringify([item.countries, item.levels, item.categories]) === JSON.stringify([entry.countries, entry.levels, entry.categories]);
     pending.scoped = pending.scoped.filter(item => !same(item));
     if (value !== 0) pending.scoped.push(entry);
-    const pricesBefore = capturePrices();
     setMasterlistPending(pending);
     updateMetrics();
     renderTable();
@@ -7138,6 +7168,10 @@
     if (!state.canEdit) return toast('You do not have permission to reset prices.');
     if (!state.active) return toast('Please upload or open a price list first.');
     if (!hasPriceAdjustments()) return toast('No price adjustments to reset (already at 0%).');
+    const shared = coveringScoped();
+    $('#resetPricesText').textContent = shared.length
+      ? `Clears the % on these prices: ${shared.map(scopedLabel).join(', ')}. ${shared.some(entry => !(entry.countries?.length === 1 && entry.countries[0] === state.active.country)) ? 'It also comes off every other list it covers.' : ''}`.trim()
+      : 'Clears every adjustment and restores the uploaded prices.';
     // A small confirm card hanging from the Reset prices button, not a full-screen modal.
     const box = dom.resetPricesButton.getBoundingClientRect();
     dom.resetPricesDialog.style.top = `${Math.round(box.bottom + 10)}px`;
@@ -7175,15 +7209,25 @@
     dom.resetPricesDialog.close();
     const previous = Object.entries(state.categoryAdjustments || {}).filter(([, v]) => Number(v) !== 0).map(([c, v]) => `${c} ${Number(v) > 0 ? '+' : ''}${v}%`);
     const pricesBefore = capturePrices();
+    const hadOwn = Number(state.adjustment || 0) !== 0 || Object.values(state.categoryAdjustments || {}).some(v => Number(v || 0) !== 0);
+    // Unsaved % changes for several lists that cover this one come off too.
+    const shared = coveringScoped();
+    if (shared.length) {
+      const pending = masterlistPending();
+      pending.scoped = pending.scoped.filter(entry => !shared.includes(entry));
+      setMasterlistPending(pending);
+    }
     state.adjustment = 0;
     state.categoryAdjustments = {};
-    if (state.active) {
+    if (state.active && hadOwn) {
       markDraft();
     }
     dom.percentage.value = 0;
     updateMetrics();
     renderTable();
     rollPrices(pricesBefore);
+    renderWorkflowState();
+    renderTabs();
     toast(state.active?.isDraft ? 'Price adjustments cleared. Other edits are kept.' : 'Prices are back to how they were when you opened the list.');
   });
 

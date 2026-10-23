@@ -12286,3 +12286,6 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 @keyframes dash-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 [data-theme="dark"] .dash-bone, [data-theme="dark"] .dash-step.is-skeleton .dash-step-riser { background-color: #26292e; }
 @media (prefers-reduced-motion: reduce) { .dash-entering .dash-step-riser, .dash-entering .dash-step-card, .dash-entering .dash-day-bar, .dash-entering .dash-attention-item, .dash-bone, .dash-day.is-skeleton .dash-day-bar { animation: none; } .dash-step-riser, .dash-day-bar { transition: none; } }
+/* Presentation Stands › Total Price Based on MOQ: worked out from the price (Price/box × MOQ), read-only. */
+#priceTable td.excel-cell.is-computed { color: var(--text-muted); font-variant-numeric: tabular-nums; cursor: default; }
+#priceTable td.excel-cell.is-computed::after { content: "="; margin-left: 5px; color: var(--text-subtle); font-size: 0.7em; font-weight: 700; opacity: .7; }

@@ -14,7 +14,10 @@ const XLSX = require(path.join(root, 'assets/vendor/xlsx.full.min.js'));
 const template = JSON.parse(fs.readFileSync(path.join(root, 'rules/price_list_template.json'), 'utf8'));
 const source = fs.readFileSync(path.join(root, 'scripts/app.js'), 'utf8');
 const downloader = source.slice(source.indexOf('  function downloadExcelTemplate() {'), source.indexOf('  /** Send the original workbook'));
-const exporter = source.slice(source.indexOf('  /** Pallet cells read'), source.indexOf('  const pdfImageCache'));
+// The export, plus the MOQ total (Price/box × MOQ) it uses, both from the same file.
+const moqStart = source.indexOf('  function moqTotal(');
+const exporter = source.slice(source.indexOf('  /** Pallet cells read'), source.indexOf('  const pdfImageCache'))
+  + source.slice(moqStart, source.indexOf('\n  }\n', moqStart) + 4);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-workbook-tests-'));
 const php = process.env.PLA_TEST_PHP || 'C:/xampp/php/php.exe';
 let captured;
@@ -197,7 +200,9 @@ async function apiChecks() {
         assert.equal(data[head + 3][0], sample[11], 'product group title row');
         assert.deepEqual(data[head + 4], [...sample.slice(0, 6), adjusted(sample[6]), adjusted(sample[7]), ...sample.slice(8, 11).map(pallet)], 'export preserves values and price adjustments');
       } else {
-        assert.deepEqual(data[head + 2], [sample[0], sample[1], sample[2], adjusted(sample[3]), adjusted(sample[4]), sample[5], sample[6], sample[7], sample[8], sample[9]], 'stand values and price adjustments');
+        // Total Price Based on MOQ = Price/box (with the %) × the MOQ quantity ('10 Sets').
+        const moqTotal = Math.round(sample[4] * 1.05 * Number(String(sample[8]).match(/\d+/)[0]) * 100) / 100;
+        assert.deepEqual(data[head + 2], [sample[0], sample[1], sample[2], adjusted(sample[3]), adjusted(sample[4]), sample[5], sample[6], sample[7], sample[8], moqTotal], 'stand values, price adjustments and the MOQ total');
       }
     });
     checks++; console.log('PASS Excel exports follow the final header template');

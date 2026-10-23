@@ -106,15 +106,25 @@ function masterlist_row(array $product, ?float $pricePc, ?float $priceBox, strin
     $row[8] = $pricePc ?? '';
     $row[9] = $priceBox ?? '';
     // The MOQ total is price/box × MOQ in the template: it moves with the price/box.
-    // (Against the Price/box the row was saved with: the level's file, or the product list.)
-    $total = $product['row'][MASTERLIST_MOQ_TOTAL_COLUMN] ?? '';
-    $savedBox = is_numeric($product['row'][9] ?? null) ? (float) $product['row'][9] : (float) ($product['priceBox'] ?? 0);
-    if (is_numeric($total) && $priceBox !== null && $savedBox > 0) {
-        $row[MASTERLIST_MOQ_TOTAL_COLUMN] = round((float) $total * $priceBox / $savedBox, 2);
-    }
+    $row[MASTERLIST_MOQ_TOTAL_COLUMN] = masterlist_moq_total($product['row'], $priceBox, $product['priceBox'] ?? null);
     $row[19] = $level;
     $row[20] = $country;
     return $row;
+}
+
+/**
+ * Presentation Stands › "Total Price Based on MOQ": Price/box × the MOQ quantity ("10 Sets" → 10). A MOQ
+ * without a number keeps the uploaded total, moved in proportion to the price (against the Price/box the
+ * row was saved with: the level's file, or the product list).
+ */
+function masterlist_moq_total(array $savedRow, ?float $priceBox, ?float $fallbackBox = null): mixed
+{
+    $total = $savedRow[MASTERLIST_MOQ_TOTAL_COLUMN] ?? '';
+    if ($priceBox !== null && preg_match('/\d+(?:\.\d+)?/', (string) ($savedRow[15] ?? ''), $m) && (float) $m[0] > 0) {
+        return round($priceBox * (float) $m[0], 2);
+    }
+    $savedBox = is_numeric($savedRow[9] ?? null) ? (float) $savedRow[9] : (float) ($fallbackBox ?? 0);
+    return is_numeric($total) && $priceBox !== null && $savedBox > 0 ? round((float) $total * $priceBox / $savedBox, 2) : $total;
 }
 
 /** A version-shaped record for the editor and export (no approvals: it is the live list). */
