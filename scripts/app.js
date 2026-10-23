@@ -2942,19 +2942,62 @@
   // level is than the cheapest one), the price ladder (one product's price in every level, on one
   // line), what needs attention, and the last 30 days of uploads, price changes and exports. ---
   const LEVEL_COLORS = ['#b52042', '#d97706', '#0f766e', '#2563eb', '#7c3aed', '#be185d', '#4d7c0f', '#0e7490'];
-  const dash = { data: null, loading: null, product: '', unit: 'pc' };
-  async function loadDashboard() {
+  const dash = { data: null, signature: '', loading: null, product: '', unit: 'pc', fetchedAt: 0, drawn: false };
+  /**
+   * Opening the Dashboard keeps what is on screen (nothing re-draws or re-animates); fresh numbers
+   * are fetched in the background and only what changed moves: a step glides to its new height, a
+   * figure counts to its new value. The entrance animation plays once, when it is first drawn.
+   */
+  async function loadDashboard({ quiet = false } = {}) {
     if (!$('#dashboardPanel')) return;
     renderDashboardHeading();
-    if (dash.data) renderDashboard(); // the last numbers at once; fresh ones follow
+    if (!dash.drawn) renderDashSkeleton();
     if (dash.loading) return dash.loading;
     dash.loading = api('dashboard').then(res => {
-      dash.data = res.dashboard;
-      if (!$('#dashboardPanel').hidden) renderDashboard();
+      const signature = JSON.stringify(res.dashboard);
+      dash.fetchedAt = Date.now();
+      if (signature !== dash.signature || !dash.drawn) {
+        dash.data = res.dashboard;
+        dash.signature = signature;
+        if (!$('#dashboardPanel').hidden || !dash.drawn) renderDashboard();
+      }
+      renderDashUpdated();
     }).catch(error => {
-      if (!dash.data) $('#dashSummary').textContent = `Could not load the dashboard: ${error.message}`;
+      if (!dash.drawn && !quiet) $('#dashSummary').textContent = `Could not load the dashboard: ${error.message}`;
     }).finally(() => { dash.loading = null; });
     return dash.loading;
+  }
+  // The 'Updated …' note keeps time while the Dashboard is open.
+  setInterval(() => { if (!$('#dashboardPanel')?.hidden) renderDashUpdated(); }, 30000);
+  // Back on the Dashboard after a while away from the window: quietly check for newer numbers.
+  window.addEventListener('focus', () => {
+    if (!$('#dashboardPanel')?.hidden && dash.drawn && Date.now() - dash.fetchedAt > 30000) loadDashboard({ quiet: true });
+  });
+  /** Sets an element's HTML only when it differs, so unchanged parts are never rebuilt (or re-animated). */
+  function setHtml(el, html) {
+    if (!el || el.__html === html) return false;
+    el.__html = html;
+    el.innerHTML = html;
+    return true;
+  }
+  /** Counts a figure such as "+9.1%" from its old value to the new one (from 0 the first time). */
+  function countTo(el, text) {
+    const match = /^([+−-]?)(\d+(?:\.\d+)?)(%?)$/.exec(text);
+    const before = Number(el.dataset.value);
+    if (!match || reducedMotion()) { el.textContent = text; el.dataset.value = match ? match[2] : ''; return; }
+    const target = Number(match[2]);
+    const decimals = (match[2].split('.')[1] || '').length;
+    const from = Number.isFinite(before) && el.dataset.value !== '' ? before : 0;
+    el.dataset.value = String(target);
+    if (from === target) { el.textContent = text; return; }
+    const start = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - start) / 700);
+      const eased = 1 - Math.pow(1 - k, 3);
+      el.textContent = `${match[1]}${(from + (target - from) * eased).toFixed(decimals)}${match[3]}`;
+      if (k < 1) requestAnimationFrame(step); else el.textContent = text;
+    };
+    requestAnimationFrame(step);
   }
   function renderDashboardHeading() {
     const hour = new Date().getHours();
@@ -2962,10 +3005,38 @@
     $('#dashGreeting').textContent = `${hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}`;
     $('#dashDate').textContent = new Intl.DateTimeFormat('en-PH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
     $('#dashUploadBtn').hidden = !can('upload');
+    renderDashUpdated();
+  }
+  /** "Updated just now": when the numbers on screen were fetched. */
+  function renderDashUpdated() {
+    const note = $('#dashUpdated');
+    if (!note) return;
+    note.hidden = !dash.fetchedAt;
+    if (dash.fetchedAt) note.textContent = `Updated ${formatRelativeTime(new Date(dash.fetchedAt).toISOString()).replace(/^just now$/i, 'just now')}`;
+  }
+  /** Before the first numbers arrive: quiet placeholder shapes where each part will be. */
+  function renderDashSkeleton() {
+    if ($('#dashStairs').childElementCount) return;
+    $('#dashStairs').innerHTML = Array.from({ length: 6 }, (_, i) => `<span class="dash-step is-skeleton" style="--lift: ${[30, 55, 80, 20, 0, 100][i]}" aria-hidden="true"><span class="dash-step-card"><span class="dash-bone is-wide"></span><span class="dash-bone is-big"></span><span class="dash-bone"></span></span><span class="dash-step-riser"></span></span>`).join('');
+    $('#dashLadder').innerHTML = '<div class="dash-ladder-skeleton" aria-hidden="true"><span class="dash-bone is-line"></span></div>';
+    $('#dashAttention').innerHTML = '<li class="dash-attention-item is-skeleton" aria-hidden="true"><span class="dash-bone is-wide"></span></li>';
+    $('#dashPulse').innerHTML = Array.from({ length: 30 }, (_, i) => `<span class="dash-day is-skeleton" style="--h: ${12 + ((i * 37) % 50)}%"><span class="dash-day-bar"></span></span>`).join('');
   }
   function renderDashboard() {
     const data = dash.data;
     if (!data) return;
+    const first = !dash.drawn;
+    const panel = $('#dashboardPanel');
+    if (first) {
+      // The entrance plays once: the steps rise and the days grow.
+      $('#dashStairs').innerHTML = '';
+      $('#dashPulse').innerHTML = '';
+      $('#dashAttention').innerHTML = '';
+      $('#dashLadder').innerHTML = '';
+      panel.classList.add('dash-entering');
+      setTimeout(() => panel.classList.remove('dash-entering'), 1600);
+    }
+    dash.drawn = true;
     renderDashboardHeading();
     const uploadedLevels = data.levels.filter(level => level.uploaded > 0).length;
     $('#dashSummary').textContent = data.levels.length
@@ -2976,32 +3047,56 @@
     renderDashAttention(data);
     renderDashPulse(data);
   }
-  /** The staircase: every level a step, raised by how much dearer it is than the cheapest level. */
+  /** The staircase: every level a step, raised by how much dearer it is than the cheapest level. Steps are
+   *  kept and updated in place, so a change glides instead of re-drawing the whole staircase. */
   function renderDashStairs(data) {
+    const box = $('#dashStairs');
     const max = Math.max(1, ...data.levels.map(level => Number(level.aboveLowest) || 0));
     const total = Math.max(1, data.products);
-    $('#dashStairs').innerHTML = data.levels.map((level, index) => {
+    const ring = 2 * Math.PI * 15;
+    const ids = data.levels.map(level => level.id).join('|');
+    if (box.dataset.ids !== ids) { box.innerHTML = ''; box.dataset.ids = ids; }
+    data.levels.forEach((level, index) => {
       const color = LEVEL_COLORS[index % LEVEL_COLORS.length];
       const has = level.uploaded > 0;
       const above = Number(level.aboveLowest);
       const lift = has && Number.isFinite(above) ? Math.round((above / max) * 100) : 0;
       const share = Math.min(1, level.uploaded / total);
-      const ring = 2 * Math.PI * 15;
       const when = level.lastChange?.at ? `${formatRelativeTime(level.lastChange.at)}${level.lastChange.by ? ` · ${level.lastChange.by}` : ''}` : 'No file yet';
       const customers = level.customers.length;
-      return `<button type="button" class="dash-step ${has ? '' : 'is-empty'}" data-open="${escapeHtml(level.id)}" style="--level: ${color}; --lift: ${lift}; --i: ${index}" title="${escapeHtml(`${level.name}: ${customers} customer${customers === 1 ? '' : 's'}${customers ? ` (${level.customers.slice(0, 8).join(', ')}${customers > 8 ? '…' : ''})` : ''}`)}">
-        <span class="dash-step-card">
-          <span class="dash-step-top">
-            <svg class="dash-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="dash-ring-track"/><circle cx="18" cy="18" r="15" class="dash-ring-fill" style="stroke-dasharray: ${(share * ring).toFixed(1)} ${ring.toFixed(1)}"/></svg>
-            <span class="dash-step-name"><strong>${escapeHtml(level.name)}</strong><small>${customers} customer${customers === 1 ? '' : 's'}</small></span>
+      let step = box.querySelector(`.dash-step[data-open="${CSS.escape(level.id)}"]`);
+      if (!step) {
+        step = document.createElement('button');
+        step.type = 'button';
+        step.className = 'dash-step';
+        step.dataset.open = level.id;
+        step.innerHTML = `<span class="dash-step-card">
+            <span class="dash-step-top">
+              <svg class="dash-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="dash-ring-track"/><circle cx="18" cy="18" r="15" class="dash-ring-fill" style="stroke-dasharray: 0 ${ring.toFixed(1)}"/></svg>
+              <span class="dash-step-name"><strong></strong><small></small></span>
+            </span>
+            <span class="dash-step-figure"></span>
+            <span class="dash-step-meta"></span>
+            <span class="dash-step-when"></span>
           </span>
-          <span class="dash-step-figure">${!has ? 'No file yet' : above === 0 ? 'Lowest' : Number.isFinite(above) && level.aboveLowest !== null ? `+${above}%` : '—'}</span>
-          <span class="dash-step-meta">${has ? `${level.uploaded.toLocaleString()} product${level.uploaded === 1 ? '' : 's'}${level.customerPrices ? ` · ${level.customerPrices} customer price${level.customerPrices === 1 ? '' : 's'}` : ''}` : 'Upload its workbook'}</span>
-          <span class="dash-step-when">${escapeHtml(when)}</span>
-        </span>
-        <span class="dash-step-riser" aria-hidden="true"></span>
-      </button>`;
-    }).join('');
+          <span class="dash-step-riser" aria-hidden="true"></span>`;
+        box.append(step);
+      }
+      step.classList.toggle('is-empty', !has);
+      step.style.setProperty('--level', color);
+      step.style.setProperty('--lift', lift);
+      step.style.setProperty('--i', index);
+      step.title = `${level.name}: ${customers} customer${customers === 1 ? '' : 's'}${customers ? ` (${level.customers.slice(0, 8).join(', ')}${customers > 8 ? '…' : ''})` : ''}`;
+      step.querySelector('.dash-step-name strong').textContent = level.name;
+      step.querySelector('.dash-step-name small').textContent = `${customers} customer${customers === 1 ? '' : 's'}`;
+      // The ring fills to how many products the level's file has (after the frame, so it can glide).
+      requestAnimationFrame(() => step.querySelector('.dash-ring-fill')?.style.setProperty('stroke-dasharray', `${(share * ring).toFixed(1)} ${ring.toFixed(1)}`));
+      const figure = step.querySelector('.dash-step-figure');
+      const text = !has ? 'No file yet' : above === 0 ? 'Lowest' : Number.isFinite(above) && level.aboveLowest !== null ? `+${above}%` : '—';
+      if (figure.dataset.text !== text) { figure.dataset.text = text; countTo(figure, text); }
+      step.querySelector('.dash-step-meta').textContent = has ? `${level.uploaded.toLocaleString()} product${level.uploaded === 1 ? '' : 's'}${level.customerPrices ? ` · ${level.customerPrices} customer price${level.customerPrices === 1 ? '' : 's'}` : ''}` : 'Upload its workbook';
+      step.querySelector('.dash-step-when').textContent = when;
+    });
   }
   /** One product on a line: a marker per level at its price, cheapest on the left. */
   function renderDashLadder(data) {
@@ -3018,7 +3113,8 @@
       const spread = item => { const v = item.pc.filter(x => x !== null && x > 0); return v.length > 1 ? Math.max(...v) / Math.min(...v) : 1; };
       dash.product = products.reduce((best, item) => (spread(item) > spread(best) ? item : best), products[0]).code;
     }
-    select.innerHTML = products.map(item => `<option value="${escapeHtml(item.code)}"${item.code === dash.product ? ' selected' : ''}>${escapeHtml(`${item.name} · ${item.code}`)}</option>`).join('');
+    setHtml(select, products.map(item => `<option value="${escapeHtml(item.code)}">${escapeHtml(`${item.name} · ${item.code}`)}</option>`).join(''));
+    select.value = dash.product;
     const item = products.find(entry => entry.code === dash.product);
     const values = (dash.unit === 'box' ? item.box : item.pc);
     const marks = data.levels.map((level, index) => ({ level, index, value: values[index] })).filter(mark => mark.value !== null && mark.value !== undefined);
@@ -3078,26 +3174,39 @@
     if (unsaved) items.push({ tone: 'rose', icon: '✎', text: `<strong>Unsaved changes</strong> in the price list: ${escapeHtml(masterlistPendingSummary())}`, action: 'open' });
     if (empty.length) items.push({ tone: 'muted', icon: '↑', text: `<strong>${empty.length} price level${empty.length === 1 ? ' has' : 's have'} no file yet:</strong> ${escapeHtml(empty.map(level => level.name).join(', '))}`, action: can('upload') ? 'upload' : '' , open: empty[0]?.id });
     if (data.customersWithoutLevel.length) items.push({ tone: 'amber', icon: '!', text: `<strong>${data.customersWithoutLevel.length} customer${data.customersWithoutLevel.length === 1 ? ' has' : 's have'} no price level:</strong> ${escapeHtml(data.customersWithoutLevel.slice(0, 5).join(', '))}`, action: can('manageImages') ? 'config' : '' });
-    $('#dashAttention').innerHTML = items.length
+    setHtml($('#dashAttention'), items.length
       ? items.map(item => `<li class="dash-attention-item is-${item.tone}"><span class="dash-attention-icon" aria-hidden="true">${item.icon}</span><span class="dash-attention-text">${item.text}</span>${item.action ? `<button type="button" class="dash-attention-go" data-dash-go="${item.action}"${item.open ? ` data-open-id="${escapeHtml(item.open)}"` : ''} aria-label="Go">›</button>` : ''}</li>`).join('')
-      : '<li class="dash-attention-clear"><span aria-hidden="true">✓</span>All clear. Every level has its file and nothing is waiting.</li>';
+      : '<li class="dash-attention-clear"><span aria-hidden="true">✓</span>All clear. Every level has its file and nothing is waiting.</li>');
   }
-  /** 30 small columns, one per day: uploads, price changes and exports stacked. */
+  /** 30 small columns, one per day: uploads, price changes and exports stacked. The columns stay; a
+   *  day whose numbers changed grows or shrinks to its new height. */
   function renderDashPulse(data) {
+    const box = $('#dashPulse');
     const days = data.activity.days;
     const top = Math.max(1, ...days.map(day => day.uploads + day.changes + day.exports));
     const sum = key => days.reduce((total, day) => total + day[key], 0);
     $('#dashPulseSummary').textContent = `${sum('uploads')} upload${sum('uploads') === 1 ? '' : 's'}, ${sum('changes')} price change${sum('changes') === 1 ? '' : 's'} and ${sum('exports')} export${sum('exports') === 1 ? '' : 's'} in the last 30 days.`;
     const label = date => new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00`));
-    $('#dashPulse').innerHTML = days.map((day, index) => {
+    const dates = days.map(day => day.date).join('|');
+    if (box.dataset.dates !== dates) {
+      // A new day (or the first time): the columns are laid out again.
+      box.dataset.dates = dates;
+      box.innerHTML = days.map((day, index) => `<span class="dash-day ${index === days.length - 1 ? 'is-today' : ''}" data-date="${day.date}" style="--i: ${index}">
+          <span class="dash-day-bar"></span>
+          ${index % 7 === 0 || index === days.length - 1 ? `<small>${escapeHtml(index === days.length - 1 ? 'Today' : label(day.date))}</small>` : ''}
+        </span>`).join('');
+    }
+    days.forEach(day => {
+      const column = box.querySelector(`.dash-day[data-date="${day.date}"]`);
+      if (!column) return;
       const total = day.uploads + day.changes + day.exports;
+      column.classList.toggle('is-quiet', !total);
+      column.style.setProperty('--h', `${total ? Math.max(10, Math.round((total / top) * 100)) : 4}%`);
+      column.title = `${label(day.date)}: ${day.uploads} upload(s), ${day.changes} price change(s), ${day.exports} export(s)`;
       const part = (key, cls) => (day[key] ? `<span class="${cls}" style="flex-grow: ${day[key]}"></span>` : '');
-      return `<span class="dash-day ${total ? '' : 'is-quiet'} ${index === days.length - 1 ? 'is-today' : ''}" title="${escapeHtml(`${label(day.date)}: ${day.uploads} upload(s), ${day.changes} price change(s), ${day.exports} export(s)`)}" style="--h: ${total ? Math.max(10, Math.round((total / top) * 100)) : 4}%; --i: ${index}">
-        <span class="dash-day-bar">${part('exports', 'is-exports')}${part('changes', 'is-changes')}${part('uploads', 'is-uploads')}</span>
-        ${index % 7 === 0 || index === days.length - 1 ? `<small>${escapeHtml(index === days.length - 1 ? 'Today' : label(day.date))}</small>` : ''}
-      </span>`;
-    }).join('');
-    $('#dashRecent').innerHTML = (data.activity.recent || []).map(item => `<li class="is-${item.group}"><span class="dash-recent-dot" aria-hidden="true"></span><span class="dash-recent-text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.actor)} · ${escapeHtml(formatRelativeTime(item.at))}</small></span></li>`).join('');
+      setHtml(column.querySelector('.dash-day-bar'), part('exports', 'is-exports') + part('changes', 'is-changes') + part('uploads', 'is-uploads'));
+    });
+    setHtml($('#dashRecent'), (data.activity.recent || []).map(item => `<li class="is-${item.group}"><span class="dash-recent-dot" aria-hidden="true"></span><span class="dash-recent-text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.actor)} · ${escapeHtml(formatRelativeTime(item.at))}</small></span></li>`).join(''));
     $('#dashRecent').hidden = !(data.activity.recent || []).length;
   }
   $('#dashStairs')?.addEventListener('click', event => {
@@ -7344,7 +7453,17 @@
   const guideVideo = $('#guideVideo');
   $('#guideBtn')?.addEventListener('click', () => {
     if (!guideDialog || !guideVideo) return;
-    if (!guideVideo.src) { guideVideo.src = guideVideo.dataset.src; guideVideo.preload = 'auto'; }
+    if (!guideVideo.src) {
+      guideVideo.src = guideVideo.dataset.src;
+      guideVideo.preload = 'auto';
+      // A browser-recorded WebM doesn't state its length: seeking past the end once makes the browser
+      // find it, so the progress bar works from the start.
+      guideVideo.addEventListener('loadedmetadata', () => {
+        if (guideVideo.duration !== Infinity) return;
+        guideVideo.addEventListener('durationchange', () => { guideVideo.currentTime = 0; if (guideDialog.open) guideVideo.play().catch(() => { }); }, { once: true });
+        guideVideo.currentTime = 1e101;
+      }, { once: true });
+    }
     toggleNotifications(false);
     guideDialog.showModal();
     guideVideo.play().catch(() => { }); // autoplay can be refused; the controls are there

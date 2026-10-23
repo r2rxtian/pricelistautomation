@@ -12071,7 +12071,7 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 .dash-step-riser {
   display: block; height: calc(14px + var(--lift) * 1.1px); margin: 0 6px; border-radius: 0 0 8px 8px;
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--level) 22%, transparent) 0 6px, color-mix(in srgb, var(--level) 12%, transparent) 6px 12px);
-  transform-origin: bottom; animation: dash-rise .7s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--i) * 70ms);
+  transform-origin: bottom; transition: height .8s cubic-bezier(0.22, 1, 0.36, 1), background .3s ease;
 }
 .dash-step.is-empty .dash-step-card { border-style: dashed; border-top-style: solid; background: var(--surface-elevated); }
 .dash-step.is-empty .dash-step-figure { color: var(--text-subtle); font-size: 0.95rem; font-family: var(--sans); font-weight: 600; }
@@ -12092,9 +12092,9 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 .dash-ladder { padding: 6px 4px 0; }
 .dash-rail { position: relative; height: 176px; margin: 0 18px; }
 .dash-rail-line { position: absolute; top: 50%; right: 0; left: 0; height: 4px; margin-top: -2px; border-radius: 4px; background: linear-gradient(90deg, #0f766e, #d97706, var(--pink)); opacity: .28; }
-.dash-rail-end { position: absolute; top: calc(50% + 10px); color: var(--text-subtle); font-size: 0.64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.dash-rail-end.is-low { left: -14px; }
-.dash-rail-end.is-high { right: -14px; }
+.dash-rail-end { position: absolute; bottom: 0; color: var(--text-subtle); font-size: 0.64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.dash-rail-end.is-low { left: 0; }
+.dash-rail-end.is-high { right: 0; }
 .dash-mark { position: absolute; top: 50%; left: var(--x, 50%); width: 0; height: 0; transition: left .65s cubic-bezier(0.22, 1, 0.36, 1), opacity .3s ease; }
 .dash-mark.is-gone { opacity: 0; pointer-events: none; }
 .dash-mark-dot { position: absolute; top: -8px; left: -8px; width: 16px; height: 16px; border: 3px solid var(--surface-card); border-radius: 50%; background: var(--level); box-shadow: 0 0 0 1.5px var(--level), 0 4px 10px -2px color-mix(in srgb, var(--level) 60%, transparent); }
@@ -12131,7 +12131,7 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 .dash-day { position: relative; display: flex; align-items: flex-end; height: 100%; }
 .dash-day-bar {
   display: flex; flex-direction: column; width: 100%; height: var(--h); min-height: 3px; overflow: hidden; border-radius: 5px; background: var(--line-soft);
-  transform-origin: bottom; animation: dash-rise .6s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--i) * 18ms);
+  transform-origin: bottom; transition: height .7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .dash-day-bar > span { display: block; min-height: 3px; }
 .dash-day.is-today .dash-day-bar { box-shadow: 0 0 0 2px var(--pink-glow); }
@@ -12257,3 +12257,32 @@ dialog.ml-upload-dialog > .dialog-card { display: flex; flex-direction: column; 
 @media (max-width: 760px) { .mf-head-tools { flex-direction: column; align-items: stretch; } .mf-search { width: auto; } }
 /* Files: a workbook dragged over the page (dropping it opens the upload window with it). */
 #filesPanel.is-file-over .history-card { outline: 2px dashed var(--pink); outline-offset: -6px; background: color-mix(in srgb, var(--pink) 4%, transparent); }
+/* Dashboard: the entrance (steps rise, days grow, cards settle) plays once, when it is first drawn;
+   afterwards a change glides (heights) or counts (figures) instead of everything re-animating. */
+.dash-entering .dash-step-riser { animation: dash-rise .7s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--i) * 70ms); }
+.dash-entering .dash-step-card { animation: dash-settle .6s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(120ms + var(--i) * 70ms); }
+.dash-entering .dash-day-bar { animation: dash-rise .6s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(300ms + var(--i) * 18ms); }
+.dash-entering .dash-attention-item, .dash-entering .dash-attention-clear, .dash-entering .dash-recent li { animation: dash-settle .5s ease both; animation-delay: .35s; }
+@keyframes dash-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.dash-step-figure { font-variant-numeric: tabular-nums; }
+.dash-step-meta, .dash-step-when { transition: color .3s ease; }
+
+/* "Updated just now", beside the buttons. */
+.dash-updated { display: inline-flex; align-items: center; gap: 7px; margin-right: 4px; color: var(--text-subtle); font-size: 0.74rem; }
+.dash-updated::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px rgba(43, 122, 43, .14); }
+.dash-actions { align-items: center; }
+
+/* Placeholders while the first numbers load. */
+.dash-step.is-skeleton { pointer-events: none; }
+.dash-step.is-skeleton .dash-step-card { border-top-color: var(--line-panel); }
+.dash-step.is-skeleton .dash-step-riser { background: var(--line-soft); }
+.dash-bone { display: block; height: 10px; width: 55%; border-radius: 6px; background: linear-gradient(90deg, var(--line-soft), color-mix(in srgb, var(--line-soft) 40%, var(--surface-card)), var(--line-soft)); background-size: 200% 100%; animation: dash-shimmer 1.3s linear infinite; }
+.dash-bone.is-wide { width: 80%; }
+.dash-bone.is-big { width: 40%; height: 20px; margin: 4px 0; }
+.dash-bone.is-line { width: 100%; height: 6px; }
+.dash-ladder-skeleton { display: grid; align-items: center; height: 176px; padding: 0 18px; }
+.dash-attention-item.is-skeleton { padding: 18px 14px; }
+.dash-day.is-skeleton .dash-day-bar { background: var(--line-soft); animation: dash-shimmer 1.3s linear infinite; background-image: linear-gradient(180deg, var(--line-soft), color-mix(in srgb, var(--line-soft) 40%, var(--surface-card)), var(--line-soft)); background-size: 100% 200%; }
+@keyframes dash-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+[data-theme="dark"] .dash-bone, [data-theme="dark"] .dash-step.is-skeleton .dash-step-riser { background-color: #26292e; }
+@media (prefers-reduced-motion: reduce) { .dash-entering .dash-step-riser, .dash-entering .dash-step-card, .dash-entering .dash-day-bar, .dash-entering .dash-attention-item, .dash-bone, .dash-day.is-skeleton .dash-day-bar { animation: none; } .dash-step-riser, .dash-day-bar { transition: none; } }

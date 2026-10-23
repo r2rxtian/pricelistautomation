@@ -47,7 +47,7 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=241">
+    <link rel="stylesheet" href="../styles/app.css?v=243">
     <script>
     (function() {
         try {
@@ -333,6 +333,7 @@ if ($required !== null && !user_can($user, $required)) {
                         <p class="muted" id="dashSummary">Loading the price levels…</p>
                     </div>
                     <div class="dash-actions">
+                        <span class="dash-updated" id="dashUpdated" hidden></span>
                         <button type="button" class="button secondary" id="dashOpenBtn">Go to files</button>
                         <button type="button" class="button primary perm-upload" id="dashUploadBtn" hidden>Upload prices</button>
                     </div>
@@ -1050,11 +1051,12 @@ if ($required !== null && !user_can($user, $required)) {
 <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideTitle">
     <div class="dialog-card guide-card">
         <header class="guide-head">
-            <div><p class="guide-kicker">Guide</p><h2 id="guideTitle">How to use PLA</h2><p class="guide-sub">A walkthrough of the whole system: uploading price lists, editing prices, approvals, exports and settings.</p></div>
+            <div><p class="guide-kicker">Guide</p><h2 id="guideTitle">How to use PLA</h2><p class="guide-sub">A 2-minute tour of the updated system: the Dashboard, price level files, uploading, editing prices, saving for approval, exports and Config.</p></div>
             <button type="button" class="icon-button guide-close" id="guideClose" aria-label="Close guide">×</button>
         </header>
         <div class="guide-player">
-            <video id="guideVideo" controls playsinline preload="none" data-src="../assets/videos/pla-guide.mp4"></video>
+            <!-- The October 2026 tour (recorded from the app). The first recording stays in assets/videos/pla-guide.mp4. -->
+            <video id="guideVideo" controls playsinline preload="none" data-src="../assets/videos/pla-guide-2026-10.webm"></video>
         </div>
     </div>
 </dialog>
@@ -1065,7 +1067,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=230"></script>
+<script src="../scripts/app.js?v=234"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
