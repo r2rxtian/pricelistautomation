@@ -25,10 +25,11 @@ require_once __DIR__ . '/../authz/audit.php';
 header('Content-Type: application/json');
 startSession();
 
-function jsonError(string $message, int $code = 400): never
+/** $data: for the sign-in page, e.g. attempts left or the seconds a lockout still lasts. */
+function jsonError(string $message, int $code = 400, array $data = []): never
 {
     http_response_code($code);
-    echo json_encode(['success' => false, 'message' => $message, 'type' => 'error']);
+    echo json_encode(['success' => false, 'message' => $message, 'type' => 'error'] + ($data ? ['data' => $data] : []));
     exit;
 }
 
@@ -93,10 +94,13 @@ if (
 }
 
 if ($user['id'] && $user['locked_until'] && strtotime((string) $user['locked_until']) > time()) {
-    $minutesLeft = max(1, (int) ceil((strtotime((string) $user['locked_until']) - time()) / 60));
+    $secondsLeft = max(1, strtotime((string) $user['locked_until']) - time());
+    $minutesLeft = (int) ceil($secondsLeft / 60);
     auditFailedLogin($loginId, 'locked');
-    jsonError("Too many failed attempts. Please try again in $minutesLeft minute(s).", 429);
+    jsonError("Too many failed attempts. Please try again in $minutesLeft minute(s).", 429, ['locked' => true, 'lockedSeconds' => $secondsLeft]);
 }
+// A lockout that has run out starts a fresh set of attempts.
+if ($user['id'] && $user['locked_until']) $user['failed_login_attempts'] = 0;
 
 // The password is the biometrics number from the master list.
 if (!hash_equals(trim((string) $user['biometrics_id']), $password)) {
@@ -110,7 +114,11 @@ if (!hash_equals(trim((string) $user['biometrics_id']), $password)) {
             ->execute([$attempts, $lockUntil, $user['id']]);
     }
     auditFailedLogin($loginId, 'bad_password', ['attempts' => $attempts]);
-    jsonError('Invalid biometrics number or password.', 401);
+    if ($lockUntil) {
+        jsonError('Too many failed attempts. Sign-in is locked for ' . LOGIN_LOCKOUT_MINUTES . ' minutes.', 429,
+            ['locked' => true, 'lockedSeconds' => LOGIN_LOCKOUT_MINUTES * 60, 'attemptsLeft' => 0, 'maxAttempts' => LOGIN_MAX_ATTEMPTS]);
+    }
+    jsonError('Invalid biometrics number or password.', 401, ['attemptsLeft' => max(0, LOGIN_MAX_ATTEMPTS - $attempts), 'maxAttempts' => LOGIN_MAX_ATTEMPTS, 'lockMinutes' => LOGIN_LOCKOUT_MINUTES]);
 }
 
 // Success
@@ -147,6 +155,7 @@ $_SESSION['user_id'] = (int) $user['id'];
 $_SESSION['department_admin'] = $isDepartmentAdmin;
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // rotate on login
 $_SESSION['signed_in_at'] = time();
+$_SESSION['renewed_at'] = time();
 
 $current = currentUser();
 if (!$current) {
@@ -159,5 +168,6 @@ echo json_encode([
     'success' => true,
     'message' => 'Welcome back, ' . $current['name'] . '!',
     'type' => 'success',
-    'data' => ['redirect' => 'dashboard.php'],
+    // The first name, for the welcome on the sign-in page.
+    'data' => ['redirect' => 'dashboard.php', 'firstName' => explode(' ', trim((string) $current['name']))[0] ?? ''],
 ]);

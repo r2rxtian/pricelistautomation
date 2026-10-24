@@ -54,6 +54,8 @@ function masterListNameSql(string $alias = 'ml'): string
 
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MINUTES = 15;
+// While the app is open, the session is renewed (a new session id) this often (api/app/session_renew.php).
+const SESSION_RENEW_MINUTES = 12;
 
 // ---------------------------------------------------------------------------
 // Approval routing (Requirements.xlsx › "Process for Uploading | Update")

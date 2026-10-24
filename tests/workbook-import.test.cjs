@@ -192,7 +192,7 @@ async function apiChecks() {
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       const sample = category.samples[0];
       const adjusted = value => Number((value * 1.05).toFixed(2));
-      const head = data.findIndex(row => row[0] === (category.layout === 'standard' ? 'Code' : 'LRN code'));
+      const head = data.findIndex(row => row[0] === 'Code');
       assert.ok(head > 0, 'export has a title block above the headers');
       if (category.layout === 'standard') {
         assert.deepEqual(data[head], finalHeaders, 'export headers follow the final template');

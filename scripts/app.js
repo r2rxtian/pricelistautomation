@@ -185,7 +185,7 @@
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
     'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
-    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch', 'dashboard': 'dashboard/summary',
+    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch', 'dashboard': 'dashboard/summary', 'session-renew': 'app/session_renew',
     'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
     'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
     'dev-reset': 'dev/reset'
@@ -206,6 +206,19 @@
     }
     return data;
   }
+  // The session renews itself every 12 minutes while the app is open (a new session id each time,
+  // api/app/session_renew.php), and at once when a tab comes back after longer away. Signed out
+  // meanwhile: api() goes back to the sign-in page.
+  const SESSION_RENEW_MS = 12 * 60 * 1000;
+  let sessionRenewedAt = Date.now();
+  function renewSession() {
+    sessionRenewedAt = Date.now();
+    api('session-renew', { method: 'POST', body: '{}' }).catch(() => { });
+  }
+  setInterval(renewSession, SESSION_RENEW_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - sessionRenewedAt >= SESSION_RENEW_MS) renewSession();
+  });
   /** Stored file paths (storage/…) are relative to the project root; this page lives in pages/. */
   function mediaUrl(path) {
     const value = String(path || '');
@@ -1329,7 +1342,7 @@
   function filterDescription() {
     return [
       state.category ? `Category: ${state.category}` : '',
-      state.codeFilter.trim() ? `LRN code: ${state.codeFilter.trim()}` : '',
+      state.codeFilter.trim() ? `Code: ${state.codeFilter.trim()}` : '',
       state.priceLevelFilter ? `Price level: ${state.priceLevelFilter}` : '',
       state.countryFilter ? `Country: ${state.countryFilter}` : '',
       state.search.trim() ? `Search: "${state.search.trim()}"` : ''
@@ -1560,7 +1573,7 @@
       <tr class="excel-header excel-header-primary presentation-header">
         <th class="col-row-num">#</th>
         <th>Photo</th>
-        <th>LRN code</th>
+        <th>Code</th>
         <th colspan="2">Item Name</th>
         <th>PC/Set Per Box</th>
         <th>Price/pc in USD</th>
@@ -4834,8 +4847,87 @@
     } catch { }
     return { letterhead: 'LRNPH', bank: 'LRNPH USD' };
   }
-  /** Opens the export window (letterhead + bank details), then exports with what was picked. */
-  function openExportDialog(format, versionId = null) {
+  /** PDF columns the export window offers (Code and Description are always in). Stands-only ones say so. */
+  const PDF_COLUMNS = [
+    ['photo', 'Photo'], ['shelf', 'Shelf Life'], ['weight', 'Weight per Pc'], ['pcs', 'Pcs/Box'], ['boxSize', 'Box Size'],
+    ['pricePc', 'Price/pc'], ['priceBox', 'Price/box'], ['pallets', 'Pallets per container'], ['nwgw', 'NW / GW (stands)'], ['moq', 'MOQ & total (stands)'],
+  ];
+  const exportPick = { rows: [], codes: new Set(), query: '' };
+  const rememberedColumns = () => {
+    try { const saved = JSON.parse(localStorage.getItem('pla_export_pdf_columns') || 'null'); if (Array.isArray(saved)) return saved; } catch { }
+    return PDF_COLUMNS.map(([key]) => key);
+  };
+  /** The rows the export would contain: what the editor shows (with its filters), or the saved list. */
+  async function exportRowsFor(versionId) {
+    if (!versionId || String(versionId) === String(state.active?.id)) return filteredRows().map(item => item.row);
+    const version = await fetchVersion(versionId);
+    return normalizeRows(version?.rows || [], version?.priceLevel, version?.country);
+  }
+  /** The product checklist, by category, with a tick for each category. */
+  function renderExportPick() {
+    const query = exportPick.query.trim().toLowerCase();
+    const groups = new Map();
+    exportPick.rows.forEach(row => {
+      const code = String(row[1] ?? ''), name = String(row[2] ?? '');
+      if (query && !`${code} ${name}`.toLowerCase().includes(query)) return;
+      const category = String(row[0] || 'Products').trim();
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push({ code, name });
+    });
+    const tick = '<span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
+    $('#exportPickList').innerHTML = [...groups].map(([category, items]) => {
+      const on = items.filter(item => exportPick.codes.has(item.code)).length;
+      return `<div class="export-pick-group">
+        <label class="export-pick-cat"><input type="checkbox" data-pick-cat="${escapeHtml(category)}"${on === items.length ? ' checked' : ''}${on && on < items.length ? ' data-some="1"' : ''}>${tick}<strong>${escapeHtml(category)}</strong><small>${on} of ${items.length}</small></label>
+        ${items.map(item => `<label class="export-pick-item"><input type="checkbox" data-pick-code="${escapeHtml(item.code)}"${exportPick.codes.has(item.code) ? ' checked' : ''}>${tick}<span>${escapeHtml(item.name || item.code)}</span><small>${escapeHtml(item.code)}</small></label>`).join('')}
+      </div>`;
+    }).join('') || '<p class="export-pick-empty">No products match.</p>';
+    $$('#exportPickList [data-some]').forEach(input => { input.indeterminate = true; });
+    $('#exportPickCount').textContent = `${exportPick.codes.size} of ${exportPick.rows.length} selected`;
+  }
+  function renderExportInclude(format) {
+    const box = $('#exportInclude');
+    if (!box) return;
+    box.hidden = format !== 'pdf';
+    if (format !== 'pdf') return;
+    $('#exportAllCount').textContent = exportPick.rows.length ? `(${exportPick.rows.length})` : '';
+    const keep = new Set(rememberedColumns());
+    const tick = '<span class="cat-custom-checkbox" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
+    $('#exportCols').innerHTML = PDF_COLUMNS.map(([key, label]) => `<label class="export-col"><input type="checkbox" value="${key}"${keep.has(key) ? ' checked' : ''}>${tick}<span>${escapeHtml(label)}</span></label>`).join('');
+    box.querySelector('input[name="exportRows"][value="all"]').checked = true;
+    showExportPick(false);
+  }
+  function showExportPick(open) {
+    const wrap = $('#exportPickWrap');
+    wrap.classList.toggle('is-open', open);
+    wrap.setAttribute('aria-hidden', String(!open));
+    if (open) renderExportPick();
+  }
+  $('#exportInclude')?.addEventListener('change', event => {
+    const target = event.target;
+    if (target.name === 'exportRows') {
+      if (target.value === 'pick' && !exportPick.codes.size) exportPick.rows.forEach(row => exportPick.codes.add(String(row[1] ?? '')));
+      return showExportPick(target.value === 'pick');
+    }
+    if (target.dataset.pickCode !== undefined) { target.checked ? exportPick.codes.add(target.dataset.pickCode) : exportPick.codes.delete(target.dataset.pickCode); return renderExportPick(); }
+    if (target.dataset.pickCat !== undefined) {
+      exportPick.rows.filter(row => String(row[0] || 'Products').trim() === target.dataset.pickCat).forEach(row => target.checked ? exportPick.codes.add(String(row[1] ?? '')) : exportPick.codes.delete(String(row[1] ?? '')));
+      return renderExportPick();
+    }
+  });
+  $('#exportPickSearch')?.addEventListener('input', event => { exportPick.query = event.target.value; renderExportPick(); });
+  $('#exportInclude')?.addEventListener('click', event => {
+    const all = event.target.closest('[data-pick-all]');
+    if (!all) return;
+    // All / None act on the products the search shows.
+    const query = exportPick.query.trim().toLowerCase();
+    exportPick.rows.filter(row => !query || `${row[1]} ${row[2]}`.toLowerCase().includes(query))
+      .forEach(row => all.dataset.pickAll === '1' ? exportPick.codes.add(String(row[1] ?? '')) : exportPick.codes.delete(String(row[1] ?? '')));
+    renderExportPick();
+  });
+  /** Opens the export window (letterhead + bank details; for a PDF also which products and columns),
+   *  then exports with what was picked. */
+  async function openExportDialog(format, versionId = null) {
     const branding = state.exportBranding;
     const dialog = $('#exportDialog');
     if (!branding || !dialog) return requestExport(format, versionId);
@@ -4856,11 +4948,25 @@
     $('#exportDialogTitle').textContent = summary ? exportTitle(summary) : 'Export';
     $('#exportDialogIntro').textContent = facts.filter(([label]) => label !== 'Prices as of').map(([, value]) => value).join(' · ') || 'Choose what goes on the file.';
     $('#exportDialogGo').textContent = `Export ${format === 'pdf' ? 'PDF' : 'Excel'}`;
+    // Which products: everything the export would contain, all ticked until "Choose products" is used.
+    Object.assign(exportPick, { rows: [], codes: new Set(), query: '' });
+    if ($('#exportPickSearch')) $('#exportPickSearch').value = '';
+    if (format === 'pdf') { try { exportPick.rows = await exportRowsFor(versionId); } catch { exportPick.rows = []; } }
+    renderExportInclude(format);
     dialog.showModal();
   }
   $('#exportForm')?.addEventListener('submit', event => {
     if (event.submitter?.value === 'cancel') return;
     const form = event.currentTarget;
+    // PDF: the products picked (when chosen) and the columns kept.
+    let options = null;
+    if (exportChoice.format === 'pdf' && !$('#exportInclude').hidden) {
+      const pick = form.querySelector('input[name="exportRows"]:checked')?.value === 'pick';
+      if (pick && !exportPick.codes.size) { event.preventDefault(); return toast('Tick at least one product to export.'); }
+      const columns = [...$$('#exportCols input:checked')].map(input => input.value);
+      try { localStorage.setItem('pla_export_pdf_columns', JSON.stringify(columns)); } catch { }
+      options = { codes: pick && exportPick.codes.size < exportPick.rows.length ? new Set(exportPick.codes) : null, columns };
+    }
     const letterhead = form.querySelector('input[name="letterhead"]:checked')?.value || '';
     const bank = form.querySelector('input[name="bank"]:checked')?.value || '';
     const summary = exportChoice.versionId ? versionSummaryById(exportChoice.versionId) : state.active;
@@ -4868,19 +4974,20 @@
     requestExport(exportChoice.format, exportChoice.versionId, {
       letterhead: state.exportBranding?.letterheads?.[letterhead] || null,
       bank: state.exportBranding?.banks?.[bank] || null,
-    });
+    }, options);
   });
   /**
    * Asks the server for the approved version (which logs the export), then builds the file from it.
    * From the editor, the active filters limit the exported rows. $branding: the letterhead and bank
    * details picked in the export window (either can be null).
    */
-  async function requestExport(format, versionId = null, branding = null) {
+  async function requestExport(format, versionId = null, branding = null, options = null) {
     const fromEditor = !versionId;
     const id = versionId || state.active?.id;
     if (!id) return toast('Open an approved price list first.');
     if (fromEditor && !canExportActive()) return toast('Only approved price lists can be exported.');
-    const scope = fromEditor && (hasActiveFilters() || state.category) ? filterDescription() : '';
+    const picked = options?.codes ? `${options.codes.size} selected product${options.codes.size === 1 ? '' : 's'}` : '';
+    const scope = [fromEditor && (hasActiveFilters() || state.category) ? filterDescription() : '', picked].filter(Boolean).join(' · ');
     let version;
     try {
       version = (await api('export', { method: 'POST', body: JSON.stringify({ id, format, scope }) })).version;
@@ -4893,8 +5000,10 @@
       rows = filteredRows().map(item => item.row);
       if (!rows.length) return toast('No products match the current filters.');
     }
+    if (options?.codes) rows = rows.filter(row => options.codes.has(String(row[1] ?? '')));
+    if (!rows.length) return toast('None of the picked products are in this price list.');
     if (format === 'excel') exportExcel(version, rows, branding);
-    else await exportPdf(version, rows, scope, branding);
+    else await exportPdf(version, rows, scope, branding, options);
     if (can('viewAudit')) api('audit-logs').then(res => { state.auditLogs = res.auditLogs || []; renderHistory(); }).catch(() => { });
   }
   /** Pallet cells read "168 Boxes/Pallet" in exports (a plain number gets the unit). */
@@ -4922,7 +5031,8 @@
       categoryMap.get(cat).push(row);
     });
 
-    const presentationHeaders = ['LRN code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ'];
+    // Shown as 'Code', like products (the upload template's stands sheet still says 'LRN code').
+    const presentationHeaders = ['Code', 'Item Name', 'PC/Set Per Box', 'Price/pc in USD', 'Price/Box USD', 'NW(KG) / Box', 'GW(KG) / Box', 'Box size', 'MOQ', 'Total Price Based on MOQ'];
 
     categoryMap.forEach((catRows, catName) => {
       const isPresentation = /presentation stands/i.test(catName);
@@ -5031,7 +5141,7 @@
     return custom?.key ? `custom:${custom.key}` : null;
   }
 
-  async function exportPdf(version, targetRows, scope = '', branding = null) {
+  async function exportPdf(version, targetRows, scope = '', branding = null, options = null) {
     try {
       if (!window.jspdf?.jsPDF) return toast('PDF tools are unavailable.');
       if (!targetRows.length) return toast('No products to export.');
@@ -5039,7 +5149,7 @@
       const rateFor = adjustmentFor(version);
       const adjusted = (value, category) => adjustedWith(rateFor(category), value);
       toast('Generating PDF...');
-      const pdfImages = await loadPdfImages(targetRows);
+      const pdfImages = !options?.columns || options.columns.includes('photo') ? await loadPdfImages(targetRows) : {};
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
       if (typeof doc.autoTable !== 'function') return toast('PDF table tools are unavailable.');
@@ -5105,114 +5215,99 @@
         doc.text(`${count.toLocaleString()} product${count === 1 ? '' : 's'}`, pageWidth - margin - 10, y + 13.2, { align: 'right' });
       };
 
+      // The columns kept in the export window (all when not chosen); Code and Description always.
+      const keep = key => !options?.columns || options.columns.includes(key);
+      const centered = value => ({ content: String(value ?? ''), styles: { halign: 'center' } });
+
       let currentY = TOP;
       for (const [category, groupsMap] of categoriesMap.entries()) {
         const isPresentation = category.toLowerCase() === 'presentation stands';
         const isAdj = rateFor(category) !== 0;
+        const price = raw => ({ content: formatPdfPrice(raw, category), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal', fontSize: 7 } });
 
-        // 3-Tier Excel Header. Column widths come only from columnStyles below: widths set on header
-        // cells win over them and pushed the table past the page edge.
-        const standardHead = [
-          [
-            { content: 'Photo', rowSpan: 3 },
-            // Requirements 17Oct2026 › Excel Header Template.
-            { content: 'Code', rowSpan: 3 },
-            { content: 'Description', rowSpan: 3 },
-            { content: 'Shelf\nLife', rowSpan: 3 },
-            { content: 'Weight per\nPc (g)', rowSpan: 3 },
-            { content: 'Pcs/Box', rowSpan: 3 },
-            { content: 'Box Size', rowSpan: 3 },
-            { content: 'Price/pc\nUSD', rowSpan: 3 },
-            { content: 'Price/box\nUSD', rowSpan: 3 },
-            { content: 'PALLET PER CONTAINER', colSpan: 3, styles: { halign: 'center' } }
-          ],
-          [
-            { content: '40ft Container', colSpan: 2, styles: { halign: 'center' } },
-            { content: '20ft Container', colSpan: 1, styles: { halign: 'center' } }
-          ],
-          [
-            { content: 'Large Pallet\n(16 pallets)', styles: { halign: 'center' } },
-            { content: 'Small Pallet\n(2 pallets)', styles: { halign: 'center' } },
-            { content: 'Large Pallet\n(8 pallets)', styles: { halign: 'center' } }
-          ]
+        // Each column: its key (what the export window toggles), header, width, alignment and cell.
+        // Requirements 17Oct2026 › Excel Header Template for products; stands keep their own columns.
+        const all = isPresentation ? [
+          { key: 'photo', head: 'Photo', width: 86, align: 'center', photo: true },
+          { key: 'code', head: 'Code', width: 64, align: 'center', bold: true, cell: row => ({ content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8 } }) },
+          { key: 'desc', head: 'Item Name', width: 180, align: 'left', grow: true, cell: row => ({ content: [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n'), styles: { halign: 'left', fontSize: 6.8 } }) },
+          { key: 'pcs', head: 'PC/Set Per Box', width: 54, align: 'center', cell: row => centered(row[6]) },
+          { key: 'pricePc', head: 'Price/pc in USD', width: 56, align: 'right', cell: row => price(row[8]) },
+          { key: 'priceBox', head: 'Price/Box USD', width: 56, align: 'right', cell: row => price(row[9]) },
+          { key: 'nwgw', head: 'NW(KG) / Box', width: 54, align: 'center', cell: row => centered(row[13]) },
+          { key: 'nwgw', head: 'GW(KG) / Box', width: 54, align: 'center', cell: row => centered(row[14]) },
+          { key: 'boxSize', head: 'Box size', width: 62, align: 'center', cell: row => centered(row[7]) },
+          { key: 'moq', head: 'MOQ', width: 62, align: 'center', cell: row => centered([row[15], row[16]].filter(v => String(v ?? '').trim()).join('\n')) },
+          { key: 'moq', head: 'Total Price Based on MOQ', width: 70, align: 'right', cell: row => ({ content: (total => (isNumeric(total) ? Number(total).toFixed(2) : String(total ?? '')))(moqTotal(row, isNumeric(row[9]) ? adjusted(numeric(row[9]), category) : null)), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal' } }) },
+        ] : [
+          { key: 'photo', head: 'Photo', width: 82, align: 'center', photo: true },
+          { key: 'code', head: 'Code', width: 64, align: 'center', bold: true, cell: row => ({ content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8 } }) },
+          { key: 'desc', head: 'Description', width: 172, align: 'left', grow: true, cell: row => ({ content: String(row[2] ?? '').replace(/\r?\n/g, '\n'), styles: { halign: 'left', fontSize: 6.8, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 } } }) },
+          { key: 'shelf', head: 'Shelf\nLife', width: 48, align: 'center', cell: row => centered(row[4]) },
+          { key: 'weight', head: 'Weight per\nPc (g)', width: 44, align: 'center', cell: row => centered(row[5]) },
+          { key: 'pcs', head: 'Pcs/Box', width: 40, align: 'center', cell: row => centered(row[6]) },
+          { key: 'boxSize', head: 'Box Size', width: 56, align: 'center', cell: row => centered(row[7]) },
+          { key: 'pricePc', head: 'Price/pc\nUSD', width: 52, align: 'right', cell: row => price(row[8]) },
+          { key: 'priceBox', head: 'Price/box\nUSD', width: 56, align: 'right', cell: row => price(row[9]) },
+          { key: 'pallets', head: 'Large Pallet\n(16 pallets)', width: 61, align: 'center', pallet: true, cell: row => centered(formatPallet(row[10])) },
+          { key: 'pallets', head: 'Small Pallet\n(2 pallets)', width: 61, align: 'center', pallet: true, cell: row => centered(formatPallet(row[11])) },
+          { key: 'pallets', head: 'Large Pallet\n(8 pallets)', width: 62, align: 'center', pallet: true, cell: row => centered(formatPallet(row[12])) },
         ];
-        const presentationHead = [
-          [
-            { content: 'Photo' },
-            { content: 'LRN code' },
-            { content: 'Item Name', colSpan: 2 },
-            { content: 'PC/Set Per Box' },
-            { content: 'Price/pc in USD' },
-            { content: 'Price/Box USD' },
-            { content: 'NW(KG) / Box' },
-            { content: 'GW(KG) / Box' },
-            { content: 'Box size' },
-            { content: 'MOQ' },
-            { content: 'Total Price Based on MOQ' }
-          ]
-        ];
+        const columns = all.filter(col => col.key === 'code' || col.key === 'desc' || keep(col.key));
+        const withPhoto = columns[0]?.photo === true;
+        const pallets = columns.filter(col => col.pallet);
 
-        // Body: a title row per product group, then its products with one shared photo cell.
+        // Header: one row, or three when the pallets are in (PALLET PER CONTAINER › 40ft / 20ft › sizes).
+        // Column widths come only from columnStyles: widths on header cells win and pushed the table past the edge.
+        const head = pallets.length
+          ? [
+            [...columns.filter(col => !col.pallet).map(col => ({ content: col.head, rowSpan: 3 })), { content: 'PALLET PER CONTAINER', colSpan: 3, styles: { halign: 'center' } }],
+            [{ content: '40ft Container', colSpan: 2, styles: { halign: 'center' } }, { content: '20ft Container', colSpan: 1, styles: { halign: 'center' } }],
+            pallets.map(col => ({ content: col.head, styles: { halign: 'center' } })),
+          ]
+          : [columns.map(col => ({ content: col.head }))];
+
+        // Body: a title row per product group, then its products (with one shared photo cell).
         const body = [];
-        const colCount = 12;
         let productCount = 0;
         for (const [groupName, rows] of groupsMap.entries()) {
           productCount += rows.length;
           body.push([{
             content: groupName,
-            colSpan: colCount,
+            colSpan: columns.length,
             styles: {
               fillColor: [249, 226, 231], textColor: INK, fontStyle: 'bold', fontSize: 8, halign: 'left',
               cellPadding: { top: 4, bottom: 4, left: 7, right: 6 }, lineColor: [221, 178, 188], lineWidth: 0.5
             }
           }]);
-          const imageKey = getPdfGroupImageKey(category, groupName);
+          const imageKey = withPhoto ? getPdfGroupImageKey(category, groupName) : null;
           // A group with a photo gets enough height to show it; the rows share it.
           const rowMin = imageKey && pdfImages[imageKey] ? Math.ceil(PHOTO_HEIGHT / rows.length) : 0;
-          const price = raw => ({ content: formatPdfPrice(raw, category), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal', fontSize: 7 } });
-
           rows.forEach((row, rIdx) => {
-            const rowCells = [];
-            if (rIdx === 0) {
-              rowCells.push({ content: '', rowSpan: rows.length, imageKey, styles: { fillColor: [255, 255, 255], cellPadding: 2, lineColor: [221, 178, 188], lineWidth: 0.5 } });
-            }
-            if (isPresentation) {
-              const itemName = [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n');
-              const moq = [row[15], row[16]].filter(v => String(v ?? '').trim()).join('\n');
-              rowCells.push(
-                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8, minCellHeight: rowMin } },
-                { content: itemName, colSpan: 2, styles: { halign: 'left', fontSize: 6.8 } },
-                { content: String(row[6] ?? ''), styles: { halign: 'center' } },
-                price(row[8]),
-                price(row[9]),
-                { content: String(row[13] ?? ''), styles: { halign: 'center' } },
-                { content: String(row[14] ?? ''), styles: { halign: 'center' } },
-                { content: String(row[7] ?? ''), styles: { halign: 'center' } },
-                { content: moq, styles: { halign: 'center' } },
-                { content: (total => (isNumeric(total) ? Number(total).toFixed(2) : String(total ?? '')))(moqTotal(row, isNumeric(row[9]) ? adjusted(numeric(row[9]), category) : null)), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal' } }
-              );
-            } else {
-              rowCells.push(
-                { content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8, minCellHeight: rowMin } },
-                { content: String(row[2] ?? '').replace(/\r?\n/g, '\n'), styles: { halign: 'left', fontSize: 6.8, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 } } },
-                { content: String(row[4] ?? ''), styles: { halign: 'center' } },
-                { content: String(row[5] ?? ''), styles: { halign: 'center' } },
-                { content: String(row[6] ?? ''), styles: { halign: 'center' } },
-                { content: String(row[7] ?? ''), styles: { halign: 'center' } },
-                price(row[8]),
-                price(row[9]),
-                { content: formatPallet(row[10]), styles: { halign: 'center' } },
-                { content: formatPallet(row[11]), styles: { halign: 'center' } },
-                { content: formatPallet(row[12]), styles: { halign: 'center' } }
-              );
-            }
-            body.push(rowCells);
+            const cells = [];
+            columns.forEach((col, index) => {
+              if (col.photo) {
+                if (rIdx === 0) cells.push({ content: '', rowSpan: rows.length, imageKey, styles: { fillColor: [255, 255, 255], cellPadding: 2, lineColor: [221, 178, 188], lineWidth: 0.5 } });
+                return;
+              }
+              const cell = col.cell(row);
+              if (index === (withPhoto ? 1 : 0) && rowMin) cell.styles = { ...cell.styles, minCellHeight: rowMin };
+              cells.push(cell);
+            });
+            body.push(cells);
           });
         }
 
+        // Widths: the description takes whatever room columns left out free up.
+        const styles = {};
+        columns.forEach((col, index) => { styles[index] = { cellWidth: col.width, halign: col.align, ...(col.bold ? { fontStyle: 'bold' } : {}) }; });
+        const used = columns.reduce((sum, col) => sum + col.width, 0);
+        const grow = columns.findIndex(col => col.grow);
+        if (used < printableWidth && grow >= 0) styles[grow].cellWidth += printableWidth - used;
+
         // Categories follow on from each other; a new page only when this one's bar, header and
         // first products would not fit.
-        const needed = 24 + (isPresentation ? 20 : 46) + 18 + PHOTO_HEIGHT;
+        const needed = 24 + (pallets.length ? 46 : 20) + 18 + (withPhoto ? PHOTO_HEIGHT : 24);
         if (currentY > TOP && currentY + needed > pageHeight - BOTTOM) {
           doc.addPage();
           currentY = TOP;
@@ -5220,7 +5315,7 @@
         drawCategoryBar(currentY, category, productCount);
 
         doc.autoTable({
-          head: isPresentation ? presentationHead : standardHead,
+          head,
           body,
           startY: currentY + 24,
           theme: 'grid',
@@ -5236,37 +5331,11 @@
             halign: 'center', valign: 'middle', lineColor: [214, 170, 181], lineWidth: 0.5
           },
           alternateRowStyles: { fillColor: [253, 249, 250] },
-          columnStyles: fitColumnsToPage(isPresentation ? {
-            0: { cellWidth: 86, halign: 'center' },
-            1: { cellWidth: 64, halign: 'center', fontStyle: 'bold' },
-            2: { cellWidth: 100, halign: 'left' },
-            3: { cellWidth: 80, halign: 'left' },
-            4: { cellWidth: 54, halign: 'center' },
-            5: { cellWidth: 56, halign: 'right' },
-            6: { cellWidth: 56, halign: 'right' },
-            7: { cellWidth: 54, halign: 'center' },
-            8: { cellWidth: 54, halign: 'center' },
-            9: { cellWidth: 62, halign: 'center' },
-            10: { cellWidth: 62, halign: 'center' },
-            11: { cellWidth: 70, halign: 'right' }
-          } : {
-            0: { cellWidth: 82, halign: 'center' },
-            1: { cellWidth: 64, halign: 'center', fontStyle: 'bold' },
-            2: { cellWidth: 172, halign: 'left' },
-            3: { cellWidth: 48, halign: 'center' },
-            4: { cellWidth: 44, halign: 'center' },
-            5: { cellWidth: 40, halign: 'center' },
-            6: { cellWidth: 56, halign: 'center' },
-            7: { cellWidth: 52, halign: 'right' },
-            8: { cellWidth: 56, halign: 'right' },
-            9: { cellWidth: 61, halign: 'center' },
-            10: { cellWidth: 61, halign: 'center' },
-            11: { cellWidth: 62, halign: 'center' }
-          }),
+          columnStyles: fitColumnsToPage(styles),
           // The group photo, fitted inside its cell without stretching.
           didDrawCell: data => {
             const raw = data.cell.raw;
-            if (data.section !== 'body' || data.column.index !== 0 || !raw || !('imageKey' in raw)) return;
+            if (!withPhoto || data.section !== 'body' || data.column.index !== 0 || !raw || !('imageKey' in raw)) return;
             const img = raw.imageKey ? pdfImages[raw.imageKey] : null;
             if (!img) {
               // No photo for this group: a quiet dash instead of an empty box.
@@ -5962,7 +6031,7 @@
       const at = query ? text.toLowerCase().indexOf(query) : -1;
       return at < 0 ? escapeHtml(text) : `${escapeHtml(text.slice(0, at))}<mark>${escapeHtml(text.slice(at, at + query.length))}</mark>${escapeHtml(text.slice(at + query.length))}`;
     };
-    codeSuggest.innerHTML = `<p class="lsm-heading">${query ? 'Matching codes' : 'LRN codes'}${seen.size > matches.length ? ` <span>${matches.length} of ${seen.size}</span>` : ''}</p>`
+    codeSuggest.innerHTML = `<p class="lsm-heading">${query ? 'Matching codes' : 'Codes'}${seen.size > matches.length ? ` <span>${matches.length} of ${seen.size}</span>` : ''}</p>`
       + matches.map(([code, description], index) => `<button type="button" class="lsm-item cs-item ${index === codeActive ? 'is-highlight' : ''}" role="option" aria-selected="${index === codeActive}" data-code="${escapeHtml(code)}"><span class="cs-code">${mark(code)}</span><span class="lsm-label cs-desc">${escapeHtml(description)}</span></button>`).join('');
     const box = $('#codeFilter').getBoundingClientRect();
     const width = Math.max(box.width, 300);

@@ -329,3 +329,59 @@ html.login-enter .login-theme-toggle { animation: login-rise .6s cubic-bezier(.2
 [data-theme="dark"] .login-field > label { color: #d4d4d8; }
 [data-theme="dark"] .auth-message.error { background: rgba(235, 151, 174, 0.12); color: #f6b3c4; }
 [data-theme="dark"] .auth-message.success { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
+
+/* Wrong password: crumbs fall out of the password box, which flashes rose. */
+.login-crumb { position: fixed; z-index: 50; border-radius: 45% 55% 50% 40%; pointer-events: none; will-change: transform, opacity; }
+.password-field.is-wrong input { border-color: #e0708a; animation: login-wrong-flash 1.1s ease-out; }
+@keyframes login-wrong-flash { 0% { box-shadow: 0 0 0 4px rgba(181, 32, 66, .28); background: #fff4f6; } 100% { box-shadow: 0 0 0 0 rgba(181, 32, 66, 0); } }
+
+/* Attempts left: one pip per attempt; used ones turn rose with a small pop. */
+.attempt-meter { display: flex; align-items: center; gap: 10px; margin-top: -2px; color: #8a6f77; font-size: 0.76rem; font-weight: 600; }
+.attempt-meter[hidden] { display: none; }
+.attempt-pips { display: inline-flex; gap: 5px; }
+.attempt-pips i { width: 18px; height: 6px; border-radius: 999px; background: #eadde1; transition: background .25s ease; }
+.attempt-pips i.is-used { background: #e0708a; }
+.attempt-pips i.is-new { animation: login-pip-pop .5s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes login-pip-pop { 0% { transform: scaleX(.3); background: #b52042; } 60% { transform: scaleX(1.25); } 100% { transform: none; } }
+.attempt-meter.is-last { color: #b52042; }
+.attempt-meter.is-last .attempt-pips i.is-used { background: #b52042; }
+
+/* Locked: fields close, the button counts down with a ring that empties. */
+.login-form.is-locked input:disabled { opacity: .55; cursor: not-allowed; }
+.login-form.is-locked #loginSubmitBtn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; background: #3a2a30; border-color: #3a2a30; color: #fff; cursor: not-allowed; opacity: 1; font-variant-numeric: tabular-nums; }
+.lock-ring { transform: rotate(-90deg); }
+.lock-ring circle { fill: none; stroke-width: 2.6; }
+.lock-ring-track { stroke: rgba(255, 255, 255, .22); }
+.lock-ring-fill { stroke: #fabbcb; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+.auth-message.locked { display: block; background: #2a1d22; color: #fbd4de; }
+.auth-message.locked::before { content: "🔒"; margin-right: 7px; }
+
+[data-theme="dark"] .password-field.is-wrong input { border-color: #f6b3c4; }
+[data-theme="dark"] .attempt-meter { color: #b9a2aa; }
+[data-theme="dark"] .attempt-pips i { background: #3a2f34; }
+[data-theme="dark"] .attempt-meter.is-last { color: #f6b3c4; }
+[data-theme="dark"] .login-form.is-locked #loginSubmitBtn { background: #4a3038; border-color: #4a3038; }
+@keyframes login-wrong-flash-dark { 0% { box-shadow: 0 0 0 4px rgba(246, 179, 196, .22); } 100% { box-shadow: none; } }
+[data-theme="dark"] .password-field.is-wrong input { animation-name: login-wrong-flash-dark; }
+@media (prefers-reduced-motion: reduce) { .password-field.is-wrong input, .attempt-pips i.is-new { animation: none; } .lock-ring-fill { transition: none; } }
+
+/* Welcome after a correct password: the form fades, a check draws itself in a rose seal, and
+   "Welcome back," rises with the first name letter by letter (scripts/login.js). */
+.login-panel { position: relative; }
+.login-form.is-welcoming { opacity: 0; transform: translateY(-10px) scale(.98); filter: blur(2px); pointer-events: none; transition: opacity .32s ease, transform .4s cubic-bezier(.22, 1, .36, 1), filter .32s ease; }
+.login-welcome { position: absolute; display: grid; align-content: center; justify-items: start; gap: 4px; pointer-events: none; }
+.welcome-seal { margin-bottom: 10px; opacity: 0; transform: scale(.6); transition: opacity .3s ease, transform .55s cubic-bezier(.34, 1.56, .64, 1); }
+.welcome-seal svg { display: block; }
+.welcome-seal-ring { fill: #b52042; stroke: none; }
+.welcome-seal-check { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 34; stroke-dashoffset: 34; transition: stroke-dashoffset .45s cubic-bezier(.65, 0, .35, 1) .28s; }
+.welcome-kicker { margin: 0; color: #8a6f77; font: 600 0.95rem Inter, sans-serif; opacity: 0; transform: translateY(6px); transition: opacity .35s ease .3s, transform .45s cubic-bezier(.22, 1, .36, 1) .3s; }
+.welcome-name { display: flex; margin: 0; color: var(--text-heading, #140d12); font: 700 clamp(2.2rem, 4.4vw, 3.2rem)/1.1 'Playfair Display', Georgia, serif; letter-spacing: -.5px; }
+.welcome-name span { display: inline-block; opacity: 0; transform: translateY(.45em) rotate(4deg); transition: opacity .3s ease, transform .5s cubic-bezier(.22, 1, .36, 1); transition-delay: calc(.42s + var(--i) * 45ms); }
+.welcome-sub { margin: 8px 0 0; color: #a18a92; font: 500 0.8rem Inter, sans-serif; opacity: 0; transition: opacity .4s ease .8s; }
+.login-welcome.is-in .welcome-seal { opacity: 1; transform: none; }
+.login-welcome.is-in .welcome-seal-check { stroke-dashoffset: 0; }
+.login-welcome.is-in .welcome-kicker, .login-welcome.is-in .welcome-sub { opacity: 1; transform: none; }
+.login-welcome.is-in .welcome-name span { opacity: 1; transform: none; }
+[data-theme="dark"] .welcome-name { color: #f4eef0; }
+[data-theme="dark"] .welcome-kicker { color: #c9b3bb; }
+[data-theme="dark"] .welcome-seal-ring { fill: #e0708a; }

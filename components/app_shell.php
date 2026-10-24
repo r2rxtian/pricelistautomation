@@ -47,7 +47,7 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=244">
+    <link rel="stylesheet" href="../styles/app.css?v=245">
     <script>
     (function() {
         try {
@@ -294,7 +294,7 @@ if ($required !== null && !user_can($user, $required)) {
                             <label class="search"><span>Search</span><svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input id="searchInput" type="search" placeholder="Search name, code or shortcut…"><kbd class="search-kbd">/</kbd></label>
                             <select id="categorySelect" class="sr-only" tabindex="-1" aria-hidden="true"></select>
                             <button type="button" id="categoryPicker" class="list-switcher category-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="categoryMenu" title="Filter by product category"><svg class="cp-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="cp-label" id="cpLabel">All categories</span><span class="cp-count" id="cpCount">0</span><svg class="ls-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-                            <div class="code-filter" id="codeFilter"><svg class="cf-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg><input id="codeFilterInput" type="text" placeholder="LRN code" autocomplete="off" spellcheck="false" role="combobox" aria-label="Filter by LRN code" aria-autocomplete="list" aria-expanded="false" aria-controls="codeSuggest"><button type="button" id="codeFilterClear" class="cf-clear" aria-label="Clear LRN code filter" hidden><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+                            <div class="code-filter" id="codeFilter"><svg class="cf-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg><input id="codeFilterInput" type="text" placeholder="Code" autocomplete="off" spellcheck="false" role="combobox" aria-label="Filter by product code" aria-autocomplete="list" aria-expanded="false" aria-controls="codeSuggest"><button type="button" id="codeFilterClear" class="cf-clear" aria-label="Clear code filter" hidden><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
                             <button type="button" id="clearFiltersBtn" class="text-button clear-filters-btn" hidden>Clear filters</button>
                             <span id="productCountNote" class="toolbar-count" aria-live="polite"></span>
                         </div>
@@ -991,6 +991,28 @@ if ($required !== null && !user_can($user, $required)) {
         <p class="muted export-intro" id="exportDialogIntro"></p>
         <fieldset class="export-choice"><legend>Letterhead <small>at the top</small></legend><div class="export-options" id="exportLetterheads"></div></fieldset>
         <fieldset class="export-choice"><legend>Bank details <small>at the bottom</small></legend><div class="export-options" id="exportBanks"></div></fieldset>
+        <!-- PDF only: which products (all, or picked) and which columns (Code and Description always). -->
+        <fieldset class="export-choice export-include" id="exportInclude" hidden>
+            <legend>What to include <small>in the PDF</small></legend>
+            <div class="export-seg" role="radiogroup" aria-label="Products">
+                <label><input type="radio" name="exportRows" value="all" checked><span>All products <small id="exportAllCount"></small></span></label>
+                <label><input type="radio" name="exportRows" value="pick"><span>Choose products…</span></label>
+            </div>
+            <div class="ml-reveal export-pick-reveal" id="exportPickWrap" aria-hidden="true">
+                <div class="ml-reveal-inner">
+                    <div class="export-pick">
+                        <div class="export-pick-tools">
+                            <label class="export-pick-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg><input type="search" id="exportPickSearch" placeholder="Search name or code…" autocomplete="off" aria-label="Search products"></label>
+                            <span class="export-pick-count" id="exportPickCount"></span>
+                            <button type="button" class="export-link" data-pick-all="1">All</button><button type="button" class="export-link" data-pick-all="0">None</button>
+                        </div>
+                        <div class="export-pick-list" id="exportPickList"></div>
+                    </div>
+                </div>
+            </div>
+            <p class="export-sub">Columns <small>Code and Description are always included</small></p>
+            <div class="export-cols" id="exportCols"></div>
+        </fieldset>
         <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button value="default" class="button primary" id="exportDialogGo">Export</button></div>
     </form>
 </dialog>
@@ -1045,7 +1067,7 @@ if ($required !== null && !user_can($user, $required)) {
     <p class="lsm-heading">Product category</p>
     <div id="categoryMenuList" class="cm-list" role="listbox" aria-label="Product categories"></div>
 </div>
-<div id="codeSuggest" class="list-switcher-menu code-suggest" role="listbox" aria-label="LRN codes" hidden></div>
+<div id="codeSuggest" class="list-switcher-menu code-suggest" role="listbox" aria-label="Product codes" hidden></div>
 <div id="rowMenu" class="row-menu" role="menu" hidden></div>
 <!-- How to use PLA: the screen-recorded guide (assets/videos/pla-guide.mp4), opened from the ? in the top bar. -->
 <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideTitle">
@@ -1067,7 +1089,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
 <script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=237"></script>
+<script src="../scripts/app.js?v=241"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=20"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

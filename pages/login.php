@@ -27,8 +27,8 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=244">
-    <link rel="stylesheet" href="../styles/login.css?v=3">
+    <link rel="stylesheet" href="../styles/app.css?v=245">
+    <link rel="stylesheet" href="../styles/login.css?v=5">
     <script>
     (function () {
         try {
@@ -90,6 +90,8 @@ try {
                     </button>
                 </span>
             </div>
+            <!-- Wrong passwords: one pip per attempt (5, then a 15-minute lock). -->
+            <div class="attempt-meter" id="attemptMeter" aria-live="polite" hidden><span class="attempt-pips" aria-hidden="true"></span><small id="attemptText"></small></div>
             <div class="auth-message" id="authMessage" role="alert"></div>
             <button class="button primary" id="loginSubmitBtn" type="submit">Sign in</button>
         </form>
@@ -103,6 +105,6 @@ try {
     </aside>
 </main>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/login.js?v=5"></script>
+<script src="../scripts/login.js?v=7"></script>
 </body>
 </html>
