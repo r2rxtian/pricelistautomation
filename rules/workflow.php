@@ -9,7 +9,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/users.php';
-require_once __DIR__ . '/../repository/store.php';
+require_once __DIR__ . '/../conn/store.php';
 
 function is_auto_approver(string $username): bool
 {

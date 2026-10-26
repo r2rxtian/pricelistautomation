@@ -9,14 +9,14 @@ declare(strict_types=1);
  *   - activity: uploads, price changes and exports per day for the last 30 days.
  */
 
-require_once __DIR__ . '/masterlist.php';
+require_once __DIR__ . '/pricing.php';
 
 const DASHBOARD_DAYS = 30;
 
 function dashboard_payload(array $user): array
 {
-    $products = masterlist_enabled() ? masterlist_db_products() : [];
-    $rules = $products ? masterlist_db_rules() : [];
+    $products = pricing_enabled() ? pricing_db_products() : [];
+    $rules = $products ? pricing_db_rules() : [];
     $levels = array_values(array_filter(database_get_list_options('priceLevels') ?? [], fn($o) => $o['active']));
     $customers = array_values(array_filter(database_get_list_options('countries') ?? [], fn($o) => $o['active']));
 
@@ -36,7 +36,7 @@ function dashboard_payload(array $user): array
             $levelId = (int) $row['price_level_id'];
             $touch($levelId, database_iso($row['set_at']), (string) $row['set_by']);
             if ($row['country_id'] === null) {
-                $levelPrices[$levelId][(int) $row['product_id']] = ['pc' => masterlist_db_number($row['price_pc']), 'box' => masterlist_db_number($row['price_box'])];
+                $levelPrices[$levelId][(int) $row['product_id']] = ['pc' => pricing_db_number($row['price_pc']), 'box' => pricing_db_number($row['price_box'])];
             } else {
                 $customerOwn[$levelId] = ($customerOwn[$levelId] ?? 0) + 1;
             }
@@ -79,7 +79,7 @@ function dashboard_payload(array $user): array
     foreach ($levels as $i => $level) {
         $onLevel = array_values(array_map(fn($c) => $c['name'], array_filter($customers, fn($c) => $c['levelId'] === $level['id'])));
         $levelCards[] = [
-            'id' => masterlist_list_id(0, $level['id']), 'name' => $level['name'], 'description' => $level['description'],
+            'id' => pricing_list_id(0, $level['id']), 'name' => $level['name'], 'description' => $level['description'],
             'customers' => $onLevel,
             'uploaded' => $uploaded[$level['id']] ?? 0,
             'customerPrices' => $customerOwn[$level['id']] ?? 0,

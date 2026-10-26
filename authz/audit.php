@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../rules/validation.php';
-require_once __DIR__ . '/../repository/store.php';
+require_once __DIR__ . '/../conn/store.php';
 
 function record_audit(string $type, string $title, string $details = '', array $metadata = [], ?array $actor = null): array
 {

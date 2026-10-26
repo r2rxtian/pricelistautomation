@@ -5,7 +5,7 @@ declare(strict_types=1);
  * looked up again here. Someone whose access was removed earlier is reactivated with the new role.
  */
 require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../../rules/user_admin.php';
+require_once __DIR__ . '/../../rules/user_management.php';
 
 $user = apiUser();
 requirePost();

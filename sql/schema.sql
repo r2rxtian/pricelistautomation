@@ -212,7 +212,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_Notifications_Rec
 GO
 
 -- ============================================================
--- Price masterlist (rules/masterlist.php)
+-- Price masterlist (rules/pricing.php)
 -- One list of products with base prices. A price in a country + price level list is the price set
 -- for it there (PLA_PriceOverrides), otherwise the base price × every matching % rule (PLA_PriceRules).
 -- ============================================================
@@ -327,6 +327,21 @@ END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceChanges_version')
     CREATE INDEX IX_PLA_PriceChanges_version ON dbo.PLA_PriceChanges (version_id);
+GO
+
+-- Who has which price list open right now: one row per browser tab, refreshed every 15 seconds while
+-- the app is open (api/app/presence.php). Rows older than 2 minutes are cleared on the next check.
+IF OBJECT_ID(N'dbo.PLA_Presence', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PLA_Presence (
+        tab_id varchar(32) NOT NULL PRIMARY KEY,
+        username nvarchar(120) NOT NULL,           -- PLA_Users.username
+        display_name nvarchar(180) NOT NULL,
+        list_id varchar(40) NULL,                  -- list-<customerId>-<priceLevelId>; NULL = no file in view
+        unsaved int NOT NULL CONSTRAINT DF_PLA_Presence_unsaved DEFAULT 0,  -- products changed, not saved yet
+        seen_at datetime2(0) NOT NULL CONSTRAINT DF_PLA_Presence_seen DEFAULT SYSUTCDATETIME()
+    );
+END;
 GO
 
 PRINT 'dbo.PLA_* tables ready. Next: run seed.sql.';

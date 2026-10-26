@@ -10,7 +10,7 @@ $versions = array_values(array_filter(repo_list_version_summaries(), fn($v) => v
 $versions = array_map(fn($v) => version_for_client($user, $v), $versions);
 // The price list and every country × price level in it (live, so always visible; nothing to approve
 // or delete, so they are sent as they are).
-$versions = array_merge($versions, masterlist_summaries());
+$versions = array_merge($versions, pricing_summaries());
 
 json_response([
     'ok' => true,
@@ -31,7 +31,7 @@ json_response([
     'exportBranding' => user_can($user, 'export') ? ['letterheads' => EXPORT_LETTERHEADS, 'banks' => EXPORT_BANK_DETAILS] : null,
     'directory' => directory_payload(),
     'versions' => $versions,
-    'masterlist' => masterlist_payload(),
+    'masterlist' => pricing_payload(),
     'productImages' => repo_list_images(),
     'photoLibrary' => user_can($user, 'manageImages') ? repo_list_library() : [],
     'photoFolders' => user_can($user, 'manageImages') ? repo_list_library_folders() : [],

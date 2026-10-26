@@ -5,7 +5,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/validation.php';
-require_once __DIR__ . '/../repository/store.php';
+require_once __DIR__ . '/../conn/store.php';
 require_once __DIR__ . '/../authz/audit.php';
 
 /** Turns $_FILES entries (single or multiple) into a flat list of upload arrays. */

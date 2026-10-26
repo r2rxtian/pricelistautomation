@@ -1,0 +1,1263 @@
+/*
+ * config.css — the styles used only on Config (pages/config.php).
+ *
+ * Loaded after styles/app.css (the shared look: colours, top bar, buttons, dialogs) by
+ * components/app_shell.php. The sections keep the titles and order they had in app.css.
+ */
+
+.select-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+html[data-initial-panel="settingsPanel"] #settingsPanel { display: block !important; }
+
+.image-setting-preview.empty-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  border: 1.5px dashed var(--line-subtle, rgba(201, 143, 152, 0.45));
+  background: var(--surface-subtle, rgba(248, 240, 242, 0.5));
+  color: var(--text-muted, #8e8387);
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .image-setting-preview.empty-preview {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c9498;
+}
+
+/* Admin image settings */
+
+.image-settings-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-panel);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-card) 96%, transparent);
+  box-shadow: 0 14px 36px rgba(98, 45, 58, .10);
+}
+
+.image-settings-toolbar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 220px minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line-panel);
+  background: var(--surface-card);
+}
+
+.settings-category-control,
+.settings-search {
+  min-width: 0;
+}
+
+.image-setting-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 102px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-row);
+  transition: background-color .18s ease;
+}
+
+.image-setting-row:nth-child(even) {
+  background: var(--surface-row-alt);
+}
+
+.image-setting-row:hover {
+  background: var(--surface-row-hover);
+}
+
+.image-setting-row:last-child {
+  border-bottom: 0;
+}
+
+.image-setting-preview {
+  width: 104px;
+  height: 74px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid var(--line-panel);
+  border-radius: 9px;
+  background: var(--surface-elevated);
+}
+
+.image-setting-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.image-setting-copy > span {
+  color: var(--rose);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.image-setting-copy > strong {
+  overflow: hidden;
+  color: var(--text-heading);
+  font-family: var(--display);
+  font-size: 1.05rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-setting-copy > small {
+  color: var(--text-muted);
+  font-size: .72rem;
+}
+
+.image-setting-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Micro-Animations & Motion Design
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .image-settings-toolbar {
+      grid-template-columns: 1fr;
+    }
+  .image-settings-toolbar .history-count {
+      padding-inline: 2px;
+    }
+  .image-setting-row {
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 12px;
+    }
+  .image-setting-preview {
+      width: 84px;
+      height: 64px;
+    }
+  .image-setting-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+      padding-left: 96px;
+    }
+}
+
+@media (max-width: 520px) {
+  .image-setting-row {
+      grid-template-columns: 1fr;
+    }
+  .image-setting-preview {
+      width: 100%;
+      height: 150px;
+    }
+  .image-setting-actions {
+      grid-column: auto;
+      padding-left: 0;
+      flex-wrap: wrap;
+      justify-content: stretch;
+    }
+  .image-setting-actions .button {
+      flex: 1 1 140px;
+    }
+}
+
+/* ==========================================================================
+   Photo library ("drawer") + picker modal
+   ========================================================================== */
+
+.library-upload-status { color: var(--pink); font-size: 0.78rem; font-weight: 600; }
+
+.library-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-panel);
+  border-radius: 12px;
+  background: var(--surface-card);
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.library-card:hover { border-color: var(--line-th); box-shadow: 0 6px 18px rgba(20, 13, 18, 0.08); }
+
+.library-thumb { aspect-ratio: 4 / 3; background: var(--surface-elevated); overflow: hidden; }
+
+.library-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.library-meta { padding: 8px 10px 10px; min-width: 0; }
+
+.library-meta strong { display: block; color: var(--text-heading); font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.library-meta small { display: block; margin-top: 1px; color: var(--text-muted); font-size: 0.68rem; }
+
+.library-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--danger);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.library-card:hover .library-delete,
+.library-delete:focus-visible { opacity: 1; }
+
+.library-delete:hover { background: var(--danger-bg); }
+
+.picker-grid .library-card { cursor: pointer; }
+
+.picker-grid .library-card:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+.picker-grid .library-card.is-selected { border-color: var(--pink); box-shadow: 0 0 0 2px var(--pink); }
+
+.picker-grid .library-card.is-current .library-meta small { color: var(--good); font-weight: 700; }
+
+[data-theme="dark"] .library-delete { background: rgba(17, 18, 22, 0.9); }
+
+/* ==========================================================================
+   Notifications panel, dark mode: the header had no dark background (it stayed near-white,
+   hiding the title); the rest is tuned to match.
+   ========================================================================== */
+
+/* Photo library: category folders and their contents. */
+
+.image-settings-card.library-workspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
+  min-height: 280px;
+  box-shadow: 0 8px 28px rgba(98, 45, 58, .06);
+}
+
+.library-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line-panel);
+  background: var(--surface-elevated);
+}
+
+.library-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 6px 14px; }
+
+.library-sidebar-heading h2 { margin: 0; color: var(--text-heading); font: 600 .9rem var(--sans); }
+
+.library-new-folder { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line-panel); border-radius: 7px; color: var(--pink); background: var(--surface-card); font-size: 1.2rem; transition: background .2s ease, border-color .2s ease; }
+
+.library-new-folder:hover { background: var(--pink-subtle); border-color: var(--pink); }
+
+.library-folders { display: grid; gap: 4px; }
+
+.library-folder { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 9px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); text-align: left; transition: background .2s ease, color .2s ease; }
+
+.library-folder > svg { flex: 0 0 auto; }
+
+.library-folder > small { flex: 0 0 auto; min-width: 22px; text-align: center; font-size: .7rem; font-variant-numeric: tabular-nums; }
+
+.library-folder:hover { background: var(--pink-subtle); color: var(--text-heading); }
+
+.library-folder.is-active { background: var(--pink-subtle); border-color: var(--line-panel); color: var(--pink); }
+
+.library-folder.is-active > span { font-weight: 600; }
+
+.library-sidebar-note { margin: auto 6px 0; padding-top: 24px; color: var(--text-subtle); font-size: .7rem; line-height: 1.6; }
+
+.library-content { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+
+.library-content-heading { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; gap: 20px; padding: 22px 24px 18px; }
+
+.library-content-heading > div { min-width: 0; }
+
+.library-content-heading h2 { margin: 0 0 5px; color: var(--text-heading); font: 600 1.4rem var(--display); overflow-wrap: anywhere; }
+
+.library-content-heading .muted { margin: 0; max-width: 64ch; font-size: .78rem; }
+
+.library-upload-controls { display: grid; grid-template-columns: minmax(150px, 220px) auto; align-items: end; gap: 10px; flex: 0 1 auto; }
+
+.library-upload-controls .button { white-space: nowrap; }
+
+.library-upload-controls .library-upload-status { grid-column: 1 / -1; }
+
+.library-upload-status:empty { display: none; }
+
+.library-upload-destination { display: grid; gap: 5px; min-width: 0; }
+
+.library-content .image-settings-toolbar { grid-template-columns: minmax(0, 1fr) auto; padding: 12px 24px; background: transparent; }
+
+.library-content .library-grid { padding: 20px 24px 24px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); align-items: start; }
+
+.library-content .settings-empty { min-height: 220px; padding: 32px 24px; }
+
+.library-upload-status { white-space: nowrap; }
+
+.library-folder-form { display: grid; gap: 8px; margin: 0 4px 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line-panel); }
+
+.library-folder-form > label { color: var(--text-muted); font-size: .75rem; font-weight: 600; }
+
+.library-folder-form-actions { display: flex; gap: 6px; }
+
+.library-folder-form-actions .button { flex: 1; padding: 0 8px; font-size: .75rem; min-height: 32px; height: 32px; }
+
+.library-folder-error { margin: 0; color: var(--danger); font-size: .73rem; }
+
+.library-photo-folder-control { display: grid; gap: 5px; padding-top: 9px; margin-top: 8px; border-top: 1px solid var(--line-soft); }
+
+.library-photo-folder-control > span { color: var(--text-subtle); font-size: .65rem; }
+
+.library-photo-folder { min-height: 30px; font-size: .7rem; padding: 0 6px; }
+
+.library-card:focus-within .library-delete { opacity: 1; }
+
+@media (max-width: 900px) {
+  .image-settings-card.library-workspace { grid-template-columns: 180px minmax(0, 1fr); }
+  .library-content-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .library-upload-controls { width: 100%; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr) auto; }
+  .library-content-heading, .library-content .image-settings-toolbar { padding-inline: 16px; }
+  .library-content .library-grid { padding-inline: 16px; }
+}
+
+@media (max-width: 640px) {
+  .image-settings-card.library-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .library-sidebar { padding: 12px; max-height: 230px; border-right: 0; border-bottom: 1px solid var(--line-panel); }
+  .library-sidebar-heading { padding-bottom: 10px; }
+  .library-folders { display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0; padding: 2px; }
+  .library-folder { width: auto; min-width: 130px; flex: 0 0 auto; }
+  .library-folder > span { white-space: nowrap; }
+  .library-sidebar-note { display: none; }
+  .library-content .library-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .library-delete { opacity: 1; }
+}
+
+/* ==========================================================================
+   Reset prices confirm: a compact card hanging from the Reset prices button (top/right are
+   set by scripts/app.js) instead of a full modal.
+   ========================================================================== */
+
+/* Photo folders: one highlight sits behind the folder buttons and glides to the active one
+   (placeFolderIndicator in scripts/app.js). Until it can be measured, the button keeps its own. */
+
+.library-folders { position: relative; }
+
+.library-folder { position: relative; z-index: 1; }
+
+.library-folder-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line-panel);
+  border-radius: 8px;
+  background: var(--pink-subtle);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.library-folders.has-indicator .library-folder.is-active,
+.library-folders.has-indicator .library-folder.is-active:hover { background: transparent; border-color: transparent; }
+
+/* ==========================================================================
+   Config sections: "Product photos" | "Countries & price levels" beside the page title, with a
+   highlight that glides between them. The photo tabs belong to Product photos only.
+   ========================================================================== */
+
+#settingsPanel .page-heading.settings-heading { display: flex !important; flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.config-sections {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line-panel);
+  border-radius: 11px;
+  background: var(--surface-elevated, #f8f2f4);
+}
+
+.config-sections-glider {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: 8px;
+  background: var(--surface-card);
+  box-shadow: 0 1px 2px rgba(60, 20, 35, 0.12), 0 4px 10px -4px rgba(60, 20, 35, 0.18);
+  pointer-events: none;
+}
+
+.config-section-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 0.8rem var(--sans);
+  cursor: pointer;
+  transition: color .2s ease;
+}
+
+.config-section-btn:hover { color: var(--text-heading); }
+
+.config-section-btn.is-active { color: var(--pink); }
+
+.config-section-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--pink) 60%, transparent); outline-offset: 1px; }
+
+[data-theme="dark"] .config-sections { background: #141519; border-color: #26292e; }
+
+[data-theme="dark"] .config-sections-glider { background: #24191e; box-shadow: inset 0 0 0 1px #4e2a36; }
+
+[data-theme="dark"] .config-section-btn.is-active { color: #fabbcb; }
+
+/* ==========================================================================
+   Countries & price levels: two lists side by side. Each row: on/off switch, name (and level
+   description), how many price lists use it, and edit / reorder / remove.
+   ========================================================================== */
+
+.lists-card { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; min-height: 0; }
+
+.lists-card[hidden] { display: none; }
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 230px);
+  border: 1px solid var(--line-panel);
+  border-radius: 14px;
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.option-list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line-soft); }
+
+.option-list-head h2 { margin: 0; font: 600 1.15rem var(--display); color: var(--text-heading); }
+
+.option-note { margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--line-soft); color: var(--text-muted); font-size: 0.74rem; line-height: 1.5; }
+
+/* The rows area is a soft dotted canvas that the tiles and ladder cards float on. */
+
+.option-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  background-color: var(--surface-elevated, #fcf8f9);
+  background-image: radial-gradient(color-mix(in srgb, var(--pink) 16%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+
+.option-rows > .option-empty { grid-column: 1 / -1; }
+
+.option-main { display: grid; gap: 2px; min-width: 0; }
+
+.option-main strong { font-size: 0.86rem; color: var(--text-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.option-main small { font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.option-main small em { color: var(--text-subtle); }
+
+.option-main input {
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line-panel);
+  border-radius: 7px;
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font: 500 0.8rem var(--sans);
+}
+
+.option-main input:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+
+.option-main input:disabled { opacity: .7; cursor: not-allowed; }
+
+.option-row.is-editing .option-main { gap: 6px; }
+
+.option-usage { font-size: 0.68rem; font-weight: 700; color: var(--text-subtle); white-space: nowrap; }
+
+.option-usage.is-used { padding: 2px 7px; border-radius: 999px; background: var(--pink-subtle); color: var(--pink); }
+
+.option-actions { display: flex; align-items: center; gap: 2px; }
+
+.option-actions .button { height: 28px; min-height: 28px; padding: 0 10px; font-size: 0.72rem; }
+
+.option-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s ease, background .2s ease, color .2s ease;
+}
+
+.option-row:hover .option-icon,
+.option-icon:focus-visible { opacity: 1; }
+
+.option-icon:hover:not(:disabled) { background: var(--pink-subtle); color: var(--pink); }
+
+.option-icon.danger:hover:not(:disabled) { background: #fde8e8; color: #b91c1c; }
+
+.option-icon:disabled { opacity: 0 !important; cursor: default; }
+
+.option-row:hover .option-icon:disabled { opacity: .3 !important; }
+
+/* Countries: quiet cards with the country's flag, name and code, a slim A–Z index on the side,
+   "All countries / In use" tabs and an "Add country" row that suggests names and shows the flag.
+   Hover a card for its ×; a country used by saved price lists says so instead and can't be removed. */
+
+.country-head-tools { display: flex; align-items: center; gap: 8px; }
+
+.country-head-tools .option-search { width: 190px; }
+
+.country-add-toggle { height: 34px; min-height: 34px; padding: 0 14px; font-size: 0.78rem; white-space: nowrap; }
+
+.country-add-toggle span { font-size: 1rem; line-height: 1; }
+
+.country-add { align-items: center; border-top: 0; border-bottom: 1px solid var(--line-soft); }
+
+.country-add[hidden] { display: none; }
+
+.country-add-flag { display: none; flex: none; width: 30px; height: 22px; overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .08); }
+
+.country-add-flag.has-flag { display: block; }
+
+.country-add-flag img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.country-add-close { opacity: 1; }
+
+.country-tabs { display: flex; align-items: center; gap: 4px; padding: 10px 18px 0; }
+
+.country-tab { height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); font: 600 0.76rem var(--sans); cursor: pointer; transition: background .2s ease, color .2s ease; }
+
+.country-tab:hover { color: var(--text-heading); }
+
+.country-tab.is-active { background: var(--pink-subtle); color: var(--pink); }
+
+.country-body { display: flex; flex: 1 1 auto; min-height: 0; }
+
+.country-body > .option-rows { flex: 1 1 auto; }
+
+[data-option-type="countries"] .option-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 10px; padding: 12px 14px 16px 18px; }
+
+.country-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-card);
+  transition: border-color .2s ease, box-shadow .25s ease, transform .3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.country-card:hover,
+.country-card:focus-within { border-color: var(--line-panel); box-shadow: 0 8px 18px -14px rgba(40, 20, 30, .45); transform: translateY(-1px); }
+
+.country-flag { display: block; flex: none; width: 34px; height: 25px; overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 1px 2px rgba(0, 0, 0, .08); }
+
+.country-flag img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.flag-fallback { display: grid; place-items: center; width: 100%; height: 100%; background: hsl(var(--tile-hue) 60% 92%); color: hsl(var(--tile-hue) 55% 32%); font: 800 0.6rem/1 var(--sans); letter-spacing: .04em; }
+
+.country-text { display: grid; gap: 1px; min-width: 0; }
+
+.country-text strong { overflow: hidden; color: var(--text-heading); font-size: 0.82rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+.country-text small { overflow: hidden; color: var(--text-subtle); font-size: 0.66rem; font-weight: 600; letter-spacing: .04em; text-overflow: ellipsis; white-space: nowrap; }
+
+.country-text small em { color: var(--pink); font-style: normal; letter-spacing: 0; }
+
+.country-remove {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font: 700 0.86rem/1 var(--sans);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%) scale(.7);
+  transition: opacity .2s ease, transform .25s ease, background .2s ease, color .2s ease;
+}
+
+.country-card:hover .country-remove,
+.country-remove:focus-visible { opacity: 1; transform: translateY(-50%) scale(1); }
+
+.country-remove:hover { background: #fde8e8; color: #b91c1c; }
+
+.country-card:hover .country-text { padding-right: 18px; }
+
+.country-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line-soft); color: var(--text-muted); font-size: 0.72rem; }
+
+.country-foot-hint { color: var(--text-subtle); }
+
+@media (prefers-reduced-motion: reduce) {
+  .country-card, .country-remove { transition: none; }
+}
+
+/* Customers: a tab per price level, and each card's price level as a small pill that is a dropdown. */
+
+.country-tabs { flex-wrap: wrap; }
+
+.country-tab-count { margin-left: 3px; color: var(--text-subtle); font-size: 0.68rem; font-weight: 700; }
+
+.country-tab.is-active .country-tab-count { color: inherit; opacity: .75; }
+
+[data-option-type="countries"] .option-rows { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+.customer-card { align-items: flex-start; }
+
+.customer-card .country-flag { margin-top: 2px; }
+
+.customer-card .country-text { gap: 4px; }
+
+.customer-level { display: inline-flex; max-width: 100%; }
+
+.customer-level.is-missing select { background-color: #fff4e5; color: #b45309; }
+
+.customer-add-level { flex: 0 0 180px; }
+
+[data-theme="dark"] .customer-level.is-missing select { background-color: #2b2112; color: #fbbf24; }
+
+/* Price levels: a ladder. Numbered medals in a straight column, joined by a dashed rail, each with
+   its floating card (name, description, usage, reorder/edit/remove, switch). */
+
+[data-option-type="priceLevels"] .option-rows { display: grid; grid-auto-rows: max-content; gap: 12px; align-content: start; }
+
+.level-step { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 10px; }
+
+.level-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  height: calc(100% + 12px);
+  border-left: 2px dashed color-mix(in srgb, var(--pink) 35%, transparent);
+}
+
+.level-medal {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #b52042, #e46a8a);
+  box-shadow: 0 0 0 4px var(--surface-elevated, #fcf8f9), 0 6px 12px -6px rgba(181, 32, 66, .7);
+  color: #fff;
+  font: 800 0.86rem/1 var(--display);
+  transition: filter .25s ease, transform .4s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.level-step:hover .level-medal { transform: scale(1.08); }
+
+.level-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--line-panel);
+  border-radius: 12px;
+  background: var(--surface-card);
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .05), 0 10px 20px -14px rgba(40, 20, 30, .3);
+  transition: transform .35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow .35s ease, opacity .25s ease;
+}
+
+.level-step:hover .level-card { transform: translateX(3px); box-shadow: 0 2px 4px rgba(40, 20, 30, .06), 0 16px 26px -16px rgba(40, 20, 30, .4); }
+
+.level-step.is-off .level-medal { filter: grayscale(1); opacity: .55; }
+
+.level-step.is-off .option-main { opacity: .55; }
+
+.level-step.is-editing .level-card { grid-template-columns: minmax(0, 1fr) auto auto; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); transform: none; }
+
+/* On/off switch: a gray pill that turns green when on, with a white knob that slides across.
+   42×24 so it sits inside a list row. */
+
+.option-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 30px;
+  background-color: #ccc;
+  cursor: pointer;
+  transition: background-color .4s, box-shadow .4s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.option-toggle[aria-checked="true"] { background-color: rgb(0, 221, 80); }
+
+.switch-knob {
+  position: absolute;
+  left: 3.5px;
+  bottom: 3.5px;
+  width: 17px;
+  height: 17px;
+  border-radius: 20px;
+  background-color: #fff;
+  transition: transform .4s;
+}
+
+.option-toggle[aria-checked="true"] .switch-knob { transform: translateX(18px); }
+
+.option-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pink) 35%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .option-toggle, .switch-knob { transition-duration: .01s; }
+}
+
+.option-add { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line-panel); background: var(--surface-elevated, #fcf8f9); }
+
+.option-add input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-panel);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font: 500 0.8rem var(--sans);
+}
+
+.option-add input:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-subtle); }
+
+.option-add .button { height: 34px; min-height: 34px; }
+
+@media (max-width: 1000px) {
+  .lists-card { grid-template-columns: minmax(0, 1fr); }
+  .option-list { max-height: none; }
+}
+
+[data-theme="dark"] .option-list { background: #141519; border-color: #26292e; }
+
+[data-theme="dark"] .option-rows { background-color: #111216; background-image: radial-gradient(rgba(250, 187, 203, .12) 1px, transparent 1.3px); }
+
+[data-theme="dark"] .level-card { background: #18191e; border-color: #2a2d34; box-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 20px -14px rgba(0, 0, 0, .9); }
+
+[data-theme="dark"] .country-card { background: #18191e; border-color: #26292e; }
+
+[data-theme="dark"] .country-card:hover { border-color: #33363e; box-shadow: 0 8px 18px -14px rgba(0, 0, 0, .9); }
+
+[data-theme="dark"] .country-flag { box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+
+[data-theme="dark"] .flag-fallback { background: hsl(var(--tile-hue) 30% 18%); color: hsl(var(--tile-hue) 70% 78%); }
+
+[data-theme="dark"] .country-remove:hover { background: #2a1414; color: #fca5a5; }
+
+[data-theme="dark"] .country-tab.is-active { background: #2a161e; color: #fabbcb; }
+
+[data-theme="dark"] .country-foot, [data-theme="dark"] .country-add { border-color: #26292e; }
+
+[data-theme="dark"] .level-medal { box-shadow: 0 0 0 4px #111216, 0 6px 12px -6px rgba(0, 0, 0, .8); }
+
+[data-theme="dark"] .option-usage.is-used { background: #24191e; color: #fabbcb; }
+
+[data-theme="dark"] .option-main input,
+[data-theme="dark"] .option-add input { background: #111216; color: #f4f4f6; border-color: #2c2f37; }
+
+[data-theme="dark"] .option-add { background: #17181d; border-color: #26292e; }
+
+/* Dark: a darker gray off-state so the white knob still stands out. */
+
+[data-theme="dark"] .option-toggle { background-color: #3a3d45; }
+
+[data-theme="dark"] .option-toggle[aria-checked="true"] { background-color: rgb(0, 200, 74); }
+
+[data-theme="dark"] .option-icon.danger:hover:not(:disabled) { background: #2a1414; color: #fca5a5; }
+
+/* ==========================================================================
+   Config › Product photos.
+   Photo library = a Polaroid wall: prints taped to a dotted board, each slightly tilted; hover
+   straightens and lifts one. The first print is a blank "Upload photos" one. Folders show a
+   small fan of their first photos that opens on hover.
+   Product type photos = plates: each product type's photo served on a round plate, or an empty
+   dashed plate to choose one, with a ring showing how many types have a photo.
+   ========================================================================== */
+
+#libraryGrid.library-grid {
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 32px 22px;
+  padding: 30px 24px 28px;
+  background-color: var(--surface-elevated, #fcf8f9);
+  background-image: radial-gradient(color-mix(in srgb, var(--pink) 16%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+
+#libraryGrid .library-card {
+  --tilt: -1.6deg;
+  padding: 10px 10px 0;
+  border: 0;
+  border-radius: 3px;
+  background: #fffdfa;
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .12), 0 12px 22px -14px rgba(40, 20, 30, .45);
+  overflow: visible;
+  transform: rotate(var(--tilt));
+  transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), box-shadow .35s ease;
+}
+
+#libraryGrid > :nth-child(4n + 2) { --tilt: 1.3deg; }
+
+#libraryGrid > :nth-child(4n + 3) { --tilt: -0.7deg; }
+
+#libraryGrid > :nth-child(4n) { --tilt: 1.9deg; }
+
+#libraryGrid .library-card:hover,
+#libraryGrid .library-card:focus-within { z-index: 2; transform: rotate(0deg) translateY(-6px) scale(1.03); box-shadow: 0 2px 4px rgba(40, 20, 30, .12), 0 26px 34px -18px rgba(40, 20, 30, .55); }
+
+/* A strip of tape holding each print up. */
+
+#libraryGrid .library-card::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: -11px;
+  left: 50%;
+  width: 74px;
+  height: 22px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .28) 0 2px, transparent 2px 5px), color-mix(in srgb, var(--pink) 26%, rgba(255, 236, 205, .78));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  opacity: .9;
+  clip-path: polygon(3% 0, 97% 5%, 100% 50%, 96% 100%, 4% 95%, 0 50%);
+  transform: translateX(-50%) rotate(calc(var(--tilt) * -2));
+}
+
+#libraryGrid .library-thumb { aspect-ratio: 1 / 1; border-radius: 1px; background: #eee8e2; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
+
+#libraryGrid .library-thumb img { transition: transform .6s cubic-bezier(0.22, 1, 0.36, 1); }
+
+#libraryGrid .library-card:hover .library-thumb img { transform: scale(1.04); }
+
+#libraryGrid .library-meta { padding: 10px 2px 12px; text-align: center; }
+
+#libraryGrid .library-meta strong { color: #3a2a30; font: italic 600 0.92rem/1.3 var(--display); }
+
+#libraryGrid .library-meta small { color: #8a7a80; }
+
+#libraryGrid .library-photo-folder-control { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(0, 0, 0, .12); }
+
+#libraryGrid .library-photo-folder-control > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+#libraryGrid .library-photo-folder { min-height: 28px; border-color: rgba(0, 0, 0, .1); border-radius: 999px; background-color: transparent; color: #5b4a50; font-size: 0.7rem; text-align-last: center; }
+
+#libraryGrid .library-delete { top: 16px; right: 16px; }
+
+/* The blank print: upload into the open folder. */
+
+.library-upload-print {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 236px;
+  padding: 20px 14px;
+  border: 2px dashed color-mix(in srgb, var(--pink) 38%, var(--line-panel));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-card) 75%, transparent);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  transform: rotate(var(--tilt, -1.6deg));
+  transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .3s ease, border-color .3s ease;
+}
+
+.library-upload-print:hover,
+.library-upload-print:focus-visible { transform: rotate(0deg) translateY(-4px); border-color: var(--pink); background: var(--pink-subtle); outline: none; }
+
+.library-upload-print strong { color: var(--text-heading); font-size: 0.9rem; }
+
+.library-upload-print small { max-width: 150px; font-size: 0.7rem; line-height: 1.4; }
+
+.library-upload-plus { display: grid; place-items: center; width: 54px; height: 54px; margin-bottom: 6px; border: 2px dashed color-mix(in srgb, var(--pink) 55%, transparent); border-radius: 50%; color: var(--pink); font: 400 1.7rem/1 var(--sans); transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .3s ease; }
+
+.library-upload-print:hover .library-upload-plus { background: var(--surface-card); transform: rotate(90deg); }
+
+/* Folder sidebar: a fan of the folder's first photos. */
+
+.library-folder > .folder-fan { position: relative; flex: 0 0 30px; width: 30px; height: 26px; margin-left: -4px; }
+
+.folder-fan img {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  transition: transform .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.folder-fan img:nth-last-child(2) { transform: rotate(-12deg) translateX(-3px); }
+
+.folder-fan img:nth-last-child(3) { transform: rotate(12deg) translateX(3px); }
+
+.library-folder:hover .folder-fan img:nth-last-child(2),
+.library-folder.is-active .folder-fan img:nth-last-child(2) { transform: rotate(-22deg) translateX(-6px); }
+
+.library-folder:hover .folder-fan img:nth-last-child(3),
+.library-folder.is-active .folder-fan img:nth-last-child(3) { transform: rotate(22deg) translateX(6px); }
+
+/* Product type photos: plates. */
+
+#imageSettingsList.image-settings-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 18px;
+  padding: 22px;
+  background-color: var(--surface-elevated, #fcf8f9);
+  background-image: radial-gradient(color-mix(in srgb, var(--pink) 16%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+
+#imageSettingsList.image-settings-list[hidden] { display: none; }
+
+.plate-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 18px 14px 14px;
+  border: 1px solid var(--line-panel);
+  border-radius: 16px;
+  background: var(--surface-card);
+  box-shadow: 0 1px 2px rgba(40, 20, 30, .05), 0 12px 22px -16px rgba(40, 20, 30, .35);
+  text-align: center;
+  transition: transform .35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow .35s ease;
+}
+
+.plate-card:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(40, 20, 30, .06), 0 20px 30px -18px rgba(40, 20, 30, .45); }
+
+.plate {
+  display: grid;
+  place-items: center;
+  width: 116px;
+  height: 116px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 57%, #f1ebee 58%, #fff 64%, #fbf8f9 100%);
+  box-shadow: 0 0 0 1px rgba(40, 20, 30, .08), 0 12px 18px -10px rgba(40, 20, 30, .45), inset 0 -3px 6px rgba(40, 20, 30, .07);
+  cursor: pointer;
+  transition: transform .6s cubic-bezier(.34, 1.56, .64, 1), box-shadow .3s ease;
+}
+
+.plate img { width: 82px; height: 82px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+
+.plate-card:hover .plate { transform: rotate(10deg) scale(1.04); }
+
+.plate:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--pink-subtle), 0 0 0 4px var(--pink), 0 12px 18px -10px rgba(40, 20, 30, .45); }
+
+.plate-empty { display: grid; place-content: center; width: 82px; height: 82px; border: 2px dashed color-mix(in srgb, var(--pink) 45%, transparent); border-radius: 50%; color: var(--pink); font: 700 0.64rem/1.2 var(--sans); }
+
+.plate-empty span { font-size: 1.4rem; font-weight: 400; line-height: 1; }
+
+.plate-category { margin-top: 14px; color: var(--pink); font: 800 0.58rem/1.2 var(--sans); letter-spacing: .14em; text-transform: uppercase; }
+
+.plate-name { max-width: 100%; margin-top: 3px; overflow: hidden; color: var(--text-heading); font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+
+.plate-meta { max-width: 100%; margin-top: 2px; overflow: hidden; color: var(--text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+
+.plate-actions { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
+
+.plate-actions .button { height: 28px; min-height: 28px; padding: 0 12px; font-size: 0.72rem; }
+
+.plate-actions .option-icon { opacity: .55; }
+
+.plate-card:hover .plate-actions .option-icon { opacity: 1; }
+
+.plate-progress { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+.plate-progress svg { transform: rotate(-90deg); }
+
+.plate-progress circle { fill: none; stroke-width: 4; }
+
+.plate-progress-track { stroke: var(--line-panel); }
+
+.plate-progress-fill { stroke: var(--pink); stroke-linecap: round; transition: stroke-dasharray .6s ease; }
+
+.plate-progress strong { color: var(--text-heading); }
+
+@media (prefers-reduced-motion: reduce) {
+  #libraryGrid .library-card, .library-upload-print, .plate, .plate-card, .folder-fan img { transition: none; }
+}
+
+[data-theme="dark"] #libraryGrid .library-card { background: #ece6df; box-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 14px 24px -14px rgba(0, 0, 0, .95); }
+
+[data-theme="dark"] .library-upload-print { border-color: #4e2a36; background: rgba(22, 23, 28, .6); }
+
+[data-theme="dark"] .library-upload-print:hover { background: #1f171b; }
+
+[data-theme="dark"] .folder-fan img { border-color: #2a2d34; }
+
+[data-theme="dark"] .plate-card { background: #18191e; border-color: #2a2d34; box-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 22px -16px rgba(0, 0, 0, .9); }
+
+[data-theme="dark"] .plate { background: radial-gradient(circle, #2a2c33 0 57%, #22242a 58%, #2a2c33 64%, #24262c 100%); box-shadow: 0 0 0 1px rgba(255, 255, 255, .05), 0 12px 18px -10px rgba(0, 0, 0, .9), inset 0 -3px 6px rgba(0, 0, 0, .3); }
+
+[data-theme="dark"] .plate-category { color: #fabbcb; }
+
+/* ==========================================================================
+   Files: price lists grouped by country (flag, name, count), each group sorted by price level.
+   Every file is a small sheet of paper with a folded corner: price level and an inked status
+   stamp on top, the name, then products · when it changed · who uploaded it, and the actions.
+   The list open in the editor wears a pink bookmark. A slim dashed tile at the top uploads.
+   ========================================================================== */
+
+.sheet-group-head .country-flag { width: 26px; height: 19px; }
+
+.slip-head .country-flag { width: 22px; height: 16px; }
+
+/* ==========================================================================
+   Audit Logs as a logbook: a timeline per day. Each event is a coloured node on the line (by type)
+   with a short card: who · what, details, the file, the change and "View changes". Quick
+   back-and-forth edits by one person on one file fold into an "editing session" of steps.
+   ========================================================================== */
+
+/* Photo library: the title, upload controls and search stay put; only the photo wall scrolls. */
+
+.library-content { overflow: hidden; }
+
+.library-content-heading, .library-content .image-settings-toolbar { flex: 0 0 auto; }
+
+#libraryGrid.library-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; grid-auto-rows: max-content; }
+
+.library-content #libraryEmpty { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* ==========================================================================
+   Open price lists as tabs, under the top bar (like browser tabs): flag, name, price level, an
+   amber dot for unsaved changes and ×. The list shown in the editor is the raised white tab with
+   the pink underline. The strip is slim, and the editor's heading sits a little higher to make room,
+   so the price table keeps its space.
+   ========================================================================== */
+
+.file-tab .country-flag { width: 20px; height: 14px; border-radius: 3px; }
+
+/* ==========================================================================
+   Config starts high: one switcher for its three sections (each with its count), no second tab row,
+   and the photo library's folder title, search, count and upload share a single row.
+   ========================================================================== */
+
+.config-section-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-muted) 12%, transparent); color: var(--text-muted); font-size: 0.66rem; font-weight: 800; line-height: 1.5; text-align: center; transition: background .2s ease, color .2s ease; }
+
+.config-section-btn.is-active .config-section-count { background: var(--pink-subtle); color: var(--pink); }
+
+[data-theme="dark"] .config-section-count { background: #23252c; color: #a1a1aa; }
+
+[data-theme="dark"] .config-section-btn.is-active .config-section-count { background: #2a161e; color: #fabbcb; }
+
+.library-content-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px 14px; padding: 14px 20px; border-bottom: 1px solid var(--line-soft); }
+
+.library-folder-heading { display: grid; gap: 1px; flex: 0 1 260px; min-width: 150px; }
+
+.library-content-heading .library-folder-heading h2 { margin: 0; overflow: hidden; font-size: 1.15rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+
+.library-content-heading .library-folder-heading .muted { overflow: hidden; font-size: 0.7rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+
+.library-content-heading .library-search { flex: 1 1 220px; width: auto; min-width: 180px; }
+
+.library-content-heading .history-count { flex: none; white-space: nowrap; }
+
+.library-content-heading .library-upload-controls { display: flex; flex: none; align-items: center; gap: 8px; margin-left: auto; }
+
+.library-content-heading .library-upload-destination { display: flex; align-items: center; gap: 8px; }
+
+.library-content-heading .library-upload-destination > span { white-space: nowrap; }
+
+.library-content-heading .library-upload-destination select,
+.library-content-heading .library-upload-destination .select-dropdown { min-width: 150px; }
+
+.library-content-heading .library-upload-status:empty { display: none; }
+
+.library-content-heading .library-upload-status { flex-basis: 100%; }
+
+@media (max-width: 1180px) {
+  .library-folder-heading { flex-basis: 100%; }
+  .library-content-heading .library-upload-controls { margin-left: 0; }
+}
+
+[data-theme="dark"] .library-content-heading { border-bottom-color: #26292e; }
+
+.library-content-heading .library-upload-controls { padding-left: 14px; border-left: 1px solid var(--line-soft); }
+
+@media (max-width: 1180px) {
+  .library-content-heading .library-upload-controls { padding-left: 0; border-left: 0; }
+}
+
+[data-theme="dark"] .library-content-heading .library-upload-controls { border-left-color: #26292e; }
+
+/* Dark mode prints are dark paper: warm charcoal a step above the board, so the photos are the
+   brightest thing on the wall instead of a row of cream cards. The tape keeps the pink accent. */
+
+[data-theme="dark"] #libraryGrid .library-card {
+  background: linear-gradient(180deg, #232126 0%, #1f1d21 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 0 0 1px rgba(255, 255, 255, .05), 0 14px 26px -14px rgba(0, 0, 0, .95);
+}
+
+[data-theme="dark"] #libraryGrid .library-card:hover,
+[data-theme="dark"] #libraryGrid .library-card:focus-within { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 0 0 1px rgba(250, 187, 203, .18), 0 28px 36px -18px rgba(0, 0, 0, 1); }
+
+[data-theme="dark"] #libraryGrid .library-card::before {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .18) 0 2px, transparent 2px 5px), rgba(250, 187, 203, .55);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  opacity: 1;
+}
+
+[data-theme="dark"] #libraryGrid .library-thumb { background: #16171b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+
+[data-theme="dark"] #libraryGrid .library-meta strong { color: #f4f4f6; }
+
+[data-theme="dark"] #libraryGrid .library-meta small { color: #9a9aa3; }
+
+[data-theme="dark"] #libraryGrid .library-photo-folder-control { border-top-color: rgba(255, 255, 255, .09); }
+
+[data-theme="dark"] #libraryGrid .library-photo-folder {
+  border-color: #2e3037;
+  background-color: #16171b;
+  color: #d4d4d8;
+}
+
+[data-theme="dark"] #libraryGrid .library-photo-folder:hover { border-color: rgba(250, 187, 203, .35); }
+
+[data-theme="dark"] #libraryGrid .library-photo-folder:focus { border-color: #fabbcb; box-shadow: 0 0 0 3px rgba(250, 187, 203, .16); outline: none; }
+
+[data-theme="dark"] .library-upload-print { border-color: rgba(250, 187, 203, .3); background: rgba(31, 29, 33, .55); }
+
+[data-theme="dark"] .library-upload-print:hover,
+[data-theme="dark"] .library-upload-print:focus-visible { border-color: rgba(250, 187, 203, .6); background: #1f1d21; }
+
+/* Renaming a library photo: a pencil appears next to the name on hover; the name turns into a text
+   box in the same script style (Enter saves, Esc cancels). */
+
+.library-name-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+
+.library-name-row .library-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; border-radius: 4px; transition: background .2s ease; }
+
+.library-name-row .library-name:hover { background: color-mix(in srgb, var(--pink) 8%, transparent); }
+
+.library-rename { display: grid; flex: none; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-subtle); cursor: pointer; opacity: 0; transition: opacity .2s ease, background .2s ease, color .2s ease; }
+
+.library-card:hover .library-rename, .library-rename:focus-visible { opacity: 1; }
+
+.library-rename:hover, .library-rename:focus-visible { background: var(--pink-subtle); color: var(--pink); outline: none; }
+
+.library-name-row.is-editing .library-rename { display: none; }
+
+#libraryGrid .library-name-input { color: #3a2a30; background: #fff; }
+
+[data-theme="dark"] #libraryGrid .library-name-input { color: #f4f4f6; background: #16171b; border-color: #fabbcb; box-shadow: 0 0 0 3px rgba(250, 187, 203, .16); }
+
+[data-theme="dark"] .library-name-row .library-name:hover { background: rgba(250, 187, 203, .1); }
+
+@media (hover: none) {
+  .library-rename { opacity: .7; }
+}
+
+/* ==========================================================================
+   Files: each price list is a printed receipt. Level and menu on top, the name, details on dotted
+   leader lines, then the status stamp and "Open" above a torn zig-zag edge. The whole receipt opens
+   the list. (The drop shadow on .file-sheet follows the torn edge.)
+   ========================================================================== */
+
+/* Product type photos show the photo the way the price table does: the whole picture in a
+   rectangular frame (not a zoomed-in circle), so it's recognisably the same photo. */
+
+.plate-card .plate {
+  width: 100%; height: auto; aspect-ratio: 3 / 2; padding: 6px;
+  border-radius: 12px;
+  background: var(--surface-elevated, #fcf8f9);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  transition: box-shadow .25s ease, transform .35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.plate-card .plate img { width: 100%; height: 100%; border-radius: 7px; object-fit: contain; box-shadow: none; }
+
+.plate-card:hover .plate { transform: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pink) 35%, var(--line-soft)); }
+
+.plate-card .plate-empty { width: 100%; height: 100%; border-radius: 8px; }
+
+.plate-card .plate-category { margin-top: 12px; }
+
+[data-theme="dark"] .plate-card .plate { background: #141519; box-shadow: inset 0 0 0 1px #2a2d34; }
+
+[data-theme="dark"] .plate-card:hover .plate { box-shadow: inset 0 0 0 1px rgba(250, 187, 203, .3); }
+
+/* ==========================================================================
+   Tablets, iPads and small laptops (and MacBooks at default scaling).
+   ========================================================================== */
+
+/* Photo library header: wraps as rows (folder title, then search, count and upload). */
+
+.library-content-heading { flex-direction: row; }
+
+.library-content-heading .library-folder-heading { min-height: 0; }
+
+.library-content-heading .library-search { min-height: 0; }
+
+@media (max-width: 900px) {
+  .library-content-heading .library-search { flex: 1 1 100%; }
+  .library-content-heading .library-upload-controls { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .library-content-heading .library-upload-destination { flex: 1 1 200px; }
+  .library-content-heading .library-upload-destination select { flex: 1; width: 100%; }
+}

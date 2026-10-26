@@ -47,7 +47,13 @@ if ($required !== null && !user_can($user, $required)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=245">
+    <!-- Shared styles first, then each page's (all pages live in this one shell). Order matters: see app.css. -->
+    <link rel="stylesheet" href="../styles/app.css?v=250">
+    <link rel="stylesheet" href="../styles/dashboard.css?v=1">
+    <link rel="stylesheet" href="../styles/files.css?v=1">
+    <link rel="stylesheet" href="../styles/audit_logs.css?v=1">
+    <link rel="stylesheet" href="../styles/users.css?v=1">
+    <link rel="stylesheet" href="../styles/config.css?v=1">
     <script>
     (function() {
         try {
@@ -164,6 +170,9 @@ if ($required !== null && !user_can($user, $required)) {
                             </div>
                             <div class="file-tags-row" id="listTagsRow" hidden>
                                 <span id="activeBadge" class="status-badge" hidden><span class="pulse-dot" aria-hidden="true"><span class="pulse-ring"></span></span>Active</span><span class="file-audit-row" id="savedMetaRow" hidden><span id="savedMeta" class="saved-meta"></span></span>
+                                <!-- Who else has this file open, and a note when someone else's change reached it (scripts/app.js › renderPresence). -->
+                                <span id="presenceNote" class="presence-note" role="status" aria-live="polite" hidden></span>
+                                <span id="staleNote" class="stale-note" role="status" aria-live="polite" hidden><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg><span id="staleNoteText"></span><button type="button" id="staleNoteBtn" class="mini-action review">Show the new prices</button></span>
                                 <span id="approvalBanner" class="workflow-note" role="status" aria-live="polite" hidden>
                                     <span id="approvalBannerIcon" class="workflow-note-icon" aria-hidden="true"></span>
                                     <span id="approvalBannerText" class="workflow-note-text"></span>
@@ -865,6 +874,16 @@ if ($required !== null && !user_can($user, $required)) {
     </form>
 </dialog>
 
+<!-- Two people changed the same prices: keep which? (saving), or replace them? (approving). -->
+<dialog id="conflictDialog" class="conflict-dialog" aria-labelledby="conflictTitle">
+    <form method="dialog" class="dialog-card">
+        <div class="dialog-heading"><div><p class="kicker" id="conflictKicker">Before you save</p><h2 id="conflictTitle">Someone else changed some of the same prices</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+        <p class="muted" id="conflictText"></p>
+        <div id="conflictList" class="conflict-list"></div>
+        <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><span class="change-review-spacer"></span><button value="theirs" id="conflictTheirs" class="button secondary">Use theirs</button><button value="mine" id="conflictMine" class="button primary">Keep mine</button></div>
+    </form>
+</dialog>
+
 <dialog id="photoPickerDialog" class="photo-picker-dialog">
     <div class="dialog-card photo-picker-card">
         <div class="dialog-heading">
@@ -1088,10 +1107,9 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/country-flags.js?v=1"></script>
-<script src="../scripts/app.js?v=241"></script>
+<script src="../scripts/app.js?v=251"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=20"></script>
+<script src="../scripts/motion.js?v=22"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/constants.php';
-require_once __DIR__ . '/options.php';
+require_once __DIR__ . '/customers.php';
 
 function clean_text(mixed $value, int $max = 180): string
 {
@@ -22,7 +22,7 @@ function clean_number(mixed $value, float $min, float $max): ?float
 }
 
 /**
- * A price level from the configured list (rules/options.php): its exact name in any case, or the
+ * A price level from the configured list (rules/customers.php): its exact name in any case, or the
  * shorthand "1", "level 1", "PL1" for "Price Level 1". Null when it isn't listed.
  */
 function canonical_price_level(string $input): ?string

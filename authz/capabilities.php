@@ -1,11 +1,13 @@
 <?php
 declare(strict_types=1);
 /**
- * Role → permission matrix (Requirements.xlsx › Price Automation, section 2). Keyed by role NAME
+ * Which role may do what (Requirements.xlsx › Price Automation, section 2). Keyed by role NAME
  * (dbo.PLA_Roles.name), not numeric id, so it doesn't depend on IDENTITY insertion order.
  *
  *   Admin – Upload | Update | Save | Approve | Export   (Ms. Gen, Chelsea, Margaret)
  *   User  – Export approved price lists only             (Gemma)
+ *
+ * The check endpoints call is requirePermission() in authz/authz.php.
  */
 
 const ROLE_ADMIN = 'Admin';

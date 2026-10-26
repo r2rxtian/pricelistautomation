@@ -14,8 +14,8 @@ declare(strict_types=1);
  */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
-require_once __DIR__ . '/../rules/options.php';
-require_once __DIR__ . '/../repository/sqlserver.php';
+require_once __DIR__ . '/../rules/customers.php';
+require_once __DIR__ . '/../conn/sqlserver.php';
 
 $apply = in_array('--apply', $argv, true);
 $db = database_connection(); // also adds the customer → price level column when it is missing

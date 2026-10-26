@@ -1,8 +1,9 @@
 // motion.js — iOS-style motion for the app pages.
 //
 // It hooks into what the app already does instead of changing app.js:
-//   • the active top-nav item      → a sliding underline (GSAP)
-//   • a page (.panel) being shown   → the page glides up into place
+//   • the active top-nav item      → a sliding underline that stretches between tabs (GSAP)
+//   • a page picked in the top menu → the old page swings away, the new one swings in (pageSwap)
+//   • any other page (.panel) shown → the page glides into place
 //   • <dialog> showModal / close    → scale and fade in on open, quick fade out on close
 //   • popups whose `hidden` is removed (notifications, Edit prices, switchers, row menus,
 //     dev tools) → they grow out from where they open
@@ -133,7 +134,18 @@
         placed = true;
         return;
       }
-      window.gsap.to(bar, { ...target, duration: 0.55, ease: 'expo.out', overwrite: true });
+      // Moving to another page the underline stretches like taffy: its far edge reaches the new tab
+      // first, then the near edge catches up. (Coming back from an open file it just slides in.)
+      const fromX = Number(window.gsap.getProperty(bar, 'x')) || 0;
+      const fromW = Number(window.gsap.getProperty(bar, 'width')) || 0;
+      const shown = Number(window.gsap.getProperty(bar, 'opacity')) > 0.5;
+      if (Math.round(fromX) === Math.round(target.x) && Math.round(fromW) === Math.round(target.width)) return;
+      window.gsap.killTweensOf(bar);
+      if (!shown || !fromW) { window.gsap.to(bar, { ...target, duration: 0.55, ease: 'expo.out' }); return; }
+      const left = Math.min(fromX, target.x);
+      window.gsap.timeline()
+        .to(bar, { x: left, width: Math.max(fromX + fromW, target.x + target.width) - left, opacity: 1, duration: 0.17, ease: 'power2.in' })
+        .to(bar, { ...target, duration: 0.45, ease: 'expo.out' });
     };
     new MutationObserver(() => place(true)).observe(nav, { attributes: true, subtree: true, attributeFilter: ['class', 'hidden'] });
     window.addEventListener('resize', () => place(false));
@@ -168,6 +180,26 @@
       setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 680 + delay + 200);
     });
   }
+  /** During a page swap (below) the page's sections are dealt onto it from below, one after another. */
+  function dealIn(panel) {
+    [...panel.children]
+      .filter(el => !el.hidden && el.offsetParent !== null && el.tagName !== 'DIALOG')
+      .slice(0, 5)
+      .forEach((el, index) => {
+        el.getAnimations().forEach(a => a.id === 'pla-page' && a.cancel());
+        const delay = 110 + index * 40;
+        const anim = el.animate(
+          [
+            { opacity: 0, transform: 'translate3d(0, 22px, 0) scale(0.985)' },
+            { opacity: 1, offset: 0.4 },
+            { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+          ],
+          { duration: 460, delay, easing: PAGE_EASE, fill: 'backwards' }
+        );
+        anim.id = 'pla-page';
+        setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 460 + delay + 200);
+      });
+  }
   const panelObserver = new MutationObserver(records => {
     for (const record of records) {
       const panel = record.target;
@@ -179,10 +211,40 @@
       if (!previous || previous === panel.id || document.body.classList.contains('is-booting') || !animate()) continue;
       // Leftover motion on the page being left stops at once.
       document.getElementById(previous)?.querySelectorAll(':scope > *').forEach(el => el.getAnimations().forEach(a => a.id === 'pla-page' && a.finish()));
-      glideIn(panel, PAGE_ORDER.indexOf(panel.id) >= PAGE_ORDER.indexOf(previous));
+      if (root.classList.contains('pla-page-vt')) dealIn(panel);
+      else glideIn(panel, PAGE_ORDER.indexOf(panel.id) >= PAGE_ORDER.indexOf(previous));
     }
   });
   document.querySelectorAll('.panel').forEach(panel => panelObserver.observe(panel, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true }));
+
+  // --- Page changes from the top menu (a view transition, styles/app.css › "Page changes"): the
+  // page you leave swings back and away like a card in a carousel, and the new one swings in from
+  // the side of the tab you picked. Only the page area moves; the top bar stays put. About half a
+  // second. ---
+  let swapping = null;
+  /**
+   * Shows page `targetId` with the swap; `update` is what actually switches the page (called by the
+   * browser a moment later). Returns false when it doesn't animate, so the caller switches at once.
+   */
+  function pageSwap(targetId, update) {
+    const current = document.querySelector('.panel:not([hidden])')?.id;
+    if (!animate() || typeof document.startViewTransition !== 'function' || !current || current === targetId || document.body.classList.contains('is-booting')) return false;
+    // The open file sits between Files and the pages after it.
+    const order = id => (id === 'workspacePanel' ? PAGE_ORDER.indexOf('filesPanel') + 0.5 : PAGE_ORDER.indexOf(id));
+    const forward = order(targetId) >= order(current);
+    swapping?.skipTransition();
+    root.classList.remove('pla-page-fwd', 'pla-page-back');
+    root.classList.add('pla-page-vt', forward ? 'pla-page-fwd' : 'pla-page-back');
+    const transition = swapping = document.startViewTransition(update);
+    transition.ready.catch(() => { });
+    transition.finished.catch(() => { }).finally(() => {
+      if (swapping !== transition) return; // a newer swap took over
+      swapping = null;
+      root.classList.remove('pla-page-vt', 'pla-page-fwd', 'pla-page-back');
+    });
+    return true;
+  }
+  window.plaMotion.pageSwap = pageSwap;
 
   // --- Popups: grow out from where they open -------------------------------------------------
   const POPUPS = [

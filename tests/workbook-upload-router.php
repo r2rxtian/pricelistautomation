@@ -24,7 +24,7 @@ function canonical_country(string $value): ?string { return in_array($value, ['S
 function canonical_price_level(string $value): ?string { return in_array($value, PRICE_LEVELS, true) ? $value : null; }
 function find_option(string $type, string $input): ?array { return ['name' => $input, 'description' => '', 'active' => true]; }
 // The price masterlist is not part of this fixture: no id is one of its lists.
-function masterlist_is_virtual_id(string $id): bool { return false; }
+function pricing_is_virtual_id(string $id): bool { return false; }
 function repo_list_version_summaries(): array {
     return [
         ['id'=>'uploaded-base','revision'=>1,'name'=>'Test price list','country'=>'Switzerland','priceLevel'=>'Price Level 4','status'=>'uploaded'],
@@ -49,7 +49,7 @@ function approvers_for(string $username): array { return ['fixture-reviewer']; }
 function is_auto_approver(string $username): bool { return false; }
 function user_display_name(string $username): string { return $username; }
 set_exception_handler(function(Throwable $error): void { json_response(['ok'=>false,'message'=>$error->getMessage()], 500); });
-$code = file_get_contents(__DIR__ . '/../api/versions/save.php');
+$code = file_get_contents(__DIR__ . '/../api/files/save.php');
 $code = preg_replace('~^<\?php\s*declare\(strict_types=1\);~', '', $code);
 $code = preg_replace('~^require_once __DIR__ .*;$~m', '', $code);
 eval($code);

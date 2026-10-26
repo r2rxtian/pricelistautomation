@@ -1,12 +1,13 @@
 <?php
 declare(strict_types=1);
 /**
- * The single shared authorization check. Every write endpoint in api/ calls this after
- * requireLogin(true) and csrfVerify():
+ * The one shared permission check. Every write endpoint in api/ calls it after requireLogin(true) and
+ * csrfVerify():
  *
  *   requirePermission($user, 'approve', 'Your role cannot approve price lists.');
  *
- * A role → permission check (see authz/capabilities.php) plus an audit-log entry on denial.
+ * Which role has which permission is in authz/capabilities.php. A denied action is answered with 403 and
+ * written to the audit log.
  */
 
 require_once __DIR__ . '/capabilities.php';

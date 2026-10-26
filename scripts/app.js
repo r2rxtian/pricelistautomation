@@ -179,15 +179,16 @@
   // Each action is its own endpoint under api/ (paths are relative to the page files in pages/).
   const API_ROUTES = {
     'state': 'app/state',
-    'open': 'versions/open', 'save': 'versions/save', 'check-workbook': 'versions/check', 'approve': 'versions/approve', 'reject': 'versions/reject',
-    'export': 'versions/export', 'delete-version': 'versions/delete',
+    'open': 'files/open', 'save': 'files/save', 'check-workbook': 'files/check_workbook', 'approve': 'approvals/approve', 'reject': 'approvals/reject',
+    'export': 'files/export', 'delete-version': 'files/delete',
     'audit-logs': 'audit/list', 'log-activity': 'audit/log_activity',
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
-    'library-folder': 'photos/library_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
-    'search-keywords': 'search/keywords_save', 'list-options': 'config/list_options_save', 'masterlist-save': 'masterlist/save_batch', 'dashboard': 'dashboard/summary', 'session-renew': 'app/session_renew',
+    'library-folder': 'photos/library_add_folder', 'library-move': 'photos/library_move', 'library-rename': 'photos/library_rename',
+    'search-keywords': 'search/save_keywords', 'list-options': 'customers/save_lists', 'save-changes': 'prices/save_changes', 'dashboard': 'dashboard/summary', 'session-renew': 'app/session_renew',
+    'presence': 'app/presence', 'check-conflicts': 'approvals/check_conflicts',
     'users-list': 'users/list', 'users-create': 'users/create', 'users-update': 'users/update',
-    'assign-group-image': 'photos/assign_group_image', 'upload-group-image': 'photos/upload_group_image', 'delete-group-image': 'photos/delete_group_image',
+    'assign-group-image': 'photos/product_photo_assign', 'upload-group-image': 'photos/product_photo_upload', 'delete-group-image': 'photos/product_photo_remove',
     'dev-reset': 'dev/reset'
   };
   async function api(action, options = {}) {
@@ -202,6 +203,7 @@
     if (!response.ok || !data.ok) {
       const error = new Error(data.message || 'Request failed.');
       if (Array.isArray(data.problems)) error.problems = data.problems; // e.g. every issue in a rejected workbook
+      if (Array.isArray(data.conflicts)) error.conflicts = data.conflicts; // prices someone else changed meanwhile
       throw error;
     }
     return data;
@@ -555,7 +557,7 @@
   const TAB_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
   function tabInnerMarkup(tab) {
     const name = escapeHtml(tab.name || 'Price list');
-    const mark = tab.master ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(tab.country, countryCodeOf(tab.country))}</span>`;
+    const mark = tab.master ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${nameTile(tab.country)}</span>`;
     return `<button type="button" class="file-tab-open" role="tab">
         ${mark}
         <span class="file-tab-name">${name}</span>
@@ -1102,6 +1104,9 @@
       active.pricesBaked = true;
       // How the list looks as opened, so undoing every change (or "Reset prices") is not an unsaved edit.
       openedSnapshot = { id: active.id, rows: JSON.stringify(state.rows) };
+      // Kept with its draft too: saving sends only what this person changed since (someone else may have
+      // changed other prices meanwhile, see pricing_rebase_rows in rules/pricing.php).
+      if (inMasterlistFile(active)) active.openedRows = state.rows.map(row => row.slice());
     } else if (active.id && active.pricesBaked && openedSnapshot?.id !== active.id) {
       // A draft restored after a refresh: rebuild the opened state from the saved version.
       openedSnapshot = null;
@@ -1159,6 +1164,10 @@
     renderWorkflowState();
     updateMetrics(); renderTable(); renderImageSettings();
     loadChangeMarks(active);
+    // Who else has this list open, and whether it changed since (scripts: "Who else is here" below).
+    staleChange = null;
+    renderPresence();
+    presenceSoon();
   }
 
   /** Status badge, approval banner and export lock for the open price list. */
@@ -1272,6 +1281,10 @@
     });
   }
   let openedSnapshot = null; // { id, rows } of the list as it was opened
+  // Who else is here (see sendPresence): everyone else in the app and their open list, and the changes
+  // others made to the open list since it was opened ({count, people, at}).
+  let presencePeople = [];
+  let staleChange = null;
   /** True when the open list is exactly as it was opened: same cells, no % adjustment. */
   function matchesOpenedList() {
     return Boolean(state.active?.id && openedSnapshot && openedSnapshot.id === state.active.id && !hasPriceAdjustments() && JSON.stringify(state.rows) === openedSnapshot.rows);
@@ -1889,18 +1902,26 @@
     }
   }
 
-  /** A price level's or customer's list only sets prices (its other cells come from the uploaded file),
-   *  and the MOQ total is always worked out from the price. */
+  /**
+   * Which cells can't be typed in: the MOQ total (worked out from the price), and in a price level or
+   * customer list the category and the code (they identify the product). Everything else can be
+   * changed: in a level's view for all its customers, in a customer's view just for that customer.
+   */
   function cellLocked(colIdx) {
-    if (Number(colIdx) === 17) return true;
-    return Boolean(state.active?.priceOnly) && !state.priceColumns.includes(Number(colIdx));
+    const col = Number(colIdx);
+    if (col === 17) return true;
+    if (!state.active?.priceOnly) return false;
+    return [COL.category, COL.code, COL.priceLevel, COL.country].includes(col);
+  }
+  function lockedCellMessage(colIdx) {
+    return Number(colIdx) === 17
+      ? 'Total Price Based on MOQ is worked out: Price/box × MOQ. Change the price or the MOQ instead.'
+      : 'The code and category identify the product, so they can’t be changed here. A new or renamed product comes in with an upload.';
   }
   function startCellEdit(td, initialChar = null, selectAll = false) {
     if (!state.canEdit || !td || state.isEditing) return;
     if (cellLocked(td.dataset.col)) {
-      toast(Number(td.dataset.col) === 17
-        ? 'Total Price Based on MOQ is worked out: Price/box × MOQ. Change the price or the MOQ instead.'
-        : 'Only prices can be changed here. Descriptions, sizes and the rest come from the uploaded workbook.');
+      toast(lockedCellMessage(td.dataset.col));
       return;
     }
     state.isEditing = true;
@@ -2017,7 +2038,7 @@
         const trimmed = String(finalVal).trim();
         if (String(oldRaw).trim() !== trimmed) {
           state.rows[rowIdx][colIdx] = trimmed;
-          if (colIdx === 2 && !state.rows[rowIdx][18]) {
+          if (colIdx === 2 && !state.rows[rowIdx][18] && !state.active?.priceOnly) { // (uploaded single files only)
             state.rows[rowIdx][18] = state.rows[rowIdx][0];
           }
           valChanged = true;
@@ -2355,7 +2376,7 @@
     const fileStatus = titleStatus === 'partial' ? '<span class="list-status-pill status-pending">Partly approved</span>'
       : titleStatus ? statusPill(titleStatus) : '';
     const fileStrip = hasFile ? `<div class="audit-entry-file">
-        ${country ? `<span class="country-flag" aria-hidden="true">${flagMarkup(country, countryCodeOf(country))}</span>` : '<svg class="audit-entry-file-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'}
+        ${country ? `<span class="country-flag" aria-hidden="true">${nameTile(country)}</span>` : '<svg class="audit-entry-file-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'}
         <span class="audit-entry-file-text"><strong>${escapeHtml(fileName)}</strong>${country || level ? `<small>${escapeHtml([country, level].filter(Boolean).join(' · '))}</small>` : ''}</span>
         ${fileStatus}${isLogCurrentFile(log) ? '<span class="audit-entry-open-now">Open now</span>' : ''}
       </div>` : '';
@@ -2891,7 +2912,7 @@
         : adjustmentChips(version) + (edits ? `<span class="adj-chip edits">${edits} cell edit${edits === 1 ? '' : 's'}</span>` : '') || '<span class="adj-chip edits">No price adjustments</span>';
       // The masterlist and its rules cover every list: a small ledger mark instead of a flag.
       const wide = ['masterlist', 'rules', 'batch'].includes(version.kind);
-      const mark = wide ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${flagMarkup(version.country, countryCodeOf(version.country))}</span>`;
+      const mark = wide ? `<span class="slip-ml-mark" aria-hidden="true">${MASTERLIST_ICON}</span>` : `<span class="country-flag" aria-hidden="true">${nameTile(version.country)}</span>`;
       const tag = wide ? '<span class="sheet-level">All countries &amp; price levels</span>'
         : `<span class="sheet-level"><b aria-hidden="true">${escapeHtml(levelMark(version.priceLevel))}</b>${escapeHtml(version.priceLevel || 'No price level')}</span>${version.kind === 'list' ? `<span class="sheet-level">${escapeHtml(version.country)}</span>` : ''}`;
       return `<article class="approval-slip ${pending ? 'is-pending' : 'is-rejected'} ${version.canApprove ? 'is-mine' : ''}" role="listitem" data-key="change-${vid}" aria-label="${name}, ${escapeHtml(stampText)}">
@@ -2943,11 +2964,10 @@
       body.innerHTML = tray + uploadTile + [...groups.values()]
         .sort((a, b) => a.country.localeCompare(b.country))
         .map(({ country, files: list }) => {
-          const code = countryCodeOf(country);
           list.sort((a, b) => levelNumber(a.priceLevel) - levelNumber(b.priceLevel) || String(a.priceLevel).localeCompare(String(b.priceLevel)) || String(a.name).localeCompare(String(b.name)));
           return `<section class="sheet-group" aria-label="${escapeHtml(country)}">
             <header class="sheet-group-head">
-              <span class="country-flag" aria-hidden="true">${flagMarkup(country, code)}</span>
+              <span class="country-flag" aria-hidden="true">${nameTile(country)}</span>
               <h3>${escapeHtml(country)}</h3>
               <span class="sheet-group-count">${list.length} file${list.length === 1 ? '' : 's'}</span>
             </header>
@@ -2958,7 +2978,7 @@
     // The search / country / level bar only ever filtered separate files: with the price list it goes.
     const tools = $('#filesPanel .history-tools');
     if (tools) tools.hidden = Boolean(board);
-    if (board) filterFileCards();
+    if (board) { filterFileCards(); paintFilePresence(); }
   }
   // The blank sheet opens the upload dialog (same as the "Upload files" button).
   $('#filesTable')?.addEventListener('click', event => {
@@ -2969,7 +2989,8 @@
     if (opener) openOriginRect = (opener.closest('.file-sheet, .approval-slip, .mf-card') || opener).getBoundingClientRect();
   }, true);
   $('#filesTable')?.addEventListener('click', event => {
-    const receipt = event.target.closest('.file-sheet, .mf-card:not(.is-empty)');
+    // Clicking a card opens it (a level without a file opens its one customer file, if it has one).
+    const receipt = event.target.closest('.file-sheet, .mf-card');
     if (!receipt || event.target.closest('button, a, input, select, [role="menu"]')) return;
     receipt.querySelector('.sheet-open, .mf-actions [data-action="open"]')?.click();
   });
@@ -3280,7 +3301,7 @@
   });
   $('#dashUploadBtn')?.addEventListener('click', () => openMasterlistUpload());
   $('#noResults')?.addEventListener('click', event => { if (event.target.closest('[data-no-file-upload]')) openMasterlistUpload(); });
-  $('#dashOpenBtn')?.addEventListener('click', () => switchPanel('filesPanel', true));
+  $('#dashOpenBtn')?.addEventListener('click', () => swapToPanel('filesPanel'));
 
   // --- Price masterlist: one list of products and standard prices. Every price level and customer
   // is worked out from it (with the % changes), and can have prices of its own. On the Files page it
@@ -3307,6 +3328,14 @@
     const ownRate = category => Number(draft.categoryAdjustments?.[category] ?? draft.adjustment ?? 0) || 0;
     const headers = normalizeHeaders(live.headers);
     const liveByCode = new Map((live.rows || []).map(row => [String(row[COL.code] ?? '').toLowerCase(), row]));
+    // As the view was when opened: a cell still the same is not this person's change, even when the
+    // current price differs (someone else changed it meanwhile; saving leaves theirs).
+    const openedByCode = Array.isArray(draft.openedRows) ? new Map(draft.openedRows.map(row => [String(row[COL.code] ?? '').toLowerCase(), row])) : null;
+    const untouched = (row, col) => {
+      const was = openedByCode?.get(String(row[COL.code] ?? '').toLowerCase());
+      if (!was) return false;
+      return isNumeric(was[col]) && isNumeric(row[col]) ? Math.abs(numeric(was[col]) - numeric(row[col])) < 0.00005 : String(was[col] ?? '').trim() === String(row[col] ?? '').trim();
+    };
     const changes = [];
     (draft.rows || []).forEach(row => {
       const old = liveByCode.get(String(row[COL.code] ?? '').toLowerCase());
@@ -3316,14 +3345,16 @@
       const name = row[2] || row[1];
       [8, 9].forEach(col => {
         if (!isNumeric(row[col])) return;
+        if (factor === 1 && untouched(row, col)) return;
         const after = Math.max(0, Math.round(numeric(row[col]) * factor * 10000) / 10000);
         const before = isNumeric(old[col]) ? numeric(old[col]) : null;
         if (before !== null && Math.abs(after - before) < 0.005) return;
         changes.push({ code: row[COL.code], name, column: col === 8 ? 'Price/pc' : 'Price/box', before, after, price: true });
       });
-      if (view.kind === 'masterlist') {
+      // Details (description, sizes…): in every view (a level's file, or one customer's own details).
+      if (view.kind === 'masterlist' || view.kind === 'list') {
         headers.forEach((header, col) => {
-          if ([0, 1, 8, 9, 17, COL.priceLevel, COL.country].includes(col) || !String(header || '').trim()) return;
+          if ([0, 1, 8, 9, 17, COL.priceLevel, COL.country].includes(col) || !String(header || '').trim() || untouched(row, col)) return;
           if (String(row[col] ?? '').trim() !== String(old[col] ?? '').trim()) changes.push({ code: row[COL.code], name, column: String(header).replace(/\s+/g, ' ').trim(), before: old[col], after: row[col], price: false });
         });
       }
@@ -3436,16 +3467,35 @@
     renderMasterlistSaveSummary();
   });
   dom.saveConfirmCheck?.addEventListener('change', () => { if (inMasterlistFile(state.active)) dom.confirmSave.disabled = !masterlistUnsavedCount() || !dom.saveConfirmCheck.checked; });
-  async function saveMasterlistFile() {
+  /**
+   * Saves every view's changes as one. Each view also sends its rows as they were when opened, so only
+   * what this person changed is saved. If someone else changed some of the same prices meanwhile, the
+   * server asks first (409 with the conflicts) and this asks the person: keep mine or theirs.
+   */
+  async function saveMasterlistFile(resolve = '') {
     const pending = masterlistPending();
     const payload = { lists: [], scoped: pending.scoped };
+    if (resolve) payload.resolve = resolve;
     for (const [id, view] of Object.entries(pending.views)) {
       const draft = String(state.active?.id) === id ? state.active : await getDraft(draftKey(view));
       if (!draft?.rows) continue;
       const item = { id, rows: draft.rows, adjustment: Number(draft.adjustment || 0), categoryAdjustments: draft.categoryAdjustments || {} };
+      if (Array.isArray(draft.openedRows)) item.opened = draft.openedRows;
       if (id === MASTERLIST_ID) payload.base = item; else payload.lists.push(item);
     }
-    const data = await api('masterlist-save', { method: 'POST', body: JSON.stringify(payload) });
+    let data;
+    try {
+      data = await api('save-changes', { method: 'POST', body: JSON.stringify(payload) });
+    } catch (error) {
+      if (!error.conflicts || resolve) throw error;
+      const choice = await askConflicts('save', error.conflicts);
+      if (choice !== 'mine' && choice !== 'theirs') {
+        const kept = new Error('Not saved. Your changes are still here.');
+        kept.cancelled = true;
+        throw kept;
+      }
+      return saveMasterlistFile(choice);
+    }
     await discardMasterlistPending();
     versionCache.clear();
     if (data.version?.status === 'approved') stampDecision('approve');
@@ -3489,14 +3539,26 @@
       const searchText = [entry.level, record?.sourceFile || '', ...entry.customers.map(customer => customer.country)].join('\n').toLowerCase();
       const upload = can('upload') ? `<button type="button" class="button ${has ? 'secondary' : 'primary'}" data-ml-upload="${escapeHtml(view.id)}">${has ? 'Upload new version' : `Upload ${escapeHtml(entry.level)} workbook`}</button>` : '';
       if (!has) {
-        return `<article class="mf-card is-empty" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
+        // No file for the level itself, but customers may have uploaded files of their own: list them,
+        // so a customer's upload is never hidden behind "No file yet".
+        const waitingCount = entry.customers.length - ownCustomers.length;
+        const customerFiles = ownCustomers.length ? `<div class="mf-customers">
+            <span class="mf-customers-label">Customer files:</span>${ownCustomers.map(customer => {
+              const file = latestUploadOf(entry.level, customer.country)?.sourceFile;
+              return `<button type="button" class="mf-chip" data-action="open" data-id="${escapeHtml(customer.id)}" title="${escapeHtml(`${file ? `${file} · ` : ''}${customer.ownPriceCount} product${customer.ownPriceCount === 1 ? '' : 's'} just for ${customer.country}`)}">${escapeHtml(customer.country)}</button>`;
+            }).join('')}
+          </div>` : '';
+        return `<article class="mf-card is-empty ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
           <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
           <div class="mf-body">
-            <h3>${escapeHtml(entry.level)}</h3>
-            <p class="mf-file">No file yet</p>
-            <p class="mf-meta">${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} waiting for its prices</p>
+            <h3>${escapeHtml(entry.level)}${isOpen ? ' <span class="mf-tag">Open</span>' : ''}</h3>
+            <p class="mf-file">No ${escapeHtml(entry.level)} file yet</p>
+            <p class="mf-meta">${ownCustomers.length ? `${ownCustomers.length} customer${ownCustomers.length === 1 ? ' has its' : 's have their'} own file${waitingCount ? ` · ${waitingCount} waiting for the level's prices` : ''}` : `${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} waiting for its prices`}</p>
           </div>
-          <div class="mf-actions">${upload}</div>
+          <div class="mf-actions">${ownCustomers.length === 1
+            ? `<button type="button" class="button primary row-primary" data-action="open" data-id="${escapeHtml(ownCustomers[0].id)}">Open ${escapeHtml(ownCustomers[0].country)}</button>${upload.replace('button primary', 'button secondary')}`
+            : upload}</div>
+          ${customerFiles}
         </article>`;
       }
       const when = view.savedAt ? `${formatRelativeTime(view.savedAt)}${view.savedBy ? ` by ${view.savedBy}` : ''}` : '';
@@ -3686,7 +3748,7 @@
     if (confirm) form.append('confirm', confirm);
     form.append('target', mlUpload.target || MASTERLIST_ID);
     form.append('workbook', mlUpload.file, mlUpload.file.name);
-    const response = await fetch('../api/masterlist/upload.php', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
+    const response = await fetch('../api/files/upload_workbook.php', { method: 'POST', headers: { 'X-CSRF-Token': state.csrf || '' }, body: form });
     if (response.status === 401) { window.location.href = 'login.php'; throw new Error('Please sign in again.'); }
     const data = await response.json().catch(() => ({ ok: false, message: 'Invalid server response.' }));
     if (!response.ok || !data.ok) {
@@ -5884,7 +5946,7 @@
         await saveMasterlistFile();
         setSaveButtonState('done');
       } catch (error) {
-        setSaveButtonState('error');
+        setSaveButtonState(error.cancelled ? '' : 'error');
         toast(error.message);
       }
       return;
@@ -6128,11 +6190,19 @@
     ), 300);
     setTimeout(() => stamp.remove(), 1900);
   }
-  async function submitDecision(kind, remarks) {
+  async function submitDecision(kind, remarks, overwrite = false) {
     const decision = state.pendingDecision;
     if (!decision || decision.kind !== kind) return;
     try {
-      const data = await api(kind, { method: 'POST', body: JSON.stringify({ id: decision.id, remarks }) });
+      let data;
+      try {
+        data = await api(kind, { method: 'POST', body: JSON.stringify({ id: decision.id, remarks, ...(overwrite ? { overwrite: true } : {}) }) });
+      } catch (error) {
+        // Some of its prices were changed by another approved change since it was saved: ask first.
+        if (kind !== 'approve' || overwrite || !error.conflicts) throw error;
+        if (await askConflicts('approve', error.conflicts) !== 'mine') return toast('Not approved. Nothing was changed.');
+        return submitDecision(kind, remarks, true);
+      }
       state.pendingDecision = null;
       stampDecision(kind);
       if (String(state.active?.id) === String(decision.id) && !state.active.isDraft) loadActive(data.active);
@@ -6257,7 +6327,7 @@
   // --- Change review: exactly what a saved price change does, compared with the version it was made
   // from (its "basedOn"). Prices are compared as people see them (with each version's % adjustments),
   // other columns as text. Used by the review window and to mark changed cells in the editor. ---
-  const versionCache = new Map(); // "id|savedAt" -> promise of the full version (versions/open has no side effects)
+  const versionCache = new Map(); // "id|savedAt" -> promise of the full version (files/open has no side effects)
   function fetchVersion(id) {
     if (!id) return Promise.resolve(null);
     const key = `${id}|${versionSummaryById(id)?.savedAt || ''}`;
@@ -6477,6 +6547,13 @@
       const base = change?.basedOn ? await fetchVersion(change.basedOn).catch(() => null) : null;
       if (reviewingId !== id) return;
       body.innerHTML = reviewMarkup(change, compareVersions(change, base), base);
+      // Waiting for approval: warn when some of its prices were changed by someone else since it was saved.
+      if (change?.kind === 'batch' && change.status === 'pending') {
+        api('check-conflicts', { method: 'POST', body: JSON.stringify({ id }) }).then(({ conflicts }) => {
+          if (reviewingId !== id || !conflicts?.length) return;
+          body.insertAdjacentHTML('afterbegin', `<section class="review-section conflict-warning"><h3>Changed since this was saved <small>approving replaces these prices</small></h3>${conflictTableMarkup('approve', conflicts)}</section>`);
+        }).catch(() => { });
+      }
     } catch (error) {
       if (reviewingId === id) body.innerHTML = `<p class="review-note is-rejected">${escapeHtml(error.message || 'Could not load this price change.')}</p>`;
     }
@@ -6644,7 +6721,8 @@
     }
     const historyLink = event.target.closest('.version-history-link');
     if (historyLink) { const version = versionSummaryById(historyLink.dataset.id); if (version) openVersionHistory(version); return; }
-    const primary = event.target.closest('.row-primary');
+    // The Open buttons, and the customer buttons on a Files card (a customer's own file).
+    const primary = event.target.closest('.row-primary, .mf-chip[data-action]');
     if (primary && !primary.disabled) await runListAction(primary.dataset.action, primary.dataset.id);
   }));
   rowMenu?.addEventListener('click', async event => {
@@ -6775,6 +6853,7 @@
       else if (finalPanelId === 'filesPanel' && previousPanel === 'workspacePanel') setTimeout(landOnActiveSheet, 0);
     }
     openOriginRect = null;
+    if (previousPanel !== finalPanelId) presenceSoon(); // the file in view changed: tell the others
   }
   // The logo is "home": Files, the page everything starts from. Like the Files button, an open file
   // stays in its tab with any unsaved changes. Already on Files, it brings the board back to the top.
@@ -6786,7 +6865,7 @@
       $('#dashboardPanel')?.scrollTo?.({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
       return;
     }
-    switchPanel('dashboardPanel', true);
+    swapToPanel('dashboardPanel');
   });
   /** The editor opens out of the sheet you clicked: its outline grows from that sheet to the full page. */
   function unfoldEditor(rect) {
@@ -6809,9 +6888,12 @@
     setTimeout(() => { if (anim.playState === 'running') anim.finish(); }, 900);
   }
 
-  $$('.nav-item').forEach(button => button.addEventListener('click', () => {
-    switchPanel(button.dataset.panel, true);
-  }));
+  // Picking a page in the top menu (or the logo) swaps pages with motion (scripts/motion.js › pageSwap).
+  function swapToPanel(panelId) {
+    const go = () => switchPanel(panelId, true);
+    if (!state.booted || !window.plaMotion?.pageSwap?.(panelId, go)) go();
+  }
+  $$('.nav-item').forEach(button => button.addEventListener('click', () => swapToPanel(button.dataset.panel)));
   // Back / Forward between Files and an open list.
   window.addEventListener('popstate', async () => {
     const file = location.pathname.split('/').pop();
@@ -7828,6 +7910,199 @@
   window.addEventListener('focus', pollUpdates);
   setInterval(pollUpdates, 20000);
 
+  // --- Who else is here (api/app/presence.php). Every 15 s this tab says which price list is in view
+  // and how many of its products have unsaved changes; the answer says who else is in the app and in
+  // which file. The editor shows "Margaret is also editing this", the Files cards show who is in them,
+  // and when someone else's change reaches the open list (approved, or a new upload), a note offers the
+  // new prices, keeping any unsaved edits. Nothing is locked: two people can still edit the same file,
+  // and saving asks about any price both changed (saveMasterlistFile). ---
+  const PRESENCE_MS = 15000;
+  const presenceTab = Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('');
+  let presenceTimer = 0;
+  let presenceBusy = false;
+  const firstName = name => String(name || '').trim().split(/\s+/)[0] || 'Someone';
+  const namesInWords = names => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+  /** The price list in view (a price level or customer), or '' (another page, or not a price list). */
+  const presenceListId = () => {
+    const active = state.active;
+    return active && inMasterlistFile(active) && active.kind === 'list' && !$('#workspacePanel')?.hidden ? String(active.id) : '';
+  };
+  const sameCell = (a, b) => (isNumeric(a) && isNumeric(b) ? Math.abs(numeric(a) - numeric(b)) < 0.00005 : String(a ?? '').trim() === String(b ?? '').trim());
+  /** How many products in view this person changed without saving (a % counts for its products). */
+  function unsavedInView() {
+    const active = state.active;
+    if (!active?.isDraft) return 0;
+    if (!Array.isArray(active.openedRows)) return 1;
+    const opened = new Map(active.openedRows.map(row => [String(row[COL.code] ?? '').toLowerCase(), row]));
+    return state.rows.filter(row => {
+      const was = opened.get(String(row[COL.code] ?? '').toLowerCase());
+      return !was || shownRate(String(row[0] ?? '').trim()) !== 0 || row.some((value, col) => col !== 17 && !sameCell(was[col], value));
+    }).length;
+  }
+  async function sendPresence() {
+    if (!state.user || presenceBusy) return;
+    presenceBusy = true;
+    const active = state.active;
+    const listId = presenceListId();
+    try {
+      const data = await api('presence', { method: 'POST', body: JSON.stringify({
+        tab: presenceTab, listId, unsaved: listId ? unsavedInView() : 0,
+        after: listId && Number.isFinite(Number(active?.changeMark)) ? Number(active.changeMark) : null,
+      }) });
+      presencePeople = Array.isArray(data.people) ? data.people : [];
+      if (listId && state.active === active) staleChange = data.changed?.count ? data.changed : null;
+      renderPresence();
+    } catch { /* tried again on the next round */ }
+    presenceBusy = false;
+  }
+  /** Checks in shortly (after opening a list or changing page), once for a burst of calls. */
+  function presenceSoon() {
+    clearTimeout(presenceTimer);
+    presenceTimer = setTimeout(sendPresence, 400);
+  }
+  setInterval(sendPresence, PRESENCE_MS);
+  // Closing the tab: gone at once (otherwise after 90 s).
+  window.addEventListener('pagehide', () => {
+    if (!state.user) return;
+    fetch('../api/app/presence.php', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf || '' }, body: JSON.stringify({ tab: presenceTab, leaving: true }) }).catch(() => { });
+  });
+
+  function renderPresence() {
+    const listId = presenceListId();
+    const here = listId ? presencePeople.filter(person => person.listId === listId) : [];
+    const note = $('#presenceNote');
+    if (note) {
+      note.hidden = !here.length;
+      if (here.length) {
+        const editing = here.some(person => person.unsaved > 0);
+        const names = here.map(person => firstName(person.name));
+        const verb = here.length === 1 ? (editing ? 'is also editing this' : 'is also viewing this') : (editing ? 'are also in this file, editing' : 'are also viewing this');
+        const unsaved = here.length === 1 && here[0].unsaved > 0 ? ` · ${here[0].unsaved} unsaved` : '';
+        note.classList.toggle('is-editing', editing);
+        note.innerHTML = `<span class="presence-faces" aria-hidden="true">${here.slice(0, 3).map(person => `<i title="${escapeHtml(person.name)}">${escapeHtml(initials(person.name))}</i>`).join('')}</span><span>${escapeHtml(namesInWords(names))} ${verb}${unsaved}</span>`;
+        note.title = here.map(person => `${person.name}: ${person.unsaved > 0 ? `editing, ${person.unsaved} product${person.unsaved === 1 ? '' : 's'} not saved yet` : 'viewing'}`).join('\n')
+          + '\nYou can both edit. If you both change the same price, saving asks which one to keep.';
+      }
+    }
+    const stale = $('#staleNote');
+    if (stale) {
+      const show = Boolean(listId && staleChange);
+      stale.hidden = !show;
+      if (show) {
+        const who = staleChange.people?.length ? namesInWords(staleChange.people.map(firstName)) : 'Someone';
+        const count = Number(staleChange.count || 0);
+        $('#staleNoteText').textContent = `${who} changed ${count} price${count === 1 ? '' : 's'} in this file ${staleChange.at ? formatRelativeTime(staleChange.at) : 'just now'}.`;
+        $('#staleNoteBtn').textContent = state.active?.isDraft ? 'Get the new prices (keeps your edits)' : 'Show the new prices';
+      }
+    }
+    paintFilePresence();
+  }
+  /** On the Files cards: who is in each price level's file (the level or one of its customers) right now. */
+  function paintFilePresence() {
+    $$('#filesTable .mf-card[data-key]').forEach(card => {
+      const level = (String(card.dataset.key).match(/^list-\d+-(\d+)$/) || [])[1];
+      const people = level ? presencePeople.filter(person => (String(person.listId).match(/^list-\d+-(\d+)$/) || [])[1] === level) : [];
+      const byPerson = new Map();
+      people.forEach(person => { const seen = byPerson.get(person.username); if (!seen || person.unsaved > seen.unsaved) byPerson.set(person.username, person); });
+      const unique = [...byPerson.values()];
+      let tag = card.querySelector('.mf-presence');
+      if (!unique.length) { tag?.remove(); return; }
+      if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'mf-presence';
+        card.querySelector('.mf-body')?.append(tag);
+      }
+      const editing = unique.some(person => person.unsaved > 0);
+      tag.classList.toggle('is-editing', editing);
+      tag.title = unique.map(person => `${person.name}: ${person.unsaved > 0 ? 'editing' : 'viewing'}`).join('\n');
+      tag.innerHTML = `<span class="presence-faces" aria-hidden="true">${unique.slice(0, 3).map(person => `<i>${escapeHtml(initials(person.name))}</i>`).join('')}</span>${escapeHtml(unique.length === 1 ? `${firstName(unique[0].name)} ${editing ? 'editing' : 'here'}` : `${unique.length} people here`)}`;
+    });
+  }
+
+  /**
+   * "Get the new prices": the open list is fetched again. Unsaved edits are kept: the prices this person
+   * changed since opening go on top of the new ones (the same rule the server uses when saving).
+   */
+  async function refreshOpenView() {
+    const active = state.active;
+    if (!active?.id) return;
+    let fresh;
+    try {
+      fresh = (await api('open', { method: 'POST', body: JSON.stringify({ id: active.id }) })).active;
+    } catch (error) {
+      return toast(error.message);
+    }
+    if (state.active !== active) return;
+    versionCache.clear();
+    if (!active.isDraft) {
+      loadActive(fresh);
+      return toast('Showing the new prices.');
+    }
+    if (!Array.isArray(active.openedRows)) return toast('Save or discard your changes first, then the new prices show.');
+    const key = row => String(row[COL.code] ?? '').toLowerCase();
+    const opened = new Map(active.openedRows.map(row => [key(row), row]));
+    const mine = new Map(state.rows.map(row => [key(row), row]));
+    const freshRows = normalizeRows(fresh.rows || [], fresh.priceLevel, fresh.country);
+    const merged = freshRows.map(row => {
+      const was = opened.get(key(row));
+      const now = mine.get(key(row));
+      const out = row.slice();
+      if (!was || !now) return out;
+      // Every cell this person changed (prices and, in a level's view, details); the MOQ total follows the price/box.
+      now.forEach((value, col) => { if (![COL.category, COL.code, 17, COL.priceLevel, COL.country].includes(col) && !sameCell(was[col], value)) out[col] = value; });
+      if (!sameCell(was[9], now[9])) out[17] = now[17];
+      return out;
+    });
+    const next = { ...active, rows: merged, openedRows: freshRows.map(row => row.slice()), changeMark: fresh.changeMark, savedAt: fresh.savedAt, savedBy: fresh.savedBy, ownPrices: fresh.ownPrices };
+    loadActive(next);
+    openedSnapshot = { id: next.id, rows: JSON.stringify(freshRows) };
+    await setDraft(draftKey(next), next);
+    toast('New prices loaded. Your unsaved edits are kept.');
+  }
+  $('#staleNoteBtn')?.addEventListener('click', refreshOpenView);
+
+  /** The prices two people changed, as a table: product, where, the price before, theirs now, and yours. */
+  function conflictTableMarkup(mode, conflicts) {
+    const approving = mode === 'approve';
+    const places = new Set(conflicts.map(item => item.where));
+    const value = raw => (raw === null || raw === undefined || raw === '' ? '—' : priceText(raw));
+    const rows = conflicts.slice(0, 60).map(item => `<tr>
+        <td class="review-product"><strong>${escapeHtml(item.description || item.code)}</strong><small>${escapeHtml(item.code)}${places.size > 1 ? ` · ${escapeHtml(item.where)}` : ''} · ${escapeHtml(String(item.column || '').replace(/ in USD$/, ''))}</small></td>
+        <td class="conflict-was">${value(approving ? item.saved : item.opened)}</td>
+        <td class="conflict-theirs">${item.gone ? '<em>removed from the file</em>' : `${value(approving ? item.now : item.theirs)}${item.by ? `<small>${escapeHtml(firstName(item.by))}${item.at ? ` · ${escapeHtml(formatRelativeTime(item.at))}` : ''}</small>` : ''}`}</td>
+        <td class="conflict-mine">${item.gone ? `<s>${value(approving ? item.new : item.mine)}</s>` : value(approving ? item.new : item.mine)}</td>
+      </tr>`).join('');
+    const more = conflicts.length > 60 ? `<p class="review-note">and ${conflicts.length - 60} more</p>` : '';
+    return `<div class="review-table-wrap"><table class="review-table conflict-table"><thead><tr><th>Product</th><th>${approving ? 'When saved' : 'When you opened it'}</th><th>Now</th><th>${approving ? 'This change' : 'Yours'}</th></tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+  }
+  /**
+   * Asks which prices to keep when two people changed the same ones. Saving: "Keep mine" or "Use theirs"
+   * (every other change is saved either way). Approving: "Approve anyway" or cancel.
+   * Resolves 'mine', 'theirs' or '' (cancelled).
+   */
+  function askConflicts(mode, conflicts) {
+    const dialog = $('#conflictDialog');
+    const approving = mode === 'approve';
+    const people = [...new Set(conflicts.map(item => item.by).filter(Boolean))].map(firstName);
+    const who = people.length ? namesInWords(people) : 'Someone else';
+    const live = conflicts.filter(item => !item.gone).length;
+    const gone = conflicts.length - live;
+    if (!dialog) return Promise.resolve(window.confirm(`${who} changed some of the same prices. Keep yours?`) ? 'mine' : '');
+    $('#conflictKicker').textContent = approving ? 'Before you approve' : 'Before you save';
+    $('#conflictTitle').textContent = approving ? 'Some prices changed since this was saved' : `${who} changed some of the same prices`;
+    $('#conflictText').textContent = approving
+      ? `${who} changed ${live} of these price${live === 1 ? '' : 's'} after this was saved. Approving puts this change’s prices in their place.`
+      : `While you were editing, ${who.toLowerCase() === 'someone else' ? 'someone else' : who} changed ${live ? `${live} of the prices you changed` : 'the file'}.${gone ? ` ${gone} of your price${gone === 1 ? ' is' : 's are'} for products no longer in the file, so ${gone === 1 ? 'it' : 'they'} can’t be saved.` : ''} Choose which prices to keep; your other changes are saved either way.`;
+    $('#conflictList').innerHTML = conflictTableMarkup(mode, conflicts);
+    $('#conflictMine').textContent = approving ? 'Approve anyway' : 'Keep mine';
+    $('#conflictTheirs').hidden = approving || !live;
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(['mine', 'theirs'].includes(dialog.returnValue) ? dialog.returnValue : ''), { once: true });
+      dialog.returnValue = '';
+      dialog.showModal();
+    });
+  }
+
   // --- Category folders, reusable photo library and photo picker ---
   const libraryFolderIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="M3 7h18"/></svg>';
   function photoAttr(value) { return escapeHtml(value).replace(/"/g, '&quot;'); }
@@ -8135,29 +8410,22 @@
     const used = item.usedBy > 0;
     return `${levels ? `<button type="button" class="option-icon" data-option-action="up" aria-label="Move ${escapeHtml(item.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="option-icon" data-option-action="down" aria-label="Move ${escapeHtml(item.name)} down" ${index === count - 1 ? 'disabled' : ''}>↓</button>` : ''}<button type="button" class="option-icon" data-option-action="edit" aria-label="Edit ${escapeHtml(item.name)}" title="Edit">✎</button><button type="button" class="option-icon danger" data-option-action="remove" aria-label="Remove ${escapeHtml(item.name)}" ${used ? `disabled title="Used by ${item.usedBy} price list${item.usedBy === 1 ? '' : 's'}: switch it off instead"` : 'title="Remove"'}>×</button>`;
   }
-  // Countries are cards with their flag (assets/flags, matched by name via scripts/country-flags.js),
-  // name and code; an A–Z index on the side jumps to a letter. Hover a card for its ×; a country
-  // used by saved price lists says so instead, and stays.
+  // A customer (the 'countries' list) shows a small coloured tile with its initials, the same colour
+  // wherever it appears: tabs, Files, the audit log and Config.
   const countryView = { tab: 'all' };
-  const COUNTRY_LOOKUP = new Map(Object.entries(window.PLA_COUNTRY_CODES || {}).map(([name, code]) => [name.toLowerCase(), { name, code }]));
-  const countryCodeOf = name => COUNTRY_LOOKUP.get(String(name || '').trim().toLowerCase())?.code || '';
-  const flagMarkup = (name, code) => code
-    ? `<img src="../assets/flags/${code}.svg" alt="" loading="lazy">`
-    : `<span class="flag-fallback" style="--tile-hue: ${countryHue(name)}">${escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase())}</span>`;
+  const nameTile = name => `<span class="flag-fallback" style="--tile-hue: ${countryHue(name)}">${escapeHtml(String(name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase())}</span>`;
   /** The price level names from Config, in their order. */
   const configLevelNames = () => (state.listOptions?.priceLevels || []).map(level => level.name);
   // Customers (the 'countries' list) are cards: a tile with their initials, the name, and the price
   // level they buy at, which can be changed right there.
   function countryCard(item, index) {
     const name = escapeHtml(item.name);
-    const used = item.usedBy > 0;
-    const uses = `${item.usedBy} price setting${item.usedBy === 1 ? '' : 's'}`;
+    const used = item.usedBy > 0; // has prices or % changes of its own: it can't be removed (no ×)
     const levels = configLevelNames();
     return `<div class="option-row country-card customer-card ${used ? 'is-used' : ''}" data-index="${index}" data-key="${name}" ${used ? `title="Has prices or % changes of its own, so it stays"` : ''}>
-      <span class="country-flag" aria-hidden="true">${flagMarkup(item.name, '')}</span>
+      <span class="country-flag" aria-hidden="true">${nameTile(item.name)}</span>
       <span class="country-text"><strong title="${name}">${name}</strong>
-        <span class="customer-level ${item.level ? '' : 'is-missing'}"><select data-option-change="level" aria-label="Price level of ${name}">${item.level ? '' : '<option value="" selected>Choose price level…</option>'}${levels.map(level => `<option value="${escapeHtml(level)}"${level === item.level ? ' selected' : ''}>${escapeHtml(level)}</option>`).join('')}</select></span>
-        ${used ? `<small><em>${uses}</em></small>` : ''}</span>
+        <span class="customer-level ${item.level ? '' : 'is-missing'}"><select data-option-change="level" aria-label="Price level of ${name}">${item.level ? '' : '<option value="" selected>Choose price level…</option>'}${levels.map(level => `<option value="${escapeHtml(level)}"${level === item.level ? ' selected' : ''}>${escapeHtml(level)}</option>`).join('')}</select></span></span>
       ${used ? '' : `<button type="button" class="country-remove" data-option-action="remove" aria-label="Remove ${name}" title="Remove ${name}">×</button>`}
     </div>`;
   }
@@ -8306,7 +8574,7 @@
   function showCountryAddFlag(name) {
     const holder = $('#countryAddFlag');
     if (!holder) return;
-    holder.innerHTML = name.trim() ? flagMarkup(name.trim(), '') : '';
+    holder.innerHTML = name.trim() ? nameTile(name.trim()) : '';
     holder.classList.toggle('has-flag', Boolean(name.trim()));
   }
   $('#countryAddToggle')?.addEventListener('click', () => setCountryAdd(countryAddForm.hidden));

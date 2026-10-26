@@ -120,7 +120,7 @@ async function apiChecks() {
     async function request(name, body, status, extraHeaders = {}, method = 'POST') {
       const headers = { ...baseHeaders, ...extraHeaders };
       if (typeof body === 'string') headers['Content-Type'] = 'application/json';
-      const response = await fetch(`${url}/api/versions/save.php`, { method, headers, ...(method === 'GET' ? {} : { body }) });
+      const response = await fetch(`${url}/api/files/save.php`, { method, headers, ...(method === 'GET' ? {} : { body }) });
       const data = await response.json();
       assert.equal(response.status, status, `${name}: ${data.message}`);
       if (status !== 200) assert.deepEqual(data._testEffects, { saved: 0, superseded: 0, audit: 0, notifications: 0 }, `${name}: rejection has no write effects`);

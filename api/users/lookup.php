@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /** Read-only: who a biometrics number belongs to (master list) and whether they already have access. */
 require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../../rules/user_admin.php';
+require_once __DIR__ . '/../../rules/user_management.php';
 
 $user = apiUser();
 requirePermission($user, 'manageUsers', 'Only admins can manage users.');
