@@ -25,7 +25,12 @@ if (!pricing_list_prices($customerId, $levelId)) json_response(['ok' => false, '
 
 // A saved change for this customer still waits: deciding on it first keeps it from landing on nothing.
 foreach (repo_list_version_summaries() as $summary) {
-    if (($summary['kind'] ?? '') !== 'batch' || $summary['status'] !== 'pending') continue;
+    if ($summary['status'] !== 'pending') continue;
+    // A new file for this customer that waits for approval.
+    if (($summary['kind'] ?? '') === 'list' && pricing_parse_list_id((string) ($summary['basedOn'] ?? '')) === [$customerId, $levelId]) {
+        json_response(['ok' => false, 'message' => "A new file for {$for} is waiting for approval. Approve or reject it first, then delete the file."], 409);
+    }
+    if (($summary['kind'] ?? '') !== 'batch') continue;
     foreach (pricing_batch_scopes(repo_get_version($summary['id'])['masterlistBatch'] ?? []) as $scope) {
         if ($scope['countryId'] === $customerId && ($scope['levelId'] === null || $scope['levelId'] === $levelId)) {
             json_response(['ok' => false, 'message' => "A price change for {$for} is waiting for approval. Approve or reject it first, then delete the file."], 409);

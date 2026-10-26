@@ -28,6 +28,11 @@ if ($complete) {
     $version['approvedBy'] = implode(' & ', array_map(fn($a) => $a['name'], $version['approvals']));
     // A masterlist or country list change takes effect now.
     if (($version['kind'] ?? '') !== '') pricing_apply_version($version, $version['savedBy'] ?? $user['name']);
+    // An approved upload is from now on the customer's uploaded file (Files shows it as the last upload).
+    if (is_array($version['pendingImport'] ?? null)) {
+        unset($version['pendingImport']);
+        $version['source'] = 'upload';
+    }
 }
 repo_save_version($version);
 

@@ -51,7 +51,7 @@ if ($required !== null && !user_can($user, $required)) {
     <!-- Shared styles first, then each page's (all pages live in this one shell). Order matters: see app.css. -->
     <link rel="stylesheet" href="../styles/app.css?v=253">
     <link rel="stylesheet" href="../styles/dashboard.css?v=1">
-    <link rel="stylesheet" href="../styles/files.css?v=7">
+    <link rel="stylesheet" href="../styles/files.css?v=8">
     <link rel="stylesheet" href="../styles/audit_logs.css?v=1">
     <link rel="stylesheet" href="../styles/users.css?v=1">
     <link rel="stylesheet" href="../styles/config.css?v=2">
@@ -1120,11 +1120,9 @@ if ($required !== null && !user_can($user, $required)) {
 </dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.__BOOT__ = <?= json_encode(['user' => $user, 'csrf' => csrfToken()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
-<script src="../assets/vendor/xlsx.full.min.js"></script>
-<script src="../assets/vendor/jspdf.umd.min.js"></script>
-<script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
+<!-- The Excel and PDF tools (assets/vendor/xlsx…, jspdf…) load when first needed: scripts/app.js › ensureExcelTools. -->
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/app.js?v=267"></script>
+<script src="../scripts/app.js?v=273"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=23"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

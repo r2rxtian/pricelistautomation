@@ -5,6 +5,18 @@ Options -Indexes
 ErrorDocument 404 /pricelistautomation/pages/404.php
 ErrorDocument 403 /pricelistautomation/pages/403.php
 
+# Speed: text files are sent compressed where the server has mod_deflate (XAMPP ships it switched
+# off in httpd.conf). Styles, scripts, fonts and images are kept by the browser for a week: the app's
+# own files carry ?v= numbers (components/app_shell.php), so a new version is still fetched at once.
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript text/javascript application/json image/svg+xml
+</IfModule>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|svg|png|jpe?g|webp|woff2?)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>
+
 # Internal files are never served directly.
 <FilesMatch "\.(md|sql|lock|tmp|json|config)$">
     Require all denied

@@ -21,6 +21,17 @@
     try { const tab = sessionStorage.getItem('pla_config_tab'); return ['library', 'types', 'lists'].includes(tab) ? tab : 'library'; } catch { return 'library'; }
   }
   const money = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Prices as the company's file has them, the same in the editor, the formula bar, Excel and PDF:
+  // Price/pc (column 8) to 3 decimals, because its formula is ROUND(Price/box ÷ Pcs/box, 3);
+  // everything else to 2. Always at least 2 decimals.
+  const PRICE_PC_COL = 8;
+  const pcMoney = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  const priceDecimals = col => (Number(col) === PRICE_PC_COL ? 3 : 2);
+  const priceRound = (value, col) => Number(Number(value).toFixed(priceDecimals(col)));
+  /** For showing: "0.181", "0.45", "1,234.50". */
+  const priceShown = (value, col) => (Number(col) === PRICE_PC_COL ? pcMoney : money).format(priceRound(value, col));
+  /** For typing and files (no thousands commas): "0.181", "0.45", "1234.50". */
+  const pricePlain = (value, col) => { const v = priceRound(value, col); return v.toFixed(Math.max(2, (String(v).split('.')[1] || '').length)); };
   let suppressRowEnter = false; // set while a price roll re-renders the table (see rollPrices)
   const dom = {
     appView: $('#appView'), userName: $('#userName'), roleBadge: $('#roleBadge'), emptyState: $('#emptyState'), dataView: $('#dataView'), listTitle: $('#listTitle'), listMeta: $('#listMeta'), savedMeta: $('#savedMeta'), savedMetaRow: $('#savedMetaRow'), activeBadge: $('#activeBadge'), productCount: $('#productCount'), categoryCount: $('#categoryCount'), priceColumnCount: $('#priceColumnCount'), currentAdjustment: $('#currentAdjustment'), percentage: $('#percentage'), applyAllCategoriesButton: $('#applyAllCategoriesButton'), search: $('#searchInput'), category: $('#categorySelect'), table: $('#priceTable'), noResults: $('#noResults'), saveDialog: $('#saveDialog'), saveForm: $('#saveForm'), versionNameInput: $('#versionNameInput'), deleteDialog: $('#deleteDialog'), deleteVersionName: $('#deleteVersionName'), resetPricesDialog: $('#resetPricesDialog'), resetPricesForm: $('#resetPricesForm'), confirmResetPrices: $('#confirmResetPrices'), resetPricesButton: $('#resetPricesButton'), logoutDialog: $('#logoutDialog'), logoutForm: $('#logoutForm'), historyTable: $('#historyTable'), historyTableBody: $('#historyTableBody'), historyEmpty: $('#historyEmpty'), historyCount: $('#historyCount'), historySearchInput: $('#historySearchInput'), historyAdjustmentSelect: $('#historyAdjustmentSelect'), emptyGoToPricesBtn: $('#emptyGoToPricesBtn'), toast: $('#toast'), fileInput: $('#fileInput'), settingsNav: $('#settingsNav'), settingsPanel: $('#settingsPanel'), imageCategoryFilter: $('#imageCategoryFilter'), imageSearchInput: $('#imageSearchInput'), imageSettingsList: $('#imageSettingsList'), imageSettingsEmpty: $('#imageSettingsEmpty'), imageSettingsCount: $('#imageSettingsCount'), groupImageInput: $('#groupImageInput'), deleteImageDialog: $('#deleteImageDialog'), deleteImageForm: $('#deleteImageForm'), deleteImageName: $('#deleteImageName'), addRowBtn: $('#addRowBtn'), excelFormulaBar: $('#excelFormulaBar'), formulaCellIndicator: $('#formulaCellIndicator'), formulaInput: $('#formulaInput'), formulaCancelBtn: $('#formulaCancelBtn'), formulaConfirmBtn: $('#formulaConfirmBtn'), deleteRowDialog: $('#deleteRowDialog'), deleteRowForm: $('#deleteRowForm'), deleteRowProductName: $('#deleteRowProductName'), confirmDeleteRow: $('#confirmDeleteRow'),
@@ -221,6 +232,31 @@
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && Date.now() - sessionRenewedAt >= SESSION_RENEW_MS) renewSession();
   });
+  // --- The Excel and PDF tools (about 1.3 MB) load only when needed, not with every page: each use
+  // waits for them, and they are also fetched quietly a few seconds after the app is ready, so an
+  // export doesn't wait either. ---
+  const scriptLoads = new Map();
+  function loadScript(src) {
+    if (!scriptLoads.has(src)) {
+      scriptLoads.set(src, new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => { scriptLoads.delete(src); reject(new Error('A part of the app could not be loaded. Check the connection and try again.')); };
+        document.head.appendChild(script);
+      }));
+    }
+    return scriptLoads.get(src);
+  }
+  const ensureExcelTools = () => (window.XLSX ? Promise.resolve() : loadScript('../assets/vendor/xlsx.full.min.js'));
+  async function ensurePdfTools() {
+    if (!window.jspdf?.jsPDF) await loadScript('../assets/vendor/jspdf.umd.min.js');
+    if (typeof window.jspdf.jsPDF.API?.autoTable !== 'function') await loadScript('../assets/vendor/jspdf.plugin.autotable.min.js'); // needs jsPDF first
+  }
+  function preloadExportTools() {
+    const later = window.requestIdleCallback || (callback => setTimeout(callback, 1));
+    setTimeout(() => later(() => { if (can('export') || can('upload')) { ensureExcelTools().catch(() => { }); ensurePdfTools().catch(() => { }); } }), 4000);
+  }
   /** Stored file paths (storage/…) are relative to the project root; this page lives in pages/. */
   function mediaUrl(path) {
     const value = String(path || '');
@@ -819,7 +855,7 @@
   function waitingChangeFor(version) {
     const [, customer, level] = (String(version?.id || '').match(/^list-(\d+)-(\d+)$/) || []).map(Number);
     if (!level) return null;
-    return (state.versions || []).find(change => change.kind === 'batch' && change.status === 'pending' && (change.reaches || []).some(scope =>
+    return (state.versions || []).find(change => ['batch', 'list'].includes(change.kind) && change.status === 'pending' && (change.reaches || []).some(scope =>
       (scope.levelId === null || scope.levelId === level) && (scope.countryId === null || scope.countryId === customer))) || null;
   }
   function versionSummaryById(id) {
@@ -1581,7 +1617,7 @@
   function renderTable() {
     renderCategoryPicker();
     const visible = filteredRows();
-    const valueMarkup = (row, column) => { const raw = row[column] ?? '', price = state.priceColumns.includes(column) && isNumeric(raw), value = price ? adjusted(numeric(raw), String(row[0] ?? '')) : raw; return price ? money.format(value) : escapeHtml(raw).replace(/\r?\n/g, '<br>'); };
+    const valueMarkup = (row, column) => { const raw = row[column] ?? '', price = state.priceColumns.includes(column) && isNumeric(raw), value = price ? adjusted(numeric(raw), String(row[0] ?? '')) : raw; return price ? priceShown(value, column) : escapeHtml(raw).replace(/\r?\n/g, '<br>'); };
     const standardHeader = () => `
       <tr class="excel-header excel-header-primary">
         <th rowspan="3" class="col-row-num">#</th>
@@ -1774,7 +1810,7 @@
     if (!row) return '';
     const raw = row[colIdx] ?? '';
     if (state.priceColumns.includes(colIdx) && isNumeric(raw)) {
-      return money.format(adjusted(numeric(raw), String(row[0] ?? '')));
+      return priceShown(adjusted(numeric(raw), String(row[0] ?? '')), colIdx);
     }
     const isPresentation = String(row[0] || '').toLowerCase() === 'presentation stands';
     if (isPresentation && colIdx === 2) {
@@ -2031,8 +2067,8 @@
     }
     if (state.priceColumns.includes(colIdx) && isNumeric(row[colIdx])) {
       const rate = shownRate(cat);
-      if (rate) return `fx  = uploaded price × (1 ${rate > 0 ? '+' : '−'} ${Math.abs(Math.round(rate * 100) / 100)}%) = ${money.format(numeric(row[colIdx]))} × ${(1 + rate / 100).toFixed(4)} = ${money.format(adjusted(numeric(row[colIdx]), cat))}`;
-      return `${header(colIdx) || 'Price'}: ${money.format(numeric(row[colIdx]))}, the price as uploaded (no formula, no % change).`;
+      if (rate) return `fx  = uploaded price × (1 ${rate > 0 ? '+' : '−'} ${Math.abs(Math.round(rate * 100) / 100)}%) = ${priceShown(numeric(row[colIdx]), colIdx)} × ${(1 + rate / 100).toFixed(4)} = ${priceShown(adjusted(numeric(row[colIdx]), cat), colIdx)}`;
+      return `${header(colIdx) || 'Price'}: ${priceShown(numeric(row[colIdx]), colIdx)}, the price as uploaded (no formula, no % change).`;
     }
     return `${header(colIdx) || 'This cell'}: a plain value from the uploaded file (no formula).`;
   }
@@ -2119,7 +2155,7 @@
     const raw = state.rows[rowIdx]?.[colIdx] ?? '';
     if (state.priceColumns.includes(colIdx) && isNumeric(raw)) {
       const cat = String(state.rows[rowIdx][0] ?? '');
-      input.value = Number(adjusted(numeric(raw), cat)).toFixed(2);
+      input.value = pricePlain(adjusted(numeric(raw), cat), colIdx);
     } else {
       input.value = typeof raw === 'number' ? String(Number(raw.toPrecision(15))) : String(raw);
     }
@@ -2165,7 +2201,7 @@
     let editVal = typeof rawVal === 'number' ? String(Number(rawVal.toPrecision(15))) : String(rawVal);
     if (state.priceColumns.includes(colIdx) && isNumeric(rawVal)) {
       const cat = String(state.rows[rowIdx][0] ?? '');
-      editVal = Number(adjusted(numeric(rawVal), cat)).toFixed(2);
+      editVal = pricePlain(adjusted(numeric(rawVal), cat), colIdx);
     }
     if (initialChar !== null) {
       editVal = initialChar;
@@ -2300,7 +2336,7 @@
         const row = state.rows[rowIdx];
         const isPrice = state.priceColumns.includes(colIdx);
         const cat = String(row[COL.category] ?? '');
-        const shown = value => (isPrice && isNumeric(value) ? money.format(adjusted(numeric(value), cat)) : String(value ?? ''));
+        const shown = value => (isPrice && isNumeric(value) ? priceShown(adjusted(numeric(value), cat), colIdx) : String(value ?? ''));
         const change = {
           code: String(row[COL.code] ?? ''),
           product: String(row[COL.description] ?? '').split(/\r?\n/)[0].slice(0, 200),
@@ -3145,7 +3181,7 @@
         </div>
       </article>`;
     };
-    const uploadTile = showUpload ? `<button type="button" class="sheet-upload" data-key="upload"><span class="sheet-upload-plus" aria-hidden="true">+</span><strong>Upload files</strong><small>Excel price lists · uploads need no approval</small></button>` : '';
+    const uploadTile = showUpload ? `<button type="button" class="sheet-upload" data-key="upload"><span class="sheet-upload-plus" aria-hidden="true">+</span><strong>Upload files</strong><small>Excel price lists</small></button>` : '';
     // The approval tray: each change is a paper-clipped slip. Approvers get Approve / Reject / Review
     // right on it; everyone else can review it. Rejected changes stay until they're deleted.
     const slip = version => {
@@ -3161,7 +3197,8 @@
         ? `<button type="button" class="row-primary is-approve" data-action="approve" data-id="${vid}">Approve</button><button type="button" class="row-primary slip-reject" data-action="reject" data-id="${vid}">Reject</button><button type="button" class="row-primary slip-review" data-action="review" data-id="${vid}" title="See every price this change makes">Review</button>`
         : `<button type="button" class="row-primary" data-action="review" data-id="${vid}">Review changes</button>`;
       const edits = Number(version.changeCount || 0);
-      const what = version.kind === 'batch'
+      // A saved change or an uploaded file waiting for approval says what it changes in words.
+      const what = version.kind === 'batch' || version.summary?.what
         ? `<span class="adj-chip edits" title="${escapeHtml(version.summary?.what || '')}">${escapeHtml(version.summary?.what || `${edits} changes`)}</span>`
         : version.kind === 'rules'
         ? `<span class="adj-chip edits">${edits} rule change${edits === 1 ? '' : 's'}</span>`
@@ -4082,7 +4119,9 @@
     showMlStep('preview');
     const next = $('#mlUploadNext');
     next.disabled = !data.changeCount;
-    next.textContent = data.changeCount ? `Apply ${data.changeCount.toLocaleString()} change${data.changeCount === 1 ? '' : 's'}` : 'Nothing to change';
+    // A customer file by someone who isn't an auto-approver waits for approval (api/files/upload_workbook.php).
+    const changes = `${data.changeCount.toLocaleString()} change${data.changeCount === 1 ? '' : 's'}`;
+    next.textContent = !data.changeCount ? 'Nothing to change' : state.autoApprove ? `Apply ${changes}` : `Send ${changes} for approval`;
   }
   $('#mlUploadNext')?.addEventListener('click', async () => {
     if (mlUpload.busy || !mlUpload.file) return;
@@ -4090,7 +4129,7 @@
     const next = $('#mlUploadNext');
     next.disabled = true;
     const applying = mlUpload.step === 'preview';
-    next.textContent = applying ? 'Applying…' : 'Checking…';
+    next.textContent = applying ? (state.autoApprove ? 'Applying…' : 'Sending…') : 'Checking…';
     try {
       const data = await sendMlUpload(applying ? mlUpload.fingerprint : '');
       mlUpload.busy = false;
@@ -4775,6 +4814,7 @@
     }
     clearStagedFile();
     fillDatalists();
+    await ensureExcelTools().catch(() => { }); // the template preview draws its sheet with them
     renderTemplateGuide();
     setUploadGuide(false, false);
     if ($('#applyAllCountry')) $('#applyAllCountry').innerHTML = countryOptionsHtml('', 'Country…');
@@ -4929,7 +4969,8 @@
   }
 
   function downloadExcelTemplate() {
-    if (!window.XLSX) return toast('Excel tools are not available.');
+    // The Excel tools load on first use; then this runs again.
+    if (!window.XLSX) { ensureExcelTools().then(() => (window.XLSX ? downloadExcelTemplate() : toast('Excel tools are not available.')), error => toast(error.message)); return; }
     const template = state.importTemplate;
     if (!template) return toast('The template could not be loaded. Refresh the page.');
     const wb = XLSX.utils.book_new();
@@ -5158,6 +5199,12 @@
     }
     return [['Customer', version.country || '—'], ['Price level', version.priceLevel || '—'], ['Prices as of', date]];
   }
+  /**
+   * The header's "… by" label. A live list (worked out from the uploads and approved changes) names
+   * whoever last changed its prices, the uploader or the approver, so it says "Last updated by";
+   * "Approved by" is kept for a saved change that really was approved.
+   */
+  const approvalLabel = version => (inMasterlistFile(version) ? 'Last updated by' : 'Approved by');
   function exportFileName(version, extension) {
     // Named by who it is for and the date its prices are from, e.g. "Sinodis Price List - FOB Price - 2026-10-21.pdf".
     const parts = [exportTitle(version)];
@@ -5317,6 +5364,8 @@
     const id = versionId || state.active?.id;
     if (!id) return toast('Open an approved price list first.');
     if (fromEditor && !canExportActive()) return toast('Only approved price lists can be exported.');
+    // The Excel / PDF tools first, so an export is only logged when the file can really be made.
+    try { await (format === 'excel' ? ensureExcelTools() : ensurePdfTools()); } catch (error) { return toast(error.message); }
     const picked = options?.codes ? `${options.codes.size} selected product${options.codes.size === 1 ? '' : 's'}` : '';
     const scope = [fromEditor && (hasActiveFilters() || state.category) ? filterDescription() : '', picked].filter(Boolean).join(' · ');
     let version;
@@ -5352,7 +5401,7 @@
     if (!window.XLSX) return toast('Excel tools are unavailable.');
     const wb = XLSX.utils.book_new();
     const rateFor = adjustmentFor(version);
-    const price = (value, category) => (isNumeric(value) ? Number(adjustedWith(rateFor(category), numeric(value)).toFixed(2)) : value);
+    const price = (value, category, col) => (isNumeric(value) ? priceRound(adjustedWith(rateFor(category), numeric(value)), col) : value);
     const asOf = version.approvedAt || version.savedAt;
 
     const categoryMap = new Map();
@@ -5378,7 +5427,7 @@
       data.push([exportTitle(version)]);
       across(data.length - 1);
       exportFacts(version).forEach(([label, value]) => { data.push([label, value]); across(data.length - 1, 1); });
-      if (version.status === 'approved' && version.approvedBy) { data.push(['Approved by', version.approvedBy]); across(data.length - 1, 1); }
+      if (version.status === 'approved' && version.approvedBy) { data.push([approvalLabel(version), version.approvedBy]); across(data.length - 1, 1); }
       data.push([]);
       data.push([catName.toUpperCase()]);
       across(data.length - 1);
@@ -5406,8 +5455,8 @@
       groups.forEach((groupRows, group) => {
         if (groups.size > 1 || group !== catName) { data.push([group]); across(data.length - 1); }
         groupRows.forEach(row => productRows.push([data.length, row]) && data.push(isPresentation
-          ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName), price(row[9], catName), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), moqTotal(row, isNumeric(row[9]) ? adjustedWith(rateFor(catName), numeric(row[9])) : null)]
-          : [row[1], row[2], row[4], row[5], row[6], row[7], price(row[8], catName), price(row[9], catName), formatPallet(row[10]), formatPallet(row[11]), formatPallet(row[12])]));
+          ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName, 8), price(row[9], catName, 9), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), moqTotal(row, isNumeric(row[9]) ? adjustedWith(rateFor(catName), numeric(row[9])) : null)]
+          : [row[1], row[2], row[4], row[5], row[6], row[7], price(row[8], catName, 8), price(row[9], catName, 9), formatPallet(row[10]), formatPallet(row[11]), formatPallet(row[12])]));
       });
 
       // Bank details.
@@ -5518,6 +5567,9 @@
       const printableWidth = pageWidth - margin * 2;
       const INK = [23, 20, 23], MUTED = [113, 98, 103], ROSE = [181, 32, 66];
       const PHOTO_HEIGHT = 54;
+      // Rows one photo cell may span. A block is kept on one page, so two blocks of 6 three-line rows
+      // fit a page (blocks of 8 left each page ~40% empty; a whole long group couldn't be drawn at all).
+      const PDF_PHOTO_SPAN = 6;
 
       const formatPallet = val => {
         const s = String(val ?? '').trim();
@@ -5525,13 +5577,8 @@
         if (/pallet|box/i.test(s)) return s;
         return isNumeric(s) ? `${s} Boxes/Pallet` : s;
       };
-      const formatPdfPrice = (raw, cat) => {
-        if (!isNumeric(raw)) return String(raw ?? '');
-        const val = adjusted(numeric(raw), cat);
-        const numStr = String(raw).trim();
-        const decimals = numStr.includes('.') ? numStr.split('.')[1].length : 2;
-        return Number(val).toFixed(Math.max(2, Math.min(4, decimals)));
-      };
+      // Same decimals as the editor and Excel (pricePlain): Price/pc 3, Price/box 2.
+      const formatPdfPrice = (raw, cat, col) => (isNumeric(raw) ? pricePlain(adjusted(numeric(raw), cat), col) : String(raw ?? ''));
       // Shrinks the column widths proportionally if they add up to more than the printable width.
       const fitColumnsToPage = columns => {
         const total = Object.values(columns).reduce((sum, col) => sum + (col.cellWidth || 0), 0);
@@ -5574,7 +5621,7 @@
       for (const [category, groupsMap] of categoriesMap.entries()) {
         const isPresentation = category.toLowerCase() === 'presentation stands';
         const isAdj = rateFor(category) !== 0;
-        const price = raw => ({ content: formatPdfPrice(raw, category), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal', fontSize: 7 } });
+        const price = (raw, col) => ({ content: formatPdfPrice(raw, category, col), styles: { halign: 'right', textColor: INK, fontStyle: isAdj ? 'bold' : 'normal', fontSize: 7 } });
 
         // Each column: its key (what the export window toggles), header, width, alignment and cell.
         // Requirements 17Oct2026 › Excel Header Template for products; stands keep their own columns.
@@ -5583,8 +5630,8 @@
           { key: 'code', head: 'Code', width: 64, align: 'center', bold: true, cell: row => ({ content: String(row[1] ?? ''), styles: { halign: 'center', fontStyle: 'bold', fontSize: 6.8 } }) },
           { key: 'desc', head: 'Item Name', width: 180, align: 'left', grow: true, cell: row => ({ content: [row[2], row[3]].filter(v => String(v ?? '').trim()).join('\n'), styles: { halign: 'left', fontSize: 6.8 } }) },
           { key: 'pcs', head: 'PC/Set Per Box', width: 54, align: 'center', cell: row => centered(row[6]) },
-          { key: 'pricePc', head: 'Price/pc in USD', width: 56, align: 'right', cell: row => price(row[8]) },
-          { key: 'priceBox', head: 'Price/Box USD', width: 56, align: 'right', cell: row => price(row[9]) },
+          { key: 'pricePc', head: 'Price/pc in USD', width: 56, align: 'right', cell: row => price(row[8], 8) },
+          { key: 'priceBox', head: 'Price/Box USD', width: 56, align: 'right', cell: row => price(row[9], 9) },
           { key: 'nwgw', head: 'NW(KG) / Box', width: 54, align: 'center', cell: row => centered(row[13]) },
           { key: 'nwgw', head: 'GW(KG) / Box', width: 54, align: 'center', cell: row => centered(row[14]) },
           { key: 'boxSize', head: 'Box size', width: 62, align: 'center', cell: row => centered(row[7]) },
@@ -5598,8 +5645,8 @@
           { key: 'weight', head: 'Weight per\nPc (g)', width: 44, align: 'center', cell: row => centered(row[5]) },
           { key: 'pcs', head: 'Pcs/Box', width: 40, align: 'center', cell: row => centered(row[6]) },
           { key: 'boxSize', head: 'Box Size', width: 56, align: 'center', cell: row => centered(row[7]) },
-          { key: 'pricePc', head: 'Price/pc\nUSD', width: 52, align: 'right', cell: row => price(row[8]) },
-          { key: 'priceBox', head: 'Price/box\nUSD', width: 56, align: 'right', cell: row => price(row[9]) },
+          { key: 'pricePc', head: 'Price/pc\nUSD', width: 52, align: 'right', cell: row => price(row[8], 8) },
+          { key: 'priceBox', head: 'Price/box\nUSD', width: 56, align: 'right', cell: row => price(row[9], 9) },
           { key: 'pallets', head: 'Large Pallet\n(16 pallets)', width: 61, align: 'center', pallet: true, cell: row => centered(formatPallet(row[10])) },
           { key: 'pallets', head: 'Small Pallet\n(2 pallets)', width: 61, align: 'center', pallet: true, cell: row => centered(formatPallet(row[11])) },
           { key: 'pallets', head: 'Large Pallet\n(8 pallets)', width: 62, align: 'center', pallet: true, cell: row => centered(formatPallet(row[12])) },
@@ -5632,21 +5679,26 @@
             }
           }]);
           const imageKey = withPhoto ? getPdfGroupImageKey(category, groupName) : null;
-          // A group with a photo gets enough height to show it; the rows share it.
-          const rowMin = imageKey && pdfImages[imageKey] ? Math.ceil(PHOTO_HEIGHT / rows.length) : 0;
-          rows.forEach((row, rIdx) => {
-            const cells = [];
-            columns.forEach((col, index) => {
-              if (col.photo) {
-                if (rIdx === 0) cells.push({ content: '', rowSpan: rows.length, imageKey, styles: { fillColor: [255, 255, 255], cellPadding: 2, lineColor: [221, 178, 188], lineWidth: 0.5 } });
-                return;
-              }
-              const cell = col.cell(row);
-              if (index === (withPhoto ? 1 : 0) && rowMin) cell.styles = { ...cell.styles, minCellHeight: rowMin };
-              cells.push(cell);
+          // The photo cell spans its rows, but at most PDF_PHOTO_SPAN of them: a taller cell than a page
+          // can't be drawn (the PDF tool cuts it), so a long group repeats its photo every few rows.
+          for (let start = 0; start < rows.length; start += PDF_PHOTO_SPAN) {
+            const block = rows.slice(start, start + PDF_PHOTO_SPAN);
+            // A group with a photo gets enough height to show it; the rows share it.
+            const rowMin = imageKey && pdfImages[imageKey] ? Math.ceil(PHOTO_HEIGHT / block.length) : 0;
+            block.forEach((row, rIdx) => {
+              const cells = [];
+              columns.forEach((col, index) => {
+                if (col.photo) {
+                  if (rIdx === 0) cells.push({ content: '', rowSpan: block.length, imageKey, styles: { fillColor: [255, 255, 255], cellPadding: 2, lineColor: [221, 178, 188], lineWidth: 0.5 } });
+                  return;
+                }
+                const cell = col.cell(row);
+                if (index === (withPhoto ? 1 : 0) && rowMin) cell.styles = { ...cell.styles, minCellHeight: rowMin };
+                cells.push(cell);
+              });
+              body.push(cells);
             });
-            body.push(cells);
-          });
+          }
         }
 
         // Widths: the description takes whatever room columns left out free up.
@@ -5746,7 +5798,7 @@
       const approved = version.status === 'approved';
       const facts = [
         ...exportFacts(version),
-        approved ? ['Approved by', version.approvedBy || '—'] : ['Prices', 'Original upload'],
+        approved ? [approvalLabel(version), version.approvedBy || '—'] : ['Prices', 'Original upload'],
       ];
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
@@ -5796,7 +5848,7 @@
           doc.text(label.toUpperCase(), x, 25, { charSpace: 0.4 });
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(8.5);
-          doc.setTextColor(...(label === 'Approved by' ? ROSE : INK));
+          doc.setTextColor(...(/ by$/.test(label) ? ROSE : INK));
           doc.text(value, x, 37);
           right = x - 22;
         }
@@ -5944,7 +5996,8 @@
       td.classList.remove('price-rise', 'price-fall');
       void td.offsetWidth;
       td.classList.add(rising ? 'price-rise' : 'price-fall');
-      td.innerHTML = `<span class="odo" aria-label="${money.format(to)}">${odometerMarkup(money.format(from), money.format(to), rising)}</span>`;
+      const shown = value => priceShown(value, td.dataset.col);
+      td.innerHTML = `<span class="odo" aria-label="${shown(to)}">${odometerMarkup(shown(from), shown(to), rising)}</span>`;
       td.querySelectorAll('.odo-wheel').forEach(wheel => {
         const steps = Number(wheel.dataset.steps);
         const duration = 650 + Math.min(steps, 20) * 22 + (Number(wheel.style.getPropertyValue('--odo-order')) < 3 ? 120 : 0);
@@ -5959,7 +6012,7 @@
       rolled.push({ td, to });
     });
     // Afterwards the cells hold plain text again, as the editor expects.
-    if (rolled.length) rollTimer = setTimeout(() => rolled.forEach(({ td, to }) => { if (td.isConnected && td.querySelector('.odo')) td.textContent = money.format(to); }), longest + 80);
+    if (rolled.length) rollTimer = setTimeout(() => rolled.forEach(({ td, to }) => { if (td.isConnected && td.querySelector('.odo')) td.textContent = priceShown(to, td.dataset.col); }), longest + 80);
   }
 
   // In a price level or customer of the price list, the % can cover more lists than this one: the
@@ -6741,7 +6794,8 @@
     baseRows.forEach((row, index) => { if (!seen.has(keyOf(row, index))) result.removed++; });
     return result;
   }
-  const priceText = value => (isNumeric(value) ? money.format(numeric(value)) : escapeHtml(value || '—'));
+  // Review lists show Price/pc and Price/box side by side: up to 3 decimals, so a Price/pc keeps its third.
+  const priceText = value => (isNumeric(value) ? pcMoney.format(numeric(value)) : escapeHtml(value || '—'));
   function deltaMarkup(before, after) {
     if (!isNumeric(before) || !isNumeric(after) || !numeric(before)) return '';
     const pct = (numeric(after) - numeric(before)) / numeric(before) * 100;
@@ -8213,7 +8267,9 @@
     const adjustments = Object.entries(list.categoryAdjustments || {}).filter(([, value]) => Number(value)).map(([category, value]) => `${category} ${signedRate(value)}`);
     if (!adjustments.length && Number(list.adjustment)) adjustments.push(`All categories ${signedRate(list.adjustment)}`);
     const parts = [adjustments.length ? `price adjustments (${adjustments.join(', ')})` : '', edits ? `${edits} cell edit${edits === 1 ? '' : 's'}` : ''].filter(Boolean);
-    logActivity('discard_changes', `Discarded unsaved changes to '${list.name || 'a price list'}'`,
+    // Named by customer and price level: every list is called "Price list".
+    const listName = [list.country, list.priceLevel].filter(Boolean).join(' · ') || `'${list.name || 'a price list'}'`;
+    logActivity('discard_changes', `Discarded unsaved changes to ${listName}`,
       parts.length ? `Not saved: ${parts.join(' and ')}.` : 'The unsaved changes were not saved.',
       { fileName: list.name || '', versionId: list.id || '', country: list.country || '', priceLevel: list.priceLevel || '', cellEdits: edits, adjustments });
   }
@@ -9807,5 +9863,5 @@
 
   // Opening on the Dashboard: its numbers load at the same time as the app's data, not after it.
   if (state.user && document.documentElement.dataset.initialPanel === 'dashboardPanel') { dashPrefetch = api('dashboard'); dashPrefetch.catch(() => { }); }
-  if (state.user) loadState().catch(error => { setAppLoading(false); toast(error.message); });
+  if (state.user) loadState().then(preloadExportTools).catch(error => { setAppLoading(false); toast(error.message); });
 })();

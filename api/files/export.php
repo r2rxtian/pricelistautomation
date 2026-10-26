@@ -16,7 +16,9 @@ if (!is_exportable($version)) {
     json_response(['ok' => false, 'message' => 'Only uploaded files and approved price changes can be exported.'], 403);
 }
 $scope = clean_text($data['scope'] ?? '', 200);
-record_audit('export_' . $format, "Exported '{$version['name']}' to " . ($format === 'pdf' ? 'PDF' : 'Excel'),
+// Named by its customer and price level ("Baker Patissier · FOB Price"): every list is called "Price list".
+$exported = implode(' · ', array_filter([(string) ($version['country'] ?? ''), (string) ($version['priceLevel'] ?? '')])) ?: "'{$version['name']}'";
+record_audit('export_' . $format, "Exported {$exported} to " . ($format === 'pdf' ? 'PDF' : 'Excel'),
     "{$user['name']} exported " . version_label($version) . ($scope !== '' ? " ({$scope})" : '') . '.', [
         'versionId' => $version['id'], 'versionName' => $version['name'], 'fileName' => $version['name'], 'format' => $format, 'scope' => $scope,
     ]);

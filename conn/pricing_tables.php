@@ -43,6 +43,18 @@ function pricing_db_products(bool $all = false): array
     ], $query->fetchAll());
 }
 
+/**
+ * How many active products there are and their categories in list order: what the app's list
+ * summaries need, without reading every product's details (pricing_db_products takes ~6× longer).
+ */
+function pricing_db_product_overview(): array
+{
+    $rows = database_connection()->query(
+        'SELECT category, COUNT(*) AS n, MIN(sort_order) AS first_sort FROM dbo.PLA_Products WHERE is_active = 1 GROUP BY category ORDER BY MIN(sort_order), category'
+    )->fetchAll();
+    return ['count' => array_sum(array_map(fn($r) => (int) $r['n'], $rows)), 'categories' => array_map(fn($r) => (string) $r['category'], $rows)];
+}
+
 /** Id => name for countries or price levels (switched-off ones too). */
 function pricing_db_option_ids(string $type): array
 {

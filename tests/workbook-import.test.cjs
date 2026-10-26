@@ -183,7 +183,9 @@ async function apiChecks() {
       adjustedWith: (rate, value) => value * (1 + rate / 100),
       isNumeric: value => value !== '' && Number.isFinite(Number(value)), numeric: Number,
       exportFileName: () => 'test-export.xlsx',
-      exportTitle: () => 'Test Price List', exportFacts: () => [['Customer', 'Test'], ['Price level', 'FOB Price']]
+      exportTitle: () => 'Test Price List', exportFacts: () => [['Customer', 'Test'], ['Price level', 'FOB Price']],
+      // As in scripts/app.js: Price/pc (column 8) to 3 decimals, other prices to 2.
+      priceRound: (value, col) => Number(Number(value).toFixed(Number(col) === 8 ? 3 : 2)), approvalLabel: () => 'Approved by'
     });
     // The export follows the final layout (Requirements 17Oct2026 › Excel Header Template): its own
     // column names, pallets under "PALLET PER CONTAINER", and each product group as a title row.
@@ -193,18 +195,19 @@ async function apiChecks() {
       const sheet = captured.Sheets[category.name];
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       const sample = category.samples[0];
-      const adjusted = value => Number((value * 1.05).toFixed(2));
+      // +5%, then rounded as the app shows prices: Price/pc to 3 decimals, Price/box to 2.
+      const adjusted = (value, decimals = 2) => Number((value * 1.05).toFixed(decimals));
       const head = data.findIndex(row => row[0] === 'Code');
       assert.ok(head > 0, 'export has a title block above the headers');
       if (category.layout === 'standard') {
         assert.deepEqual(data[head], finalHeaders, 'export headers follow the final template');
         assert.deepEqual(data[head + 2].slice(8), ['Large Pallet (16 pallets)', 'Small Pallet (2 pallets)', 'Large Pallet (8 pallets)']);
         assert.equal(data[head + 3][0], sample[11], 'product group title row');
-        assert.deepEqual(data[head + 4], [...sample.slice(0, 6), adjusted(sample[6]), adjusted(sample[7]), ...sample.slice(8, 11).map(pallet)], 'export preserves values and price adjustments');
+        assert.deepEqual(data[head + 4], [...sample.slice(0, 6), adjusted(sample[6], 3), adjusted(sample[7]), ...sample.slice(8, 11).map(pallet)], 'export preserves values and price adjustments');
       } else {
         // Total Price Based on MOQ = Price/box (with the %) × the MOQ quantity ('10 Sets').
         const moqTotal = Math.round(sample[4] * 1.05 * Number(String(sample[8]).match(/\d+/)[0]) * 100) / 100;
-        assert.deepEqual(data[head + 2], [sample[0], sample[1], sample[2], adjusted(sample[3]), adjusted(sample[4]), sample[5], sample[6], sample[7], sample[8], moqTotal], 'stand values, price adjustments and the MOQ total');
+        assert.deepEqual(data[head + 2], [sample[0], sample[1], sample[2], adjusted(sample[3], 3), adjusted(sample[4]), sample[5], sample[6], sample[7], sample[8], moqTotal], 'stand values, price adjustments and the MOQ total');
       }
     });
     checks++; console.log('PASS Excel exports follow the final header template');

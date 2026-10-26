@@ -4174,6 +4174,11 @@ html[data-initial-panel="usersPanel"] #workspacePanel { display: none !important
    who else is viewing) wraps inside it instead of pushing Export and Save onto their own line. */
 #workspacePanel.has-file > .page-heading > .heading-left { flex: 1 1 0; min-width: 0; }
 
+/* On a phone there is no room beside it: the left side takes the whole row, Export and Save go below. */
+@media (max-width: 720px) {
+  #workspacePanel.has-file > .page-heading > .heading-left { flex-basis: 100%; }
+}
+
 /* Export menu opened toward the left edge when there is no room to its left (scripts/app.js). */
 .export-menu.opens-right { right: auto; left: 0; }
 

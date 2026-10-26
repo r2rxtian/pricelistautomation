@@ -297,7 +297,7 @@ record_audit('save_version', "Saved '{$name}' for approval", "{$label} saved by 
 notify($version['requiredApprovers'], 'approval_request', "Approval needed: {$name}",
     "{$user['name']} saved {$label} and needs your approval before it can be exported.", $version['id']);
 
-$approverNames = implode(' & ', array_map('user_display_name', $version['requiredApprovers']));
+$approverNames = implode(APPROVAL_MODE === 'all' ? ' & ' : ' or ', array_map('user_display_name', $version['requiredApprovers'])); // one approval is enough in 'any' mode
 json_response([
     'ok' => true,
     'active' => version_for_client($user, $version),

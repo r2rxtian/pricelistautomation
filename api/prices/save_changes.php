@@ -76,5 +76,6 @@ if ($autoApproved) {
 if ($base) repo_resolve_notifications($version['id'], ['approval_request']);
 record_audit('save_version', 'Price changes sent for approval', "{$user['name']} saved price changes: {$what}. Awaiting approval.", $meta);
 notify($version['requiredApprovers'], 'approval_request', 'Approval needed: price changes', "{$user['name']} saved price changes ({$what}) and needs your approval.", $version['id']);
-$approverNames = implode(' & ', array_map('user_display_name', $version['requiredApprovers']));
+// "Gen or Margaret" when one approval is enough (APPROVAL_MODE 'any'), "Gen & Margaret" when all must.
+$approverNames = implode(APPROVAL_MODE === 'all' ? ' & ' : ' or ', array_map('user_display_name', $version['requiredApprovers']));
 json_response(['ok' => true, 'message' => $approverNames !== '' ? "Saved and sent to {$approverNames} for approval: {$what}." : "Saved: {$what}. Awaiting approval.", 'version' => version_for_client($user, version_summary($version))]);

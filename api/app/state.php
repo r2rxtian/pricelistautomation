@@ -10,7 +10,10 @@ $versions = array_values(array_filter(repo_list_version_summaries(), fn($v) => v
 $versions = array_map(fn($v) => version_for_client($user, $v), $versions);
 // A change waiting for approval says which lists it will move, so those lists can show it is waiting.
 foreach ($versions as &$v) {
-    if (($v['kind'] ?? '') === 'batch' && $v['status'] === 'pending') $v['reaches'] = pricing_batch_scopes(repo_get_version($v['id'])['masterlistBatch'] ?? []);
+    if ($v['status'] !== 'pending') continue;
+    if (($v['kind'] ?? '') === 'batch') $v['reaches'] = pricing_batch_scopes(repo_get_version($v['id'])['masterlistBatch'] ?? []);
+    // A customer file waiting for approval reaches that customer's list.
+    elseif (($v['kind'] ?? '') === 'list' && ($pair = pricing_parse_list_id((string) ($v['basedOn'] ?? '')))) $v['reaches'] = [['countryId' => $pair[0] ?: null, 'levelId' => $pair[1]]];
 }
 unset($v);
 // The price list and every country × price level in it (live, so always visible; nothing to approve

@@ -8,7 +8,11 @@ declare(strict_types=1);
  * `target` says what the file is for (Requirements 17Oct2026: choose the price level, then the customer):
  * list-<customerId>-<levelId>, one customer. Every file is one customer's price list; the price level
  * only groups customers. The customer's list becomes exactly the file (products, details and prices).
- * Like file uploads, it is live at once (no approval).
+ *
+ * Approval (Requirements.xlsx › "Process for Uploading | Update": Chelsea → Ms. Gen & Meg, Margaret →
+ * Ms. Gen & Chelsea): an upload by someone who isn't an auto-approver is kept, checked, as a change
+ * waiting for approval (kind 'list' with the file in pendingImport) and only applied once approved
+ * (rules/pricing.php › pricing_apply_version). Ms. Gen's uploads go live at once.
  */
 require_once __DIR__ . '/../bootstrap.php';
 
@@ -44,6 +48,44 @@ if ($confirm !== $fingerprint) {
 }
 if (!$changes) json_response(['ok' => false, 'message' => 'This file has no changes: every product and price is already the same.'], 422);
 
+$what = implode(', ', array_filter([
+    $counts['added'] ? "{$counts['added']} added" : '', ($counts['removed'] ?? 0) ? "{$counts['removed']} removed" : '',
+    $counts['priceChanges'] ? "{$counts['priceChanges']} new prices" : '', ($counts['reordered'] ?? 0) ? 'new order' : '', ($counts['detailChanges'] ?? 0) ? "{$counts['detailChanges']} with new details" : '',
+]));
+
+// Not an auto-approver: the checked file waits for approval; the prices stay as they are until then.
+if ($pair && !is_auto_approver($user['username'])) {
+    $for = pricing_list_name($list);
+    $identity = ['name' => PRICE_LIST_NAME, 'country' => (string) $list['country'], 'priceLevel' => (string) $list['priceLevel']];
+    $revision = 1;
+    foreach (repo_list_version_summaries() as $summary) if (same_price_list($summary, $identity)) $revision = max($revision, (int) $summary['revision'] + 1);
+    $now = gmdate('c');
+    $version = [
+        'id' => bin2hex(random_bytes(8)), 'source' => 'change', 'kind' => 'list', 'name' => PRICE_LIST_NAME,
+        'priceLevel' => (string) $list['priceLevel'], 'country' => (string) $list['country'], 'revision' => $revision, 'status' => 'pending',
+        // Its rows are the file's, so Review compares them with the live list (basedOn).
+        'headers' => $list['headers'], 'rows' => $import['rows'], 'priceColumns' => PRICE_COLUMNS, 'adjustment' => 0.0, 'categoryAdjustments' => [],
+        'summary' => ['totalProducts' => $preview['products'], 'totalAdjustedProducts' => 0, 'adjustedCategories' => [], 'what' => "New file for {$for}: {$what}"],
+        'changes' => [], 'changeCount' => $changes, 'productCount' => $preview['products'],
+        'categories' => array_values(array_unique(array_map(fn($row) => (string) $row[0], $import['rows']))),
+        'savedAt' => $now, 'savedBy' => $user['name'], 'savedByUser' => $user['username'],
+        'requiredApprovers' => approvers_for($user['username']), 'approvals' => [], 'approvedAt' => null, 'approvedBy' => null,
+        'rejectedAt' => null, 'rejectedBy' => null, 'rejectionRemarks' => null,
+        'basedOn' => $list['id'], 'templateVersion' => $import['templateVersion'], 'uploadSummary' => $counts, 'sourceFile' => $import['sourceFile'],
+        'pendingImport' => $import, // applied as an upload once approved
+    ];
+    repo_save_version($version);
+    $approvers = implode(APPROVAL_MODE === 'all' ? ' & ' : ' or ', array_map('user_display_name', $version['requiredApprovers'])); // one approval is enough in 'any' mode
+    record_audit('save_version', "File for {$for} sent for approval",
+        "{$user['name']} uploaded a new file for {$for} ({$import['sourceFile']}): {$preview['products']} products; {$what}. Awaiting approval.", [
+        'versionId' => $version['id'], 'versionName' => PRICE_LIST_NAME, 'fileName' => PRICE_LIST_NAME, 'revision' => $revision, 'kind' => 'list',
+        'country' => $version['country'], 'priceLevel' => $version['priceLevel'], 'rowCount' => $preview['products'], 'counts' => $counts, 'sourceFile' => $import['sourceFile'],
+    ]);
+    notify($version['requiredApprovers'], 'approval_request', "Approval needed: new file for {$for}", "{$user['name']} uploaded a new file for {$for} ({$what}) and needs your approval.", $version['id']);
+    json_response(['ok' => true, 'pending' => true, 'active' => version_for_client($user, $list), 'changeCount' => $changes,
+        'message' => $approvers !== '' ? "Sent to {$approvers} for approval: {$what}. The prices change once it is approved." : "Saved: {$what}. Awaiting approval."]);
+}
+
 $versionId = bin2hex(random_bytes(8));
 $records = $pair ? pricing_apply_list($import, $pair[0], $pair[1], $versionId, $user['name']) : pricing_apply_masterlist($import, $versionId);
 $live = $pair ? pricing_list_version($pair[0], $pair[1]) : pricing_base_version();
@@ -71,10 +113,6 @@ $version = [
 repo_save_version($version);
 supersede_older_approved($version);
 
-$what = implode(', ', array_filter([
-    $counts['added'] ? "{$counts['added']} added" : '', ($counts['removed'] ?? 0) ? "{$counts['removed']} removed" : '',
-    $counts['priceChanges'] ? "{$counts['priceChanges']} new prices" : '', ($counts['reordered'] ?? 0) ? 'new order' : '', ($counts['detailChanges'] ?? 0) ? "{$counts['detailChanges']} with new details" : '',
-]));
 if ($pair) {
     $for = pricing_list_name($list);
     $title = "Uploaded prices for {$for}";

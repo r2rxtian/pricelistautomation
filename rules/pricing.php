@@ -311,9 +311,7 @@ function pricing_option_id(string $type, string $name): ?int
 function pricing_summaries(): array
 {
     if (!pricing_enabled()) return [];
-    $products = pricing_db_products();
-    $count = count($products);
-    $categories = array_values(array_unique(array_map(fn($p) => $p['category'], $products)));
+    ['count' => $count, 'categories' => $categories] = pricing_db_product_overview();
     $last = pricing_last_saved();
     $counts = pricing_db_override_counts();
     $changed = pricing_db_last_changes();
@@ -415,6 +413,12 @@ function pricing_edits(array $live, array $rows): array
  */
 function pricing_apply_version(array $version, string $by): void
 {
+    // An upload that waited for approval (api/files/upload_workbook.php): applied now, as an upload.
+    if (is_array($version['pendingImport'] ?? null)) {
+        $pair = pricing_parse_list_id((string) ($version['basedOn'] ?? ''));
+        if ($pair && $pair[0] !== 0) pricing_apply_list($version['pendingImport'], $pair[0], $pair[1], $version['id'], $by);
+        return;
+    }
     if (($version['kind'] ?? '') === 'batch') {
         if (is_array($version['masterlistBatch'] ?? null)) pricing_apply_batch($version['masterlistBatch'], $version['id'], $by);
         return;

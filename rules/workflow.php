@@ -3,8 +3,9 @@ declare(strict_types=1);
 /**
  * Price list versions and the approval workflow.
  *
- *   source  'upload' – a file as uploaded: live at once, no approval needed
- *           'change' – edited prices: pending → approved | rejected
+ *   source  'upload' – a file as uploaded (live): an auto-approver's at once, anyone else's once approved
+ *           'change' – edited prices, or an uploaded file waiting for approval (pendingImport):
+ *                      pending → approved | rejected
  *   status  uploaded | pending | approved | rejected | superseded
  */
 
@@ -115,7 +116,10 @@ function is_exportable(array $version): bool
 /** What a log title calls a version: "price changes" for a price list save, else its quoted name. */
 function version_title(array $version): string
 {
-    return ($version['kind'] ?? '') === 'batch' ? 'price changes' : "'" . ($version['name'] ?? 'Price list') . "'";
+    if (($version['kind'] ?? '') === 'batch') return 'price changes';
+    // One customer's file: named by customer and price level (every list is called "Price list").
+    if (($version['kind'] ?? '') === 'list' && ($version['country'] ?? '') !== '') return "the file for {$version['country']} · {$version['priceLevel']}";
+    return "'" . ($version['name'] ?? 'Price list') . "'";
 }
 
 function version_label(array $version): string

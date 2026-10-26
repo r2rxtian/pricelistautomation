@@ -47,6 +47,7 @@ function version_label(array $version): string { return $version['name']; }
 function version_for_client(array $user, array $version): array { return $version; }
 function approvers_for(string $username): array { return ['fixture-reviewer']; }
 function is_auto_approver(string $username): bool { return false; }
+const APPROVAL_MODE = 'any'; // as in rules/constants.php: one approval is enough
 function user_display_name(string $username): string { return $username; }
 set_exception_handler(function(Throwable $error): void { json_response(['ok'=>false,'message'=>$error->getMessage()], 500); });
 $code = str_replace("\r\n", "\n", file_get_contents(__DIR__ . '/../api/files/save.php')); // Git on Windows may check out \r\n
