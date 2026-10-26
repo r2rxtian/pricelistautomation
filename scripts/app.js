@@ -7149,7 +7149,7 @@
     });
     document.querySelector('.content')?.classList.toggle('history-active', ['historyPanel', 'listsPanel', 'filesPanel'].includes(finalPanelId));
 
-    if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || 'library');
+    if (finalPanelId === 'settingsPanel') switchConfigTab(state.configTab || (can('manageImages') ? 'library' : 'display'));
     // Users: refreshed each time it opens (nothing is redrawn if nobody changed). Elsewhere, admins
     // fetch it once in the background so the page opens already filled in.
     if (finalPanelId === 'usersPanel') { state.usersPreloaded = true; loadUsers(); }
@@ -8676,6 +8676,8 @@
   };
   function switchConfigTab(tab) {
     if (!CONFIG_SECTIONS[tab]) tab = 'library';
+    // Photos and customers are for admins; everyone else has Display only (its tabs are .perm-manageImages).
+    if (!can('manageImages')) tab = 'display';
     const previous = state.configTab;
     try { sessionStorage.setItem(CONFIG_TAB_KEY, tab); } catch { }
     state.configTab = tab;

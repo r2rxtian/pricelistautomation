@@ -19,7 +19,8 @@ const APP_PAGES = [
     // 'permission': opening the page without it shows 403 · No access (pages/403.php).
     'audit_logs' => ['panel' => 'historyPanel', 'title' => 'Audit Logs', 'permission' => 'viewAudit'],
     'users' => ['panel' => 'usersPanel', 'title' => 'Users', 'permission' => 'manageUsers'],
-    'config' => ['panel' => 'settingsPanel', 'title' => 'Config', 'permission' => 'manageImages'],
+    // Everyone: export-only users see only its Display tab (photos and customers are admin-only).
+    'config' => ['panel' => 'settingsPanel', 'title' => 'Config'],
 ];
 $page = isset($page) && array_key_exists($page, APP_PAGES) ? $page : 'prices';
 
@@ -100,7 +101,7 @@ if ($required !== null && !user_can($user, $required)) {
             <button class="nav-item<?= empty($_GET['list']) ? ' active' : '' ?>" data-panel="filesPanel" id="filesNav"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><strong>Files</strong><span id="pendingApprovalCount" class="nav-count" hidden title="Price changes waiting for your approval">0</span></button>
             <button class="nav-item perm-viewAudit" data-panel="historyPanel" id="auditLogsNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg><strong>Audit Logs</strong></button>
             <button class="nav-item perm-manageUsers" data-panel="usersPanel" id="usersNav" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><strong>Users</strong></button>
-            <button id="settingsNav" class="nav-item perm-manageImages" data-panel="settingsPanel" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
+            <button id="settingsNav" class="nav-item" data-panel="settingsPanel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg><strong>Config</strong></button>
         </nav>
         <div class="topbar-right">
             <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
@@ -570,9 +571,9 @@ if ($required !== null && !user_can($user, $required)) {
                     </div>
                     <div class="config-sections" role="tablist" aria-label="Config sections">
                         <span class="config-sections-glider" aria-hidden="true"></span>
-                        <button type="button" class="config-section-btn is-active" data-config-section="library" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Photo library</span><span id="libraryCountBadge" class="config-section-count">0</span></button>
-                        <button type="button" class="config-section-btn" data-config-section="types" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Product type photos</span><span id="typesCountBadge" class="config-section-count">0</span></button>
-                        <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Customers &amp; price levels</span></button>
+                        <button type="button" class="config-section-btn is-active perm-manageImages" data-config-section="library" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Photo library</span><span id="libraryCountBadge" class="config-section-count">0</span></button>
+                        <button type="button" class="config-section-btn perm-manageImages" data-config-section="types" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Product type photos</span><span id="typesCountBadge" class="config-section-count">0</span></button>
+                        <button type="button" class="config-section-btn perm-manageImages" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Customers &amp; price levels</span></button>
                         <button type="button" class="config-section-btn" data-config-section="display" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Display</span></button>
                     </div>
                 </div>
@@ -1123,7 +1124,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/app.js?v=266"></script>
+<script src="../scripts/app.js?v=267"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=23"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
