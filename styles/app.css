@@ -1936,6 +1936,12 @@ dialog::backdrop {
   color: var(--text-muted);
 }
 
+/* Approve window for saved price changes: who/what on two lines, and a link to every change. */
+#approveDialogSummary .save-summary-cat-info { flex-direction: column; align-items: flex-start; gap: 2px; }
+#approveDialogSummary .save-summary-row { gap: 12px; padding: 8px 12px; }
+.decision-review-link { padding: 0; border: 0; background: none; color: var(--pink); font: inherit; font-weight: 700; cursor: pointer; }
+.decision-review-link:hover { text-decoration: underline; }
+
 .save-summary-empty {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -2243,6 +2249,23 @@ dialog[open]::backdrop {
       scroll-behavior: auto !important;
     }
 }
+
+/* The same when switched on in Config › Display › Reduce motion (scripts/reduce-motion.js), also
+   without the delays, so things simply appear where they end up. */
+html.reduce-motion *,
+html.reduce-motion ::before,
+html.reduce-motion ::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+html.reduce-motion::view-transition-group(*),
+html.reduce-motion::view-transition-old(*),
+html.reduce-motion::view-transition-new(*) { animation: none !important; }
 
 @media (max-width: 1024px) {
   /* Responsive adjustments */
@@ -5123,12 +5146,15 @@ html[data-theme="dark"] .button.secondary:hover:not(:disabled):not(.is-disabled)
 
 .notification-earlier { font-size: 0.64rem; color: var(--text-subtle); }
 
+/* Who did what: up to two lines (the full sentence is the row's tooltip). */
 .notifications-list .notification-details-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--text-muted);
   font-size: 0.7rem;
+  line-height: 1.4;
 }
 
 .notification-review {

@@ -8,6 +8,11 @@ $user = apiUser();
 
 $versions = array_values(array_filter(repo_list_version_summaries(), fn($v) => version_visible_to($user, $v)));
 $versions = array_map(fn($v) => version_for_client($user, $v), $versions);
+// A change waiting for approval says which lists it will move, so those lists can show it is waiting.
+foreach ($versions as &$v) {
+    if (($v['kind'] ?? '') === 'batch' && $v['status'] === 'pending') $v['reaches'] = pricing_batch_scopes(repo_get_version($v['id'])['masterlistBatch'] ?? []);
+}
+unset($v);
 // The price list and every country × price level in it (live, so always visible; nothing to approve
 // or delete, so they are sent as they are).
 $versions = array_merge($versions, pricing_summaries());

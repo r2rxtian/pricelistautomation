@@ -373,11 +373,11 @@ html.login-enter .login-theme-toggle { animation: login-rise .6s cubic-bezier(.2
 .welcome-seal { margin-bottom: 10px; opacity: 0; transform: scale(.6); transition: opacity .3s ease, transform .55s cubic-bezier(.34, 1.56, .64, 1); }
 .welcome-seal svg { display: block; }
 .welcome-seal-ring { fill: #b52042; stroke: none; }
-.welcome-seal-check { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 34; stroke-dashoffset: 34; transition: stroke-dashoffset .45s cubic-bezier(.65, 0, .35, 1) .28s; }
-.welcome-kicker { margin: 0; color: #8a6f77; font: 600 0.95rem Inter, sans-serif; opacity: 0; transform: translateY(6px); transition: opacity .35s ease .3s, transform .45s cubic-bezier(.22, 1, .36, 1) .3s; }
+.welcome-seal-check { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 34; stroke-dashoffset: 34; transition: stroke-dashoffset .4s cubic-bezier(.65, 0, .35, 1) .12s; }
+.welcome-kicker { margin: 0; color: #8a6f77; font: 600 0.95rem Inter, sans-serif; opacity: 0; transform: translateY(6px); transition: opacity .3s ease .12s, transform .4s cubic-bezier(.22, 1, .36, 1) .12s; }
 .welcome-name { display: flex; margin: 0; color: var(--text-heading, #140d12); font: 700 clamp(2.2rem, 4.4vw, 3.2rem)/1.1 'Playfair Display', Georgia, serif; letter-spacing: -.5px; }
-.welcome-name span { display: inline-block; opacity: 0; transform: translateY(.45em) rotate(4deg); transition: opacity .3s ease, transform .5s cubic-bezier(.22, 1, .36, 1); transition-delay: calc(.42s + var(--i) * 45ms); }
-.welcome-sub { margin: 8px 0 0; color: #a18a92; font: 500 0.8rem Inter, sans-serif; opacity: 0; transition: opacity .4s ease .8s; }
+.welcome-name span { display: inline-block; opacity: 0; transform: translateY(.45em) rotate(4deg); transition: opacity .25s ease, transform .4s cubic-bezier(.22, 1, .36, 1); transition-delay: calc(.2s + var(--i) * 30ms); }
+.welcome-sub { margin: 8px 0 0; color: #a18a92; font: 500 0.8rem Inter, sans-serif; opacity: 0; transition: opacity .3s ease .4s; }
 .login-welcome.is-in .welcome-seal { opacity: 1; transform: none; }
 .login-welcome.is-in .welcome-seal-check { stroke-dashoffset: 0; }
 .login-welcome.is-in .welcome-kicker, .login-welcome.is-in .welcome-sub { opacity: 1; transform: none; }

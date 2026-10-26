@@ -5,12 +5,18 @@ declare(strict_types=1);
  * doesn't include, e.g. an export-only user typing config.php. Your own access keycard (the same
  * card as on the Users page) is tapped on a reader that blinks red and says DENIED.
  * components/app_shell.php sets $deniedPage (the page's title) and $user before including this file.
+ *
+ * The web server shows it too, for a private file or folder (settings, database code…): .htaccess
+ * on Apache/XAMPP, web.config on IIS. Then there is no page or user, so it says the place is private
+ * instead of talking about roles.
  */
 require_once __DIR__ . '/../components/logo.php';
 http_response_code(403);
 header('Cache-Control: no-store');
 $base = '/pricelistautomation/';
 $h = fn(string $text) => htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+$fromServer = !isset($deniedPage); // shown by the web server, not by the app's role check
+if ($fromServer) $user = [];
 $deniedPage = isset($deniedPage) && is_string($deniedPage) ? $deniedPage : 'this page';
 $isAdmin = ($user['roleName'] ?? '') === 'Admin';
 $roleLabel = $isAdmin ? 'Admin access' : 'Export only';
@@ -29,7 +35,7 @@ $employee = trim((string) ($user['employeeId'] ?? ''));
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= $base ?>styles/app.css?v=250">
+    <link rel="stylesheet" href="<?= $base ?>styles/app.css?v=253">
     <script>try { if (localStorage.getItem('pla_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}</script>
     <style>
         .denied {
@@ -91,9 +97,14 @@ $employee = trim((string) ($user['employeeId'] ?? ''));
     <div class="denied-text">
         <?= pla_logo_lockup() ?>
         <span class="denied-code">403 · No access</span>
+<?php if ($fromServer): ?>
+        <h1>This part of PLA is private</h1>
+        <p>The system’s own files (settings, database code, uploads) can’t be opened in a browser. Nothing is wrong with your account: go back to Files to keep working.</p>
+<?php else: ?>
         <h1>Your card doesn’t open <?= $h($deniedPage) ?></h1>
         <p><?= $firstName !== '' ? $h($firstName) . ', ' : '' ?><?= $h($deniedPage) ?> is only for admins. If you need it, ask an admin to move your card to the Admins rack on the Users page.</p>
         <span class="role">Your access: <?= $h($isAdmin ? 'Admin' : 'Export only') ?></span>
+<?php endif; ?>
         <a class="button primary" href="<?= $base ?>pages/files.php">Back to Files</a>
     </div>
     <div class="scene" aria-hidden="true">
@@ -103,7 +114,7 @@ $employee = trim((string) ($user['employeeId'] ?? ''));
             <span class="reader-screen">DENIED</span>
         </div>
         <div class="keycard <?= $isAdmin ? '' : 'is-export' ?>">
-            <div class="kc-top"><span>LRN · <?= $h($roleLabel) ?></span><span>)))</span></div>
+            <div class="kc-top"><span>LRN · <?= $h($fromServer ? 'Private area' : $roleLabel) ?></span><span>)))</span></div>
             <div class="kc-main"><span class="kc-chip"></span><span class="kc-avatar"><?= $h($initials ?: '?') ?></span><span class="kc-name"><?= $h($fullName ?: 'Your card') ?></span></div>
             <div class="kc-stripe"><?= $employee !== '' ? 'EMP ' . $h($employee) : 'LRN ACCESS' ?></div>
         </div>

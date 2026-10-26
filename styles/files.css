@@ -1059,9 +1059,13 @@ col.col-pallet {
   z-index: 6;
 }
 
+/* Editing a cell, like Excel: no visible box, you type straight into the cell. The cell keeps its own
+   padding and look; only its outline (green while editing) and the text cursor show it's being edited. */
 .excel-cell.is-editing {
-  padding: 0 !important;
-  outline: none !important;
+  outline: 2px solid #16a34a !important;
+  outline-offset: -2px;
+  background-color: #ffffff !important;
+  z-index: 6;
 }
 
 .excel-cell.is-editing::after {
@@ -1069,23 +1073,34 @@ col.col-pallet {
 }
 
 .excel-cell-editor {
+  display: block;
   width: 100% !important;
-  height: 100% !important;
-  min-height: 28px;
-  border: 2px solid #16a34a !important;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 0 !important;
+  border: 0 !important;
   outline: none !important;
-  background: #ffffff !important;
-  color: #1a1518 !important;
-  font-family: inherit;
-  font-size: 0.74rem;
-  font-weight: 600;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: inherit !important;
+  font: inherit;
+  letter-spacing: inherit;
   text-align: inherit;
-  padding: 4px 6px !important;
+  caret-color: #16a34a;
   box-sizing: border-box !important;
-  border-radius: 2px;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
-  z-index: 10;
 }
+
+/* Text cells: a textarea that keeps a description's line breaks and grows with them (scripts/app.js ›
+   startCellEdit sets its height). */
+textarea.excel-cell-editor {
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  line-height: inherit;
+}
+
+[data-theme="dark"] .excel-cell.is-editing { background-color: #1b1c21 !important; }
 
 /* Row Numbers & Row Actions */
 
@@ -4155,6 +4170,13 @@ html[data-initial-panel="usersPanel"] #workspacePanel { display: none !important
 
 #workspacePanel > .page-heading > .heading-actions { flex: 0 0 auto; width: auto; }
 
+/* With a file open, the left side takes the room that is left: a long note (waiting for approval,
+   who else is viewing) wraps inside it instead of pushing Export and Save onto their own line. */
+#workspacePanel.has-file > .page-heading > .heading-left { flex: 1 1 0; min-width: 0; }
+
+/* Export menu opened toward the left edge when there is no room to its left (scripts/app.js). */
+.export-menu.opens-right { right: auto; left: 0; }
+
 @media (max-width: 1240px) {
   /* The price table keeps readable columns and scrolls sideways inside its frame, instead of
      squeezing until codes and descriptions overlap. */
@@ -4369,6 +4391,19 @@ html[data-initial-panel="usersPanel"] #workspacePanel { display: none !important
 .mf-customer-pick select { height: 28px; padding: 0 26px 0 10px; border-radius: 8px; font-size: 0.72rem; }
 
 .mf-customer-pick .ml-select-chevron { right: 9px; }
+
+/* The bin on a card: deletes one customer's file. Quiet until hovered. */
+.mf-actions .mf-delete { width: 36px; height: 36px; display: inline-grid; place-items: center; border: 1px solid var(--line-panel); border-radius: 10px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.mf-actions .mf-delete:hover { border-color: #f1b8c4; background: #fff1f4; color: #dc2626; }
+[data-theme="dark"] .mf-actions .mf-delete { border-color: #2c2f37; color: #8c8d94; }
+[data-theme="dark"] .mf-actions .mf-delete:hover { border-color: #4e2a36; background: #2a161e; color: #fabbcb; }
+
+/* The delete window when it asks which customer's file. */
+.delete-file-pick { display: grid; gap: 6px; margin: 2px 0 12px; font-size: 0.8rem; font-weight: 700; }
+.delete-file-pick .ml-select { position: relative; display: block; }
+.delete-file-pick select { width: 100%; height: 38px; padding: 0 30px 0 12px; border-radius: 10px; font-weight: 600; }
+.delete-file-pick .ml-select-chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.delete-file-note { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
 
 [data-theme="dark"] .mf-card { border-color: #2c2f37; background: #1b1c21; box-shadow: none; }
 

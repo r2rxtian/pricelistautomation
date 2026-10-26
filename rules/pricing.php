@@ -854,6 +854,19 @@ function pricing_batch_description(array $batch): array
     return ['parts' => $parts, 'text' => implode('; ', $shown), 'lines' => $lines];
 }
 
+/**
+ * Which lists a saved change will move once approved, as [{countryId, levelId}] (null = every one), so
+ * the editor can say on those lists that a change is waiting. Standard price edits reach every list.
+ */
+function pricing_batch_scopes(array $batch): array
+{
+    $scopes = [];
+    if ($batch['baseEdits'] ?? []) $scopes[] = ['countryId' => null, 'levelId' => null];
+    foreach ($batch['ruleOps'] ?? [] as $op) $scopes[] = ['countryId' => $op['countryId'] ?: null, 'levelId' => $op['levelId'] ?: null];
+    foreach ($batch['lists'] ?? [] as $list) $scopes[] = ['countryId' => ((int) $list['countryId']) ?: null, 'levelId' => ((int) $list['levelId']) ?: null];
+    return array_values(array_unique($scopes, SORT_REGULAR));
+}
+
 /** How much a one-file save changes, for messages: [base products, % changes, list prices]. */
 function pricing_batch_counts(array $batch): array
 {
@@ -1069,6 +1082,27 @@ function pricing_preview_list(array $import, int $countryId, int $levelId): ?arr
         ],
         'added' => $limit($added), 'priceChanges' => $limit($priceChanges), 'detailChanges' => $limit($detailChanges), 'notInFile' => $limit($notInFile),
     ];
+}
+
+/**
+ * Deletes a customer's file: every product of its list (prices, details, formulas) and its own %
+ * changes, so the customer is back to "No file yet". Products stay in the system for other customers.
+ * Each removed product is recorded under $versionId. Returns how many products were removed.
+ */
+function pricing_delete_list(int $countryId, int $levelId, string $versionId): int
+{
+    $records = [];
+    foreach (pricing_list_prices($countryId, $levelId) as $entry) {
+        $records[] = ['kind' => 'product_remove', 'code' => $entry['product']['code'], 'countryId' => $countryId, 'levelId' => $levelId, 'category' => $entry['product']['category'], 'old' => $entry['product']['description']];
+    }
+    $rules = array_filter(pricing_db_rules(), fn($rule) => $rule['countryId'] === $countryId && $rule['levelId'] === $levelId);
+    foreach ($rules as $rule) $records[] = ['kind' => 'rule', 'countryId' => $countryId, 'levelId' => $levelId, 'category' => $rule['category'], 'field' => 'percent_change', 'old' => $rule['percent'], 'new' => null];
+    pricing_db_transaction(function (PDO $db) use ($countryId, $levelId, $records, $versionId) {
+        $db->prepare('DELETE FROM dbo.PLA_PriceOverrides WHERE country_id = ? AND price_level_id = ?')->execute([$countryId, $levelId]);
+        $db->prepare('DELETE FROM dbo.PLA_PriceRules WHERE country_id = ? AND price_level_id = ?')->execute([$countryId, $levelId]);
+        if ($records) pricing_db_record_changes($db, $versionId, $records);
+    });
+    return count(array_filter($records, fn($record) => $record['kind'] === 'product_remove'));
 }
 
 /** Applies a price level / customer upload (see pricing_preview_list); returns the change records. */

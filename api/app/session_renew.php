@@ -8,7 +8,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/../bootstrap.php';
 
-$user = apiUser();
+$user = apiUser(true); // it renews the session, so the session stays open
 requirePost();
 csrfVerify();
 

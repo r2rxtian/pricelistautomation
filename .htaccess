@@ -1,10 +1,11 @@
-# LRN Price List Automation — Apache settings
+# LRN Price List Automation — Apache settings (XAMPP). On IIS the same is in web.config.
 Options -Indexes
 
+# The app's own error pages, kept at the address that was asked for (like QRTS).
 ErrorDocument 404 /pricelistautomation/pages/404.php
-ErrorDocument 403 /pricelistautomation/pages/404.php
+ErrorDocument 403 /pricelistautomation/pages/403.php
 
 # Internal files are never served directly.
-<FilesMatch "\.(md|sql|lock|tmp|json)$">
+<FilesMatch "\.(md|sql|lock|tmp|json|config)$">
     Require all denied
 </FilesMatch>

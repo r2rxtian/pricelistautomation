@@ -8,9 +8,9 @@ declare(strict_types=1);
  *     → dbo.lrn_master_list   BiometricsID → EmployeeID, name, department
  *     → dbo.PLA_Users     EmployeeID → this app's account and role (the selected users)
  *
- * The password is the person's biometrics number, as held in the master list (BiometricsID). It is
- * looked up at sign-in, never stored here; most are the employee number without the year, but some
- * people have their own.
+ * The password is the person's company password, checked exactly as QRTS does: password_verify()
+ * against the hash in dbo.lrnph_users.password (the same login as the other internal apps). It is
+ * never stored or copied here; changing it is done in the company's own system.
  *
  * Ordinary users need an active company login, an active master-list record and an active
  * PLA_Users row. Employees of the IT department (rules/constants.php) are provisioned
@@ -66,7 +66,7 @@ try {
     // count, and a row that has an account here wins.
     $stmt = $pdo->prepare('
         SELECT TOP 1 u.id, ml.EmployeeID AS employee_id, ml.Department AS department,
-               ml.BiometricsID AS biometrics_id, lu.status AS lrnph_status,
+               lu.password AS lrnph_password_hash, lu.status AS lrnph_status,
                u.is_active, u.failed_login_attempts, u.locked_until, u.deleted_at
         FROM ' . T_LRNPH_USERS . ' lu
         JOIN ' . T_MASTER_LIST . " ml ON ml.BiometricsID = lu.username AND ml.IsActive = '1'
@@ -102,8 +102,8 @@ if ($user['id'] && $user['locked_until'] && strtotime((string) $user['locked_unt
 // A lockout that has run out starts a fresh set of attempts.
 if ($user['id'] && $user['locked_until']) $user['failed_login_attempts'] = 0;
 
-// The password is the biometrics number from the master list.
-if (!hash_equals(trim((string) $user['biometrics_id']), $password)) {
+// The company password, as QRTS checks it (auth/password.php there): the hash in lrnph_users.
+if (!password_verify($password, (string) ($user['lrnph_password_hash'] ?? ''))) {
     $attempts = (int) $user['failed_login_attempts'] + 1;
     $lockUntil = null;
     if ($attempts >= LOGIN_MAX_ATTEMPTS) {

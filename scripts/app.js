@@ -180,7 +180,7 @@
   const API_ROUTES = {
     'state': 'app/state',
     'open': 'files/open', 'save': 'files/save', 'check-workbook': 'files/check_workbook', 'approve': 'approvals/approve', 'reject': 'approvals/reject',
-    'export': 'files/export', 'delete-version': 'files/delete',
+    'export': 'files/export', 'delete-version': 'files/delete', 'delete-customer-file': 'files/delete_customer_file',
     'audit-logs': 'audit/list', 'log-activity': 'audit/log_activity',
     'notifications': 'notifications/list', 'notifications-read': 'notifications/mark_read',
     'library-upload': 'photos/library_upload', 'library-delete': 'photos/library_delete',
@@ -812,6 +812,16 @@
   function canExportActive() {
     return can('export') && ['approved', 'uploaded'].includes(activeStatus());
   }
+  /**
+   * A saved change still waiting for approval that will move this list's prices (api/app/state.php ›
+   * reaches). The list itself shows the approved prices, and exports them, until it is approved.
+   */
+  function waitingChangeFor(version) {
+    const [, customer, level] = (String(version?.id || '').match(/^list-(\d+)-(\d+)$/) || []).map(Number);
+    if (!level) return null;
+    return (state.versions || []).find(change => change.kind === 'batch' && change.status === 'pending' && (change.reaches || []).some(scope =>
+      (scope.levelId === null || scope.levelId === level) && (scope.countryId === null || scope.countryId === customer))) || null;
+  }
   function versionSummaryById(id) {
     return (state.versions || []).find(version => String(version.id) === String(id)) || null;
   }
@@ -1170,6 +1180,7 @@
     presenceSoon();
   }
 
+  let bannerChangeId = ''; // the waiting change the approval banner shows on a live list, if any
   /** Status badge, approval banner and export lock for the open price list. */
   function renderWorkflowState() {
     const active = state.active;
@@ -1210,8 +1221,21 @@
     if (note) {
       let text = '';
       const { approved, waiting } = approvalProgress(active);
-      const canDecide = Boolean(active.canApprove) && status === 'pending';
-      if (status === 'pending') {
+      let canDecide = Boolean(active.canApprove) && status === 'pending';
+      let tone = status;
+      // A saved change for this list that still waits: say so, since the list keeps showing (and
+      // exporting) the approved prices until then. Approvers can decide from here.
+      const change = settled ? waitingChangeFor(active) : null;
+      bannerChangeId = change ? change.id : '';
+      if (change) {
+        const progress = approvalProgress(change);
+        const what = change.summary?.what ? `: ${change.summary.what}` : '';
+        canDecide = Boolean(change.canApprove);
+        tone = 'pending';
+        text = canDecide ? `${change.savedBy || 'Someone'} saved changes that need your approval${what}`
+          : `${change.savedByUser === state.user?.username ? 'Your changes are' : `Changes by ${change.savedBy || 'someone'} are`} waiting for approval${progress.waiting.length ? ` from ${progress.waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}${what}`;
+        text += '. Until then, this list and its exports keep the approved prices.';
+      } else if (status === 'pending') {
         text = canDecide
           ? 'Waiting for your approval'
           : `Awaiting approval${waiting.length ? ` from ${waiting.join(state.approvalMode === 'all' ? ' & ' : ' or ')}` : ''}`;
@@ -1222,9 +1246,9 @@
         text = 'A newer version of this price list has been approved';
       }
       note.hidden = !text;
-      note.dataset.tone = status;
+      note.dataset.tone = tone;
       note.title = text;
-      dom.approvalBannerIcon.textContent = { uploaded: '⬆', pending: '⏳', approved: '✓', rejected: '✕', superseded: '↻' }[status] || '';
+      dom.approvalBannerIcon.textContent = { uploaded: '⬆', pending: '⏳', approved: '✓', rejected: '✕', superseded: '↻' }[tone] || '';
       dom.approvalBannerText.textContent = text;
       dom.bannerApproveBtn.hidden = !canDecide;
       dom.bannerRejectBtn.hidden = !canDecide;
@@ -1760,6 +1784,9 @@
       return [row[15], row[16]].filter(v => String(v ?? '').trim()).map(v => escapeHtml(v).replace(/\r?\n/g, '<br>')).join('<br>');
     }
     if (colIdx === 10 || colIdx === 11 || colIdx === 12) return palletMarkup(raw);
+    // Numbers to 15 significant digits like Excel (1.1400000000000001 → 1.14), for files uploaded
+    // before the importer did the same (rules/workbook_import.php › value).
+    if (typeof raw === 'number') return escapeHtml(String(Number(raw.toPrecision(15))));
     return escapeHtml(raw).replace(/\r?\n/g, '<br>');
   }
 
@@ -1926,7 +1953,32 @@
   function readableFormula(expr) {
     const name = col => String(state.headers[col] || `column ${col}`).replace(/\s+/g, ' ').replace(/\s*(USD|in USD)$/i, '').trim();
     // The formula's own operators first, then the column names (which have "/" in them: "Price/box").
-    return String(expr || '').replace(/\*/g, ' × ').replace(/\//g, ' ÷ ').replace(/,/g, ', ').replace(/\{(\d+)\}/g, (m, col) => name(Number(col))).replace(/\s+/g, ' ');
+    return String(expr || '').replace(/\*/g, ' × ').replace(/\//g, ' ÷ ').replace(/,/g, ', ').replace(/([+\-^])/g, ' $1 ').replace(/\{(\d+)\}/g, (m, col) => name(Number(col))).replace(/\s+/g, ' ');
+  }
+  /**
+   * A formula worked out step by step with the row's own numbers, for fx:
+   * "Price/box ÷ Pcs/box = 70.92 ÷ 392 = 0.180918… → rounded to 3 decimals = 0.181". A ROUND, ROUNDUP
+   * or ROUNDDOWN around the whole formula becomes the last step; anything else is shown as it is.
+   */
+  const ROUNDING_WORDS = { ROUND: 'rounded', ROUNDUP: 'rounded up', ROUNDDOWN: 'rounded down' };
+  function formulaSteps(expr, row) {
+    const shown = value => String(Number(Number(value).toFixed(6))) + (Math.abs(value * 1e6 - Math.round(value * 1e6)) > 1e-6 ? '…' : '');
+    const source = String(expr || '').replace(/\s+/g, '');
+    const outer = source.match(/^(ROUND|ROUNDUP|ROUNDDOWN)\((.*),(\d+)\)$/i);
+    const inner = outer ? outer[2] : source;
+    const withNumbers = inner.replace(/\{(\d+)\}/g, (m, col) => { const v = row?.[Number(col)]; return isNumeric(v) ? String(numeric(v)) : '?'; })
+      .replace(/\*/g, ' × ').replace(/\//g, ' ÷ ').replace(/,/g, ', ').replace(/([+\-^])/g, ' $1 ').replace(/\s+/g, ' ').trim();
+    const before = evaluateFormula(inner, row);
+    const result = evaluateFormula(source, row);
+    const steps = [readableFormula(inner).trim()];
+    if (withNumbers !== steps[0]) steps.push(withNumbers);
+    if (before !== null) steps.push(shown(before));
+    let text = steps.join(' = ');
+    if (outer && result !== null) {
+      const digits = Number(outer[3]);
+      text += ` → ${ROUNDING_WORDS[outer[1].toUpperCase()]} to ${digits === 0 ? 'a whole number' : `${digits} decimal${digits === 1 ? '' : 's'}`} = ${Number(result.toFixed(6))}`;
+    }
+    return text;
   }
   /**
    * After a cell of a row changes: its formulas worked out again (twice, so one that uses another's
@@ -1967,7 +2019,7 @@
     if (formula) {
       const result = formula.expr ? evaluateFormula(formula.expr, row) : null;
       return formula.expr
-        ? `fx  = ${readableFormula(formula.expr)}${result !== null ? ` = ${Number(result.toFixed(6))}` : ''}   ·   from the uploaded file: ${formula.excel}`
+        ? `fx  ${result !== null ? formulaSteps(formula.expr, row) : readableFormula(formula.expr)}   ·   from the uploaded file: ${formula.excel}`
         : `fx  ${formula.excel}   (from the uploaded file: kept as its value, ${row[colIdx]})`;
     }
     if (colIdx === 17) {
@@ -2011,8 +2063,7 @@
     }
     const row = state.rows[rowIdx];
     if (formulaInWords && formula.expr) {
-      const result = evaluateFormula(formula.expr, row);
-      display.textContent = `= ${readableFormula(formula.expr)}${result !== null ? ` = ${Number(result.toFixed(6))}` : ''}`;
+      display.textContent = formulaSteps(formula.expr, row);
       display.title = `In the uploaded file: ${formula.excel}`;
     } else if (formula.expr) {
       // References in the editor's columns, coloured in order of appearance; the cells outlined to match.
@@ -2025,7 +2076,7 @@
         return `<span class="formula-ref" style="color: ${color}">${escapeHtml(ref ? ref.text : String(state.headers[Number(source)] || source))}</span>`;
       });
       display.innerHTML = `=${html}`;
-      display.title = `${readableFormula(formula.expr)} · in the uploaded file: ${formula.excel} · click fx to read it in words`;
+      display.title = `${formulaSteps(formula.expr, row)}\nClick fx to see it worked out in words.`;
     } else {
       // A formula the system keeps as its value (it points outside the price list): shown as in the file.
       display.textContent = formula.excel;
@@ -2070,7 +2121,7 @@
       const cat = String(state.rows[rowIdx][0] ?? '');
       input.value = Number(adjusted(numeric(raw), cat)).toFixed(2);
     } else {
-      input.value = String(raw);
+      input.value = typeof raw === 'number' ? String(Number(raw.toPrecision(15))) : String(raw);
     }
     // A formula cell shows its formula instead (a new cell starts in the formula view, not in words).
     const cellKey = `${rowIdx}|${colIdx}`;
@@ -2111,7 +2162,7 @@
     const rowIdx = Number(td.dataset.row);
     const colIdx = Number(td.dataset.col);
     const rawVal = state.rows[rowIdx]?.[colIdx] ?? '';
-    let editVal = String(rawVal);
+    let editVal = typeof rawVal === 'number' ? String(Number(rawVal.toPrecision(15))) : String(rawVal);
     if (state.priceColumns.includes(colIdx) && isNumeric(rawVal)) {
       const cat = String(state.rows[rowIdx][0] ?? '');
       editVal = Number(adjusted(numeric(rawVal), cat)).toFixed(2);
@@ -2124,13 +2175,19 @@
     td.classList.add('is-editing');
     td.innerHTML = '';
 
-    const input = document.createElement('input');
-    input.type = 'text';
+    // Typed straight into the cell, like Excel: no box (styles/files.css › .excel-cell-editor). Text
+    // cells get a textarea so descriptions keep their line breaks (Alt+Enter adds one, as in Excel);
+    // it grows with its lines. Prices are one line.
+    const multiline = !state.priceColumns.includes(colIdx);
+    const input = document.createElement(multiline ? 'textarea' : 'input');
+    if (multiline) input.rows = 1; else input.type = 'text';
     input.className = 'excel-cell-editor';
     input.value = editVal;
     input.autocomplete = 'off';
     input.spellcheck = false;
     td.appendChild(input);
+    const fitHeight = () => { if (multiline) { input.style.height = 'auto'; input.style.height = `${input.scrollHeight}px`; } };
+    fitHeight();
 
     requestAnimationFrame(() => {
       input.focus();
@@ -2150,11 +2207,17 @@
     input.addEventListener('dblclick', event => event.stopPropagation());
 
     input.addEventListener('input', () => {
+      fitHeight();
       if (dom.formulaInput) dom.formulaInput.value = input.value;
     });
 
     input.addEventListener('keydown', event => {
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && event.altKey && multiline) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.setRangeText('\n', input.selectionStart, input.selectionEnd, 'end');
+        input.dispatchEvent(new Event('input'));
+      } else if (event.key === 'Enter') {
         event.preventDefault();
         event.stopPropagation();
         commitCellEdit(td, input.value);
@@ -2279,8 +2342,13 @@
 
   function confirmFormulaEdit() {
     if (!state.activeCell.td || !state.canEdit) return;
-    const val = dom.formulaInput ? dom.formulaInput.value : '';
-    commitCellEdit(state.activeCell.td, val);
+    let val = dom.formulaInput ? dom.formulaInput.value : '';
+    // The bar is one line, so it shows a description without its line breaks. Unchanged there, the
+    // cell's own text (with its line breaks) is what gets saved.
+    const td = state.activeCell.td;
+    const full = td.querySelector('.excel-cell-editor')?.value ?? String(state.rows[Number(td.dataset.row)]?.[Number(td.dataset.col)] ?? '');
+    if (val === full.replace(/\r?\n/g, '')) val = full;
+    commitCellEdit(td, val);
     if (state.activeCell.td) {
       state.activeCell.td.focus();
     }
@@ -3198,12 +3266,16 @@
    * are fetched in the background and only what changed moves: a step glides to its new height, a
    * figure counts to its new value. The entrance animation plays once, when it is first drawn.
    */
+  let dashPrefetch = null; // the first request for the numbers, started with the app's data
   async function loadDashboard({ quiet = false } = {}) {
     if (!$('#dashboardPanel')) return;
     renderDashboardHeading();
     if (!dash.drawn) renderDashSkeleton();
     if (dash.loading) return dash.loading;
-    dash.loading = api('dashboard').then(res => {
+    // On first load the numbers were already asked for alongside the app's data (see the end of this file).
+    const request = dashPrefetch || api('dashboard');
+    dashPrefetch = null;
+    dash.loading = request.then(res => {
       const signature = JSON.stringify(res.dashboard);
       dash.fetchedAt = Date.now();
       if (signature !== dash.signature || !dash.drawn) {
@@ -3703,7 +3775,7 @@
    */
   /** The latest upload record of a level's file (or a customer's), for its workbook name. */
   function latestUploadOf(level, customer = '') {
-    return (state.versions || []).filter(version => version.source === 'upload' && version.kind === 'list'
+    return (state.versions || []).filter(version => version.source === 'upload' && version.kind === 'list' && version.status !== 'superseded' // a deleted file's upload is superseded
       && sameText(version.priceLevel, level) && sameText(version.country || '', customer))
       .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0] || null;
   }
@@ -3734,6 +3806,8 @@
       const option = customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.country)}${customer.ownPriceCount ? ` · ${customer.ownPriceCount} product${customer.ownPriceCount === 1 ? '' : 's'}` : ''}</option>`;
       const pick = entry.customers.length ? `<span class="ml-select mf-customer-pick"><select data-ml-customer aria-label="Open a customer of ${escapeHtml(entry.level)}"><option value="">Open a customer…</option>${withFile.length ? `<optgroup label="Has a file">${withFile.map(option).join('')}</optgroup>` : ''}${without.length ? `<optgroup label="No file yet">${without.map(option).join('')}</optgroup>` : ''}</select><svg class="ml-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>` : '';
       const upload = can('upload') && entry.customers.length ? `<button type="button" class="button secondary" data-ml-upload="${escapeHtml(view.id)}">Upload a customer file</button>` : '';
+      // Delete one customer's file (asks which, when several have one).
+      const remove = can('upload') && withFile.length ? `<button type="button" class="icon-button mf-delete" data-ml-delete="${escapeHtml(view.id)}" aria-label="Delete a customer file of ${escapeHtml(entry.level)}" title="Delete a customer file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>` : '';
       const when = latest ? `Last upload: ${latest.country} · ${formatRelativeTime(latest.savedAt)}${latest.savedBy ? ` by ${latest.savedBy}` : ''}` : '';
       return `<article class="mf-card ${withFile.length ? '' : 'is-empty'} ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
         <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
@@ -3743,7 +3817,7 @@
           <p class="mf-meta">${entry.customers.length ? `${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} on ${escapeHtml(entry.level)}` : 'Add customers in Config › Customers &amp; price levels'}</p>
           ${when ? `<p class="mf-when" title="${escapeHtml(displayDate(latest.savedAt))}">${escapeHtml(when)}</p>` : ''}
         </div>
-        <div class="mf-actions">${pick}${upload}</div>
+        <div class="mf-actions">${pick}${upload}${remove}</div>
       </article>`;
     }).join('');
     const markup = `<section class="ml-section mf-section">
@@ -3762,6 +3836,26 @@
       <p class="mf-empty mf-no-match" hidden>No files match your search.</p>
     </section>`;
     return { markup };
+  }
+  /**
+   * The bin on a price level card: deletes one customer's file (the delete window asks which, when
+   * several customers have one). Confirmed in #confirmDelete below.
+   */
+  function askDeleteCustomerFile(levelViewId) {
+    const entry = masterlistLevels().find(item => String(item.view.id) === String(levelViewId));
+    const withFile = (entry?.customers || []).filter(customer => customer.ownPriceCount);
+    if (!withFile.length) return toast('No customer of this price level has a file.');
+    const products = customer => `${customer.ownPriceCount} product${customer.ownPriceCount === 1 ? '' : 's'}`;
+    state.pendingDelete = { customerFile: String(withFile[0].id), level: entry.level };
+    $('#deleteDialogKicker').textContent = entry.level;
+    $('#deleteDialogTitle').textContent = 'Delete a customer file?';
+    $('#deleteDialogText').innerHTML = (withFile.length === 1
+      ? `<strong>${escapeHtml(withFile[0].country)}</strong>’s file (${products(withFile[0])}) will be deleted.`
+      : `<label class="delete-file-pick">Customer<span class="ml-select"><select id="deleteFileCustomer">${withFile.map(customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.country)} · ${products(customer)}</option>`).join('')}</select><svg class="ml-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span></label>`)
+      + '<span class="delete-file-note">Its products and prices are removed from this customer, who goes back to “No file yet”. Other customers keep theirs. This cannot be undone, but you can upload a file again.</span>';
+    $('#deleteFileCustomer')?.addEventListener('change', event => { state.pendingDelete.customerFile = event.target.value; });
+    $('#confirmDelete').textContent = 'Delete file';
+    dom.deleteDialog.showModal();
   }
   /** Shows only the file cards that match the search; a match on a customer names the customer. */
   function filterFileCards() {
@@ -3795,9 +3889,10 @@
     runListAction('open', select.value);
   });
   $('#filesTable')?.addEventListener('click', async event => {
-    const action = event.target.closest('[data-ml], [data-ml-upload]');
+    const action = event.target.closest('[data-ml], [data-ml-upload], [data-ml-delete]');
     if (!action) return;
-    if (action.dataset.mlUpload) openMasterlistUpload({ target: action.dataset.mlUpload });
+    if (action.dataset.mlDelete) askDeleteCustomerFile(action.dataset.mlDelete);
+    else if (action.dataset.mlUpload) openMasterlistUpload({ target: action.dataset.mlUpload });
     else if (action.dataset.ml === 'upload') openMasterlistUpload();
   });
 
@@ -6222,6 +6317,9 @@
   function openExportMenu() {
     const menu = $('#exportMenu');
     if (!menu) return;
+    // It opens leftward from the button's right edge; with no room there (the button on the left), rightward.
+    const button = $('#exportMenuBtn').getBoundingClientRect();
+    menu.classList.toggle('opens-right', button.right - 260 < 8);
     menu.hidden = false;
     $('#exportMenuBtn').setAttribute('aria-expanded', 'true');
     requestAnimationFrame(() => menu.querySelector('.export-menu-item')?.focus());
@@ -6349,10 +6447,20 @@
     const summary = versionSummaryById(versionId) || (String(state.active?.id) === String(versionId) ? state.active : null);
     if (!summary) return toast('Price list not found. Refresh and try again.');
     state.pendingDecision = { kind, id: versionId };
-    const label = summary.name;
+    // Saved price changes (one save of the price list) are named by what they change, not the file.
+    const isChange = ['batch', 'rules'].includes(summary.kind);
+    const label = isChange ? 'these price changes' : summary.name;
     if (kind === 'approve') {
       dom.approveDialogTitle.textContent = `Approve ${label}?`;
-      dom.approveDialogText.textContent = `Saved by ${summary.savedBy} on ${displayDate(summary.savedAt)} · ${summary.priceLevel || '—'} · ${summary.country || '—'}. Once approved, it becomes available for export.`;
+      const where = [summary.priceLevel, summary.country].filter(Boolean).join(' · ');
+      dom.approveDialogText.textContent = `Saved by ${summary.savedBy || 'a user'} · ${displayDate(summary.savedAt)}${where ? ` · ${where}` : ''}. `
+        + (isChange ? 'Once approved, the new prices go live and can be exported.' : 'Once approved, it becomes available for export.');
+      if (isChange) {
+        renderChangeDecisionSummary(summary);
+        dom.approveRemarks.value = '';
+        dom.approveDialog.showModal();
+        return;
+      }
       const adjusted = summary.summary?.adjustedCategories || [];
       dom.approveDialogSummary.innerHTML = (adjusted.length
         ? adjusted.map(item => `<div class="save-summary-row"><div class="save-summary-cat-info"><strong class="save-summary-cat-name">${escapeHtml(item.category)}</strong><span class="save-summary-cat-count">${Number(item.productCount || 0).toLocaleString()} products</span></div><span class="adjustment-pill ${item.adjustment > 0 ? 'pos' : 'neg'}">${item.adjustment > 0 ? '+' : ''}${item.adjustment}%</span></div>`).join('')
@@ -6367,6 +6475,37 @@
       requestAnimationFrame(() => dom.rejectRemarks.focus());
     }
   }
+  /**
+   * The approve window for saved price changes: one line per thing that changes ("Baker Patissier ·
+   * FOB Price · all categories  +10%", "3 prices for Sinodis"), and a link to every change.
+   */
+  async function renderChangeDecisionSummary(summary) {
+    const box = dom.approveDialogSummary;
+    const review = `<button type="button" class="decision-review-link" data-review="${escapeHtml(summary.id)}">See every change</button>`;
+    box.innerHTML = `<div class="save-summary-empty">${escapeHtml(summary.summary?.what || 'Price changes')}</div>`;
+    const change = await fetchVersion(summary.id).catch(() => null);
+    if (!change || state.pendingDecision?.id !== summary.id) return;
+    const batch = change.masterlistBatch || { baseEdits: [], ruleOps: [], lists: [] };
+    const row = (name, detail, pill = '') => `<div class="save-summary-row"><div class="save-summary-cat-info"><strong class="save-summary-cat-name">${escapeHtml(name)}</strong>${detail ? `<span class="save-summary-cat-count">${escapeHtml(detail)}</span>` : ''}</div>${pill}</div>`;
+    const plural = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+    const rows = [
+      ...batch.ruleOps.map(op => {
+        const [scope, ...rest] = String(op.label || '').split(' · ');
+        return row(scope || 'Every list', rest.join(' · ') + ' · every price moves by this %', `<span class="adjustment-pill ${op.percent > 0 ? 'pos' : 'neg'}">${op.percent > 0 ? '+' : ''}${op.percent}%</span>`);
+      }),
+      batch.baseEdits.length ? row('Standard prices', `${plural(batch.baseEdits.length, 'product')} · every price level and customer follows these`) : '',
+      ...batch.lists.map(list => row(list.country || `${list.priceLevel} · all customers`, `${list.country ? `${list.priceLevel} · ` : ''}${plural(list.edits.length, 'product')} changed`)),
+    ].filter(Boolean);
+    box.innerHTML = (rows.join('') || `<div class="save-summary-empty">${escapeHtml(summary.summary?.what || 'Price changes')}</div>`)
+      + `<div class="save-summary-unchanged">Prices stay as they are until approved. ${review}</div>`;
+  }
+  dom.approveDialogSummary?.addEventListener('click', event => {
+    const link = event.target.closest('.decision-review-link');
+    if (!link) return;
+    dom.approveDialog.close();
+    state.pendingDecision = null;
+    openChangeReview(link.dataset.review);
+  });
   /** A rubber stamp lands mid-screen after a decision: APPROVED (pink) or RETURNED (red). */
   function stampDecision(kind) {
     if (reducedMotion()) return;
@@ -6400,6 +6539,8 @@
       state.pendingDecision = null;
       stampDecision(kind);
       if (String(state.active?.id) === String(decision.id) && !state.active.isDraft) loadActive(data.active);
+      // Decided from the open list's banner: the list reloads with its prices as they are now.
+      else if (String(decision.id) === bannerChangeId && state.active?.id && !masterlistUnsavedCount()) loadActive((await api('open', { method: 'POST', body: JSON.stringify({ id: state.active.id }) })).active);
       await refreshState();
       toast(data.message);
     } catch (error) {
@@ -6947,8 +7088,9 @@
   $('#refreshListsBtn')?.addEventListener('click', async () => {
     try { await refreshState(); toast('Approvals refreshed.'); } catch (error) { toast(error.message); }
   });
-  dom.bannerApproveBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('approve', state.active.id));
-  dom.bannerRejectBtn?.addEventListener('click', () => state.active?.id && openDecisionDialog('reject', state.active.id));
+  // The banner decides on the open list, or on the waiting change it is showing (bannerChangeId).
+  dom.bannerApproveBtn?.addEventListener('click', () => { const id = bannerChangeId || state.active?.id; if (id) openDecisionDialog('approve', id); });
+  dom.bannerRejectBtn?.addEventListener('click', () => { const id = bannerChangeId || state.active?.id; if (id) openDecisionDialog('reject', id); });
   // The tab title is "<page> · <app name>" (set by components/app_shell.php).
   const APP_TITLE = document.title.split(' · ').slice(1).join(' · ') || document.title;
   // Each page has its own file in pages/; the page file tells the shell which panel to open.
@@ -7276,12 +7418,35 @@
     }
   });
 
+  // The delete window is shared (saved versions, customer files): back to its default text when closed.
+  dom.deleteDialog?.addEventListener('close', () => {
+    $('#deleteDialogKicker').textContent = 'Permanent action';
+    $('#deleteDialogTitle').textContent = 'Delete saved version?';
+    $('#deleteDialogText').innerHTML = 'This removes <strong id="deleteVersionName"></strong>. This action cannot be undone.';
+    dom.deleteVersionName = $('#deleteVersionName');
+    $('#confirmDelete').textContent = 'Delete version';
+    if (state.pendingDelete?.customerFile) state.pendingDelete = null;
+  });
   $('#confirmDelete').addEventListener('click', async event => {
     event.preventDefault();
     if (!state.pendingDelete) return;
     const button = event.currentTarget;
     button.disabled = true;
     try {
+      // A customer's file (the bin on a Files card): the card is what gets tossed into the bin.
+      if (state.pendingDelete.customerFile) {
+        const target = state.pendingDelete.customerFile;
+        const card = $$('#filesTable .mf-card').find(item => item.querySelector(`[data-ml-customer] option[value="${CSS.escape(target)}"]`));
+        const data = await api('delete-customer-file', { method: 'POST', body: JSON.stringify({ target }) });
+        const snap = snapForTrash(card);
+        state.pendingDelete = null;
+        dom.deleteDialog.close();
+        versionCache.clear();
+        if (String(state.active?.id) === target) loadActive(null);
+        await refreshState();
+        trashToast(data.message, snap);
+        return;
+      }
       const deletedId = state.pendingDelete;
       const sheet = $(`#filesTable [data-id="${CSS.escape(String(deletedId))}"]`)?.closest('.file-sheet, .approval-slip');
       const data = await api('delete-version', { method: 'POST', body: JSON.stringify({ id: deletedId }) });
@@ -7924,24 +8089,54 @@
     if (item.type === 'available') return /^new price list/i.test(item.title || '') ? 'New price list' : 'Ready to export';
     return NOTIFICATION_KINDS[item.type] || 'Update';
   }
+  /**
+   * A notification's headline: what it is about, not the file's name (every list is "Price list").
+   * Saved price changes: what they change ("+5% for Baker Patissier · FOB Price"); an upload or a
+   * file: its customer and price level; otherwise the title without its "Approved:" style prefix.
+   */
   function notificationListName(item) {
     const summary = item.versionId ? versionSummaryById(item.versionId) : null;
-    return summary?.name || String(item.title || 'Notification').replace(/^[^:]+:\s*/, '');
+    if (summary?.summary?.what) return summary.summary.what;
+    const where = [summary?.country, summary?.priceLevel].filter(Boolean).join(' · ');
+    if (where) return where;
+    // "Uploaded prices for Baker Patissier · FOB Price" → "Baker Patissier · FOB Price"
+    const title = String(item.title || 'Notification').replace(/^[^:]+:\s*/, '');
+    return title.replace(/^(uploaded (the )?prices for|prices for)\s+/i, '') || title;
   }
+  /** Notifications about the same saved change share one row (approved, then ready to export…). */
   function notificationGroupKey(item) {
-    const summary = item.versionId ? versionSummaryById(item.versionId) : null;
-    return summary ? [summary.name, summary.country, summary.priceLevel].map(part => String(part || '').trim().toLowerCase()).join('|') : `title:${notificationListName(item).toLowerCase()}`;
+    return item.versionId ? `version:${item.versionId}` : `title:${String(item.title || '').toLowerCase()}`;
   }
-  /** A short second line: the reason for a rejection, otherwise where the list applies. */
+  /**
+   * The second line: who did what, in the server's own words ("Genevie Leslie Ong approved price
+   * changes (+5% for Baker Patissier · FOB Price)."), with a rejection's reason kept in full.
+   */
   function notificationDetail(item) {
+    const message = String(item.message || '').trim();
     if (item.type === 'rejected') {
-      const reason = String(item.message || '').split(/Reason:\s*/)[1];
-      if (reason) return `Reason: ${reason}`;
+      const [what, reason] = message.split(/\s*Reason:\s*/);
+      return reason ? `${what} Reason: ${reason}` : message;
     }
+    // From the change itself when it is known: who uploaded / saved / approved it.
     const summary = item.versionId ? versionSummaryById(item.versionId) : null;
-    if (item.type === 'approval_request' && summary) return `Saved by ${summary.savedBy || 'a user'} · ${[summary.country, summary.priceLevel].filter(Boolean).join(' · ')}`;
-    if (summary) return [summary.country, summary.priceLevel].filter(Boolean).join(' · ');
-    return String(item.message || '');
+    if (summary?.source === 'upload' && summary.savedBy) {
+      const count = Number(summary.productCount || 0);
+      return [`Uploaded by ${summary.savedBy}`, count ? `${count.toLocaleString()} product${count === 1 ? '' : 's'}` : '', summary.sourceFile || ''].filter(Boolean).join(' · ');
+    }
+    if (summary?.kind === 'batch' && summary.savedBy) {
+      const mine = summary.savedByUser && summary.savedByUser === state.user?.username;
+      if (item.type === 'approval_request') return `Saved by ${summary.savedBy} · waiting for your approval`;
+      if (summary.status === 'approved' && summary.approvedBy) {
+        if (summary.approvedBy === summary.savedBy) return mine ? 'Saved and approved by you' : `Saved and approved by ${summary.savedBy}`;
+        return `${mine ? 'Your change' : `Saved by ${summary.savedBy}`} · approved by ${summary.approvedBy}`;
+      }
+    }
+    // The headline already says what changed: drop it from the sentence, and the stock endings.
+    const headline = notificationListName(item);
+    return message
+      .replace(` (${headline})`, '').replace(`: ${headline}.`, '.').replace(`: ${headline}`, '')
+      .replace(/\s*(It is ready for export|It is available (to open and )?(for )?export|The (prices|lists) are (live and can be exported|ready for export))\.?$/i, '')
+      .trim() || message;
   }
   function renderNotifications() {
     const items = state.notifications || [];
@@ -8477,6 +8672,7 @@
     library: { title: 'Photo library', subtitle: 'Category folders of product photos, ready to pick for each product type.', card: '#libraryCard' },
     types: { title: 'Product type photos', subtitle: 'The photo shown for each product type in the price list and the PDF.', card: '#typesCard' },
     lists: { title: 'Customers & price levels', subtitle: 'Every customer buys at one price level, and shares its prices.', card: '#listsCard' },
+    display: { title: 'Display', subtitle: 'How the app moves for you, on this computer.', card: '#displayCard' },
   };
   function switchConfigTab(tab) {
     if (!CONFIG_SECTIONS[tab]) tab = 'library';
@@ -8501,11 +8697,31 @@
         [{ opacity: 0, transform: `translate3d(${fromRight ? 24 : -24}px, 0, 0)` }, { opacity: 1, offset: 0.35 }, { opacity: 1, transform: 'none' }],
         { duration: 560, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }));
     }
-    if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else renderListOptions();
+    if (tab === 'library') renderLibrary(); else if (tab === 'types') renderImageSettings(); else if (tab === 'lists') renderListOptions(); else renderDisplaySettings();
   }
   $$('.config-section-btn').forEach(button => button.addEventListener('click', () => {
     if (!button.classList.contains('is-active')) switchConfigTab(button.dataset.configSection);
   }));
+
+  // --- Config › Display › Reduce motion (scripts/reduce-motion.js does the work, saved per browser).
+  // The computer's own setting turns it on too; then the switch shows on and can't be turned off here. ---
+  const systemReducesMotion = () => !window.plaReducedMotion?.() && reducedMotion();
+  function renderDisplaySettings() {
+    const button = $('#reduceMotionSwitch');
+    if (!button) return;
+    const bySystem = systemReducesMotion();
+    button.setAttribute('aria-checked', String(bySystem || !!window.plaReducedMotion?.()));
+    button.disabled = bySystem;
+    button.title = bySystem ? 'Your computer is set to reduce motion, so it is on everywhere.' : '';
+  }
+  $('#reduceMotionSwitch')?.addEventListener('click', () => {
+    if (systemReducesMotion()) return;
+    const on = !window.plaReducedMotion?.();
+    window.plaSetReducedMotion?.(on);
+    renderDisplaySettings();
+    toast(on ? 'Reduce motion is on: no more animations on this computer.' : 'Animations are back on.');
+  });
+  renderDisplaySettings(); // right even when Config opens straight on Display
 
   // --- Config › Countries & price levels: the choices in the upload and save dropdowns. Switching
   // one off hides it for new price lists; names used by saved lists can't be removed or renamed. ---
@@ -9587,5 +9803,7 @@
     }
   });
 
+  // Opening on the Dashboard: its numbers load at the same time as the app's data, not after it.
+  if (state.user && document.documentElement.dataset.initialPanel === 'dashboardPanel') { dashPrefetch = api('dashboard'); dashPrefetch.catch(() => { }); }
   if (state.user) loadState().catch(error => { setAppLoading(false); toast(error.message); });
 })();

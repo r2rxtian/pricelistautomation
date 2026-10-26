@@ -193,10 +193,10 @@
           window.plaHandOff?.(x, y);
           shell.animate(
             { clipPath: [`circle(${radius}px at ${x}px ${y}px)`, `circle(0px at ${x}px ${y}px)`] },
-            { duration: 560, easing: 'cubic-bezier(.55, 0, .75, .1)', fill: 'forwards' }
+            { duration: 420, easing: 'cubic-bezier(.55, 0, .75, .1)', fill: 'forwards' }
           ).finished.then(go, go);
-          setTimeout(go, 900); // in case frames stall
-        }, 1500);
+          setTimeout(go, 700); // in case frames stall
+        }, 850); // long enough to read "Welcome back, <name>", short enough not to wait on it
         return;
       }
       const info = data.data || {};

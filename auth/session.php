@@ -9,7 +9,7 @@ require_once __DIR__ . '/../rules/users.php';
 
 function startSession(): void
 {
-    if (session_status() !== PHP_SESSION_NONE) return;
+    if (session_status() !== PHP_SESSION_NONE || !empty($GLOBALS['pla_session_released'])) return;
     $directory = APP_ROOT . '/storage/sessions';
     if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
         throw new RuntimeException('Unable to create the session directory.');
@@ -25,6 +25,17 @@ function startSession(): void
         'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
     ]);
     session_start();
+}
+
+/**
+ * Lets go of the session file early. PHP locks it for the whole request, so a page's requests (app
+ * data, dashboard numbers…) would otherwise run one after another instead of together. $_SESSION
+ * stays readable; it just can't be changed any more in this request (api/bootstrap.php › apiUser).
+ */
+function releaseSession(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+    $GLOBALS['pla_session_released'] = true;
 }
 
 /**

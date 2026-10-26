@@ -719,7 +719,9 @@ final class OfficialPriceWorkbook
         if ($type !== '' && $type !== 'n') $this->fail("{$sheet}!{$cell->getAttribute('r')}: boolean values and Excel errors are not accepted.");
         if ($value === '') return '';
         if (!is_numeric($value) || !is_finite((float) $value)) $this->fail("{$sheet}!{$cell->getAttribute('r')}: invalid numeric value.");
-        return (float) $value;
+        // To 15 significant digits, as Excel shows it: a formula's saved result such as 0.64 + 0.5 is
+        // 1.1400000000000001 in the file, which Excel (and now this) reads as 1.14.
+        return (float) sprintf('%.15G', (float) $value);
     }
 
     private function text(DOMXPath $xpath, DOMNode $node): string

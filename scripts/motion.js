@@ -18,7 +18,8 @@
   'use strict';
   const root = document.documentElement;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const animate = () => !reducedMotion.matches && typeof Element.prototype.animate === 'function';
+  // Asked each time, so Config › Display › Reduce motion (scripts/reduce-motion.js) counts at once.
+  const animate = () => !window.plaReducedMotion?.() && !reducedMotion.matches && typeof Element.prototype.animate === 'function';
   // Lets styles/app.css switch off the plain CSS keyframes for the elements animated here.
   root.classList.add('gsap-motion');
 
@@ -549,6 +550,7 @@
     topbar.addEventListener('pointerleave', () => { pointer.active = false; });
     document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
     reducedMotion.addEventListener?.('change', () => (animate() ? start() : stop()));
+    window.addEventListener('pla:reduce-motion', () => (animate() ? start() : stop()));
     new ResizeObserver(() => running && resize()).observe(topbar);
     start();
   }

@@ -27,8 +27,10 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
-    <link rel="stylesheet" href="../styles/app.css?v=250">
-    <link rel="stylesheet" href="../styles/login.css?v=5">
+    <link rel="stylesheet" href="../styles/app.css?v=253">
+    <link rel="stylesheet" href="../styles/login.css?v=6">
+    <!-- Before anything can move: Config › Display › Reduce motion (saved in this browser). -->
+    <script src="../scripts/reduce-motion.js?v=1"></script>
     <script>
     (function () {
         try {
@@ -105,6 +107,6 @@ try {
     </aside>
 </main>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/login.js?v=7"></script>
+<script src="../scripts/login.js?v=8"></script>
 </body>
 </html>

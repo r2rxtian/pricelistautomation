@@ -47,9 +47,19 @@ function requirePost(): void
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Method not allowed.'], 405);
 }
 
-function apiUser(): array
+/**
+ * The signed-in user (401 when signed out). The session is then released so this user's other
+ * requests don't wait for this one; only an endpoint that changes the session (session_renew.php)
+ * passes $keepSessionOpen.
+ */
+function apiUser(bool $keepSessionOpen = false): array
 {
-    return requireLogin(true);
+    $user = requireLogin(true);
+    if (!$keepSessionOpen) {
+        csrfToken(); // made now, while the session can still be written
+        releaseSession();
+    }
+    return $user;
 }
 
 /** A version the user may open, or a 404 response. */

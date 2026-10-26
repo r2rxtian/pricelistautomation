@@ -43,7 +43,8 @@ if ($complete) {
     ]);
     notify([$submitter], 'approved', "Approved: {$version['name']}", "{$user['name']} approved {$label}. It is ready for export.", $version['id']);
     // Everyone who exports hears it's ready, except the submitter, who already got "Approved".
-    notify(array_diff(usernames_with_permission('export'), [$submitter]), 'available', "Ready for export: {$version['name']}", "{$label} was approved and is available for export.", $version['id']);
+    $savedBy = (string) ($version['savedBy'] ?? '') !== '' ? "{$version['savedBy']}'s " : '';
+    notify(array_diff(usernames_with_permission('export'), [$submitter]), 'available', "Ready for export: {$version['name']}", "{$user['name']} approved {$savedBy}{$label}. It is available for export.", $version['id']);
     $message = 'Price list approved and available for export.';
 } else {
     $waiting = array_diff($version['requiredApprovers'], array_map(fn($a) => $a['username'], $version['approvals']));

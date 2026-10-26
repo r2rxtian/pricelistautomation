@@ -48,12 +48,14 @@ if ($required !== null && !user_can($user, $required)) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="../assets/images/pla-mark.svg">
     <!-- Shared styles first, then each page's (all pages live in this one shell). Order matters: see app.css. -->
-    <link rel="stylesheet" href="../styles/app.css?v=250">
+    <link rel="stylesheet" href="../styles/app.css?v=253">
     <link rel="stylesheet" href="../styles/dashboard.css?v=1">
-    <link rel="stylesheet" href="../styles/files.css?v=3">
+    <link rel="stylesheet" href="../styles/files.css?v=7">
     <link rel="stylesheet" href="../styles/audit_logs.css?v=1">
     <link rel="stylesheet" href="../styles/users.css?v=1">
-    <link rel="stylesheet" href="../styles/config.css?v=1">
+    <link rel="stylesheet" href="../styles/config.css?v=2">
+    <!-- Before anything can move: Config › Display › Reduce motion. -->
+    <script src="../scripts/reduce-motion.js?v=1"></script>
     <script>
     (function() {
         try {
@@ -571,6 +573,7 @@ if ($required !== null && !user_can($user, $required)) {
                         <button type="button" class="config-section-btn is-active" data-config-section="library" role="tab" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Photo library</span><span id="libraryCountBadge" class="config-section-count">0</span></button>
                         <button type="button" class="config-section-btn" data-config-section="types" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Product type photos</span><span id="typesCountBadge" class="config-section-count">0</span></button>
                         <button type="button" class="config-section-btn" data-config-section="lists" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Customers &amp; price levels</span></button>
+                        <button type="button" class="config-section-btn" data-config-section="display" role="tab" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Display</span></button>
                     </div>
                 </div>
 
@@ -642,6 +645,17 @@ if ($required !== null && !user_can($user, $required)) {
                         <div class="option-rows" data-option-rows></div>
                         <form class="option-add" data-option-add><input type="text" maxlength="80" placeholder="Add a price level…" aria-label="New price level" autocomplete="off"><button type="submit" class="button primary">Add</button></form>
                     </section>
+                </div>
+                <!-- Config › Display: how the app looks and moves for you (saved in this browser). -->
+                <div class="display-card" id="displayCard" hidden>
+                    <div class="display-row">
+                        <div class="display-row-text">
+                            <h2 id="reduceMotionTitle">Reduce motion</h2>
+                            <p>Turns off the animations: page changes, the welcome after signing in, cards and buttons moving, and the bin when something is deleted. Everything still works the same, it just appears at once.</p>
+                            <p class="display-row-note">Saved on this computer and browser. Already on when the computer itself is set to reduce motion.</p>
+                        </div>
+                        <button type="button" id="reduceMotionSwitch" class="option-toggle" role="switch" aria-checked="false" aria-labelledby="reduceMotionTitle"><i class="switch-knob" aria-hidden="true"></i></button>
+                    </div>
                 </div>
                 <input id="groupImageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
                 <input id="libraryFileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
@@ -1109,9 +1123,9 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/app.js?v=256"></script>
+<script src="../scripts/app.js?v=266"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
-<script src="../scripts/motion.js?v=22"></script>
+<script src="../scripts/motion.js?v=23"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>
 </body>
 </html>
