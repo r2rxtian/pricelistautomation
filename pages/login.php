@@ -107,6 +107,6 @@ try {
     </aside>
 </main>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/login.js?v=8"></script>
+<script src="../scripts/login.js?v=9"></script>
 </body>
 </html>

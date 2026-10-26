@@ -136,6 +136,13 @@
     if (!lock) return;
     if (loginId.value.trim() === lock.id) lockUi(lock); else if (form.classList.contains('is-locked')) unlockUi(false);
   });
+  // Enter in the biometrics number moves on to the password, like Tab. With the password already
+  // typed (e.g. filled in by the browser), Enter signs in as usual.
+  loginId?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.isComposing || !password || password.value !== '') return;
+    event.preventDefault();
+    if (loginId.value.trim() !== '') password.focus();
+  });
   const startingLock = readLock();
   if (startingLock && loginId) { loginId.value = startingLock.id; lockUi(startingLock); }
 
