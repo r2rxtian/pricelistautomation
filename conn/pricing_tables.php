@@ -75,7 +75,7 @@ function pricing_db_rules(): array
 function pricing_db_overrides(int $countryId, int $levelId): array
 {
     $statement = database_connection()->prepare(
-        'SELECT product_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_at, set_by, row_json, sort_order
+        'SELECT product_id, price_pc, price_box, base_price_pc_when_set, base_price_box_when_set, version_id, set_at, set_by, row_json, sort_order, formulas_json
          FROM dbo.PLA_PriceOverrides WHERE ' . ($countryId === 0 ? 'country_id IS NULL' : 'country_id = ?') . ' AND price_level_id = ?'
     );
     $statement->execute($countryId === 0 ? [$levelId] : [$countryId, $levelId]);
@@ -92,6 +92,8 @@ function pricing_db_overrides(int $countryId, int $levelId): array
             // A level's row: the product as its uploaded file has it (details and order).
             'row' => $r['row_json'] === null ? null : (json_decode((string) $r['row_json'], true) ?: null),
             'sort' => $r['sort_order'] === null ? null : (int) $r['sort_order'],
+            // The uploaded file's formulas for this product: column => ['excel' => …, 'expr' => …].
+            'formulas' => $r['formulas_json'] === null ? [] : (json_decode((string) $r['formulas_json'], true) ?: []),
         ];
     }
     return $overrides;
@@ -267,8 +269,13 @@ function pricing_db_write_overrides(PDO $connection, int $countryId, int $levelI
  * details. $rows: product id => row. A customer without a row for the product gets one with no prices of
  * its own (it keeps following its level's prices).
  */
-function pricing_db_write_rows(PDO $connection, int $countryId, int $levelId, array $rows, string $versionId, string $by): void
+function pricing_db_write_rows(PDO $connection, int $countryId, int $levelId, array $rows, string $versionId, string $by, ?array $formulas = null): void
 {
+    // $formulas (product id => [column => formula]): an upload's formulas, saved with the rows. Left out
+    // (null), the saved formulas stay as they are (editing details doesn't touch them).
+    if ($formulas !== null) {
+        $setFormulas = $connection->prepare('UPDATE dbo.PLA_PriceOverrides SET formulas_json = ? WHERE product_id = ? AND ' . ($countryId === 0 ? 'country_id IS NULL' : 'country_id = ?') . ' AND price_level_id = ?');
+    }
     $customer = $countryId === 0 ? null : $countryId;
     $sameCustomer = $customer === null ? 'country_id IS NULL' : 'country_id = ?';
     $update = $connection->prepare(
@@ -283,6 +290,11 @@ function pricing_db_write_rows(PDO $connection, int $countryId, int $levelId, ar
         $json = json_encode(array_values($row), JSON_UNESCAPED_UNICODE);
         $update->execute(array_merge([$json, $versionId, $by, $productId], $customer === null ? [$levelId] : [$customer, $levelId]));
         if ($update->rowCount() === 0 && $customer !== null) $insert->execute([$productId, $customer, $levelId, $json, $versionId, $by]);
+        if ($formulas !== null) {
+            $set = $formulas[$productId] ?? [];
+            $value = $set ? json_encode($set, JSON_UNESCAPED_UNICODE) : null;
+            $setFormulas->execute(array_merge([$value, $productId], $customer === null ? [$levelId] : [$customer, $levelId]));
+        }
     }
 }
 

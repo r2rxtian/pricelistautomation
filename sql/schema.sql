@@ -306,6 +306,14 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceOverrides_list')
     CREATE INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides (country_id, price_level_id);
 GO
+-- A customer's own file: its row as uploaded (details), its order, and the Excel formulas it had
+-- ({"8": {"excel": "=ROUND(J6/G6,3)", "expr": "ROUND({9}/{6},3)"}}: column numbers of the price list).
+IF COL_LENGTH('dbo.PLA_PriceOverrides', 'row_json') IS NULL
+    ALTER TABLE dbo.PLA_PriceOverrides ADD row_json nvarchar(max) NULL, sort_order int NULL;
+GO
+IF COL_LENGTH('dbo.PLA_PriceOverrides', 'formulas_json') IS NULL
+    ALTER TABLE dbo.PLA_PriceOverrides ADD formulas_json nvarchar(max) NULL;
+GO
 
 -- What each upload or approved change did: one row per price, rule or product.
 IF OBJECT_ID(N'dbo.PLA_PriceChanges', N'U') IS NULL

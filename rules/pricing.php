@@ -197,7 +197,8 @@ function pricing_list_prices(int $countryId, int $levelId, bool $all = false): a
     $prices = [];
     foreach (pricing_db_products() as $p) {
         $level = $levelPrices[$p['id']] ?? null;
-        if (!$all && $level === null && !isset($overrides[$p['id']])) continue; // not in this level's file
+        // In the list: a level's products are its file's; a customer's are its own file's.
+        if (!$all && ($countryId === 0 ? $level === null : !isset($overrides[$p['id']]))) continue;
         if ($level !== null && $level['row']) {
             // The product as this level's file has it.
             $p['row'] = $level['row'];
@@ -207,6 +208,7 @@ function pricing_list_prices(int $countryId, int $levelId, bool $all = false): a
         }
         // A customer's own details (its own uploaded file, or edited just for it) come before the level's.
         $mine = $countryId !== 0 ? ($overrides[$p['id']]['row'] ?? null) : null;
+        $p['formulas'] = $countryId !== 0 ? ($overrides[$p['id']]['formulas'] ?? []) : ($level['formulas'] ?? []);
         if ($mine) {
             $p['row'] = $mine;
             $p['category'] = (string) ($mine[0] ?? '') ?: $p['category'];
@@ -252,8 +254,11 @@ function pricing_list_version(int $countryId, int $levelId): ?array
     $rows = [];
     $own = [];
     $latest = pricing_last_saved();
+    $formulas = []; // the uploaded file's formulas per product: code => {column: {excel, expr}} (scripts/app.js recalculates)
     foreach (pricing_list_prices($countryId, $levelId) as $code => $price) {
         $rows[] = pricing_row($price['product'], $price['pricePc'], $price['priceBox'], $customer, $levels[$levelId]);
+        $set = array_filter($price['product']['formulas'] ?? [], fn($f) => is_array($f) && isset($f['excel']));
+        if ($set) $formulas[$code] = array_map(fn($f) => ['excel' => (string) $f['excel'], 'expr' => $f['expr'] ?? null], $set);
         if (!$price['own']) continue;
         if ($price['own']['setAt'] > $latest['at']) $latest = ['at' => $price['own']['setAt'], 'by' => $price['own']['setBy']];
         // A customer's own prices are marked in its list (the level's are simply its file).
@@ -267,6 +272,7 @@ function pricing_list_version(int $countryId, int $levelId): ?array
     }
     $version = pricing_version_shell(pricing_list_id($countryId, $levelId), 'list', LIST_VIEW_NAME, $customer, $levels[$levelId], $rows, $latest['at'], $latest['by']);
     $version['ownPrices'] = $own;
+    $version['formulas'] = (object) $formulas;
     $version['priceOnly'] = true;
     $version['levelWide'] = $countryId === 0;
     // Changes applied after this one are someone else's: the open editor is told (api/app/presence.php).
@@ -931,6 +937,8 @@ function pricing_products_from_import(array $import): array
             'pricePc' => is_numeric($row[8]) ? pricing_round((float) $row[8]) : null,
             'priceBox' => is_numeric($row[9]) ? pricing_round((float) $row[9]) : null,
             'row' => $row, 'sort' => $i + 1,
+            // The file's Excel formulas for this product (the export price list): column => formula.
+            'formulas' => $import['formulas'][$i] ?? [],
         ];
     }
     return $products;
@@ -1042,10 +1050,8 @@ function pricing_preview_list(array $import, int $countryId, int $levelId): ?arr
         $seen[$key] = true;
         $old = $current[$key] ?? null;
         if (!$old) { $added[] = pricing_preview_item($p, ['pricePc' => $p['pricePc'], 'priceBox' => $p['priceBox']]); continue; }
-        if ($countryId === 0) {
-            $fields = pricing_detail_changes($old['product'], $p);
-            if ($fields) $detailChanges[] = pricing_preview_item($p, ['fields' => $fields]);
-        }
+        $fields = pricing_detail_changes($old['product'], $p);
+        if ($fields) $detailChanges[] = pricing_preview_item($p, ['fields' => $fields]);
         if (pricing_same_price($old['pricePc'], $p['pricePc']) && pricing_same_price($old['priceBox'], $p['priceBox'])) { $unchanged++; continue; }
         $priceChanges[] = pricing_preview_item($p, ['pcOld' => $old['pricePc'], 'pcNew' => $p['pricePc'], 'boxOld' => $old['priceBox'], 'boxNew' => $p['priceBox']]);
     }
@@ -1055,11 +1061,11 @@ function pricing_preview_list(array $import, int $countryId, int $levelId): ?arr
     $limit = fn(array $items) => array_slice($items, 0, UPLOAD_PREVIEW_LIMIT);
     return [
         'mode' => 'list', 'listId' => $live['id'], 'customer' => $live['country'], 'priceLevel' => $live['priceLevel'],
-        'products' => count($seen), 'first' => !$current, 'replaces' => $countryId === 0,
+        'products' => count($seen), 'first' => !$current, 'replaces' => true,
         'counts' => [
             'added' => count($added), 'priceChanges' => count($priceChanges), 'detailChanges' => count($detailChanges), 'unchanged' => $unchanged,
-            // Leaving the level (level file), or keeping the level's price (customer file).
-            'removed' => $countryId === 0 ? count($notInFile) : 0, 'notInFile' => count($notInFile), 'reordered' => $reordered ? 1 : 0,
+            // The list becomes the file: products not in it leave the list.
+            'removed' => count($notInFile), 'notInFile' => count($notInFile), 'reordered' => $reordered ? 1 : 0,
         ],
         'added' => $limit($added), 'priceChanges' => $limit($priceChanges), 'detailChanges' => $limit($detailChanges), 'notInFile' => $limit($notInFile),
     ];
@@ -1088,17 +1094,37 @@ function pricing_apply_list(array $import, int $countryId, int $levelId, string 
     }
 
     if ($countryId !== 0) {
-        // A customer: the file's prices become its own.
+        // A customer: its list becomes exactly the file (its prices and details are the customer's own;
+        // products no longer in the file leave its list).
         $records = array_map(fn($p) => ['kind' => 'product_add', 'code' => $p['code'], 'category' => $p['category'], 'new' => $p['description']], $new);
-        if ($records) pricing_db_transaction(fn(PDO $db) => pricing_db_record_changes($db, $versionId, $records));
+        $inFile = [];
+        foreach ($incoming as $p) $inFile[mb_strtolower($p['code'])] = true;
+        $gone = [];
+        foreach (pricing_list_prices($countryId, $levelId) as $code => $entry) {
+            if (isset($inFile[mb_strtolower((string) $code)])) continue;
+            $gone[] = (int) $entry['product']['id'];
+            $records[] = ['kind' => 'product_remove', 'code' => $entry['product']['code'], 'countryId' => $countryId, 'levelId' => $levelId, 'category' => $entry['product']['category'], 'old' => $entry['product']['description']];
+        }
+        pricing_db_transaction(function (PDO $db) use ($gone, $countryId, $levelId, $records, $versionId) {
+            $drop = $db->prepare('DELETE FROM dbo.PLA_PriceOverrides WHERE product_id = ? AND country_id = ? AND price_level_id = ?');
+            foreach ($gone as $productId) $drop->execute([$productId, $countryId, $levelId]);
+            if ($records) pricing_db_record_changes($db, $versionId, $records);
+        });
         $prices = [];
         foreach ($incoming as $p) $prices[$p['code']] = ['pricePc' => $p['pricePc'], 'priceBox' => $p['priceBox']];
-        $records = array_merge($records, pricing_set_list_prices($countryId, $levelId, $prices, $versionId, $by));
+        $records = array_merge($records, pricing_set_list_prices($countryId, $levelId, $prices, $versionId, $by, true));
         // Its file's details (descriptions, sizes…) are the customer's own too, so a later upload of the
         // level's file doesn't replace what this customer's file says.
+        // Its formulas too (Price/pc = Price/box ÷ Pcs/box…), so they keep working in the editor.
         $rows = [];
-        foreach ($incoming as $p) if (isset($catalog[mb_strtolower($p['code'])])) $rows[$catalog[mb_strtolower($p['code'])]['id']] = $p['row'];
-        if ($rows) pricing_db_transaction(fn(PDO $db) => pricing_db_write_rows($db, $countryId, $levelId, $rows, $versionId, $by));
+        $formulas = [];
+        foreach ($incoming as $p) {
+            $id = $catalog[mb_strtolower($p['code'])]['id'] ?? null;
+            if ($id === null) continue;
+            $rows[$id] = $p['row'];
+            $formulas[$id] = $p['formulas'] ?? [];
+        }
+        if ($rows) pricing_db_transaction(fn(PDO $db) => pricing_db_write_rows($db, $countryId, $levelId, $rows, $versionId, $by, $formulas));
         return $records;
     }
 

@@ -197,6 +197,26 @@ Sign-in always uses SQL Server. Price lists, audit logs, notifications and photo
 - Only Price/pc and Price/box are adjusted: `adjusted price = original price × (1 + percentage / 100)`. A new percentage is always calculated from the uploaded price, so adjustments never compound.
 - Exports keep the workbook's layout: per-category sheets in Excel, and grouped tables with product photos in the PDF. The PDF header shows the price level, country, revision, and approver.
 
+### The export price list (the team's own file)
+
+Besides the template, the upload accepts the price list the team keeps ("LRN Export PL …", `readExportList()` in `rules/workbook_import.php`). It's recognised when a sheet has a "Code No" or "LRN code" header row and no sheet follows the template.
+
+- **Layout:**
+  - each sheet is a category ("Factory Picture" and other sheets without a header row are skipped);
+  - in a sheet, the title row above each block of products is the product group;
+  - columns are found by their header text, not their position;
+  - Presentation Stands has its own columns.
+- **Pictures** in the file are allowed and ignored. Macros, embedded objects and links to other files are still refused.
+- **Formulas:**
+  - a formula cell is read as the value Excel saved;
+  - a formula with no saved result is refused for that cell;
+  - each product keeps its formulas (`PLA_PriceOverrides.formulas_json`, e.g. Price/pc `=ROUND(J6/G6,3)` becomes `ROUND({9}/{6},3)`, where `{n}` is a column of the price list).
+- **In the editor:**
+  - a formula cell (e.g. Price/pc = Price/box ÷ Pcs/box) recalculates when a cell it uses changes, rounding exactly like Excel;
+  - you can't type into it;
+  - the formula bar shows its formula with coloured cell references, and "fx" shows it in words.
+- **Excel export:** formulas are written back wherever every cell they use is in the exported sheet.
+
 ### Import regression checks
 
 Run `node tests/workbook-import.test.cjs` (set `PLA_TEST_PHP` if PHP is not at `C:/xampp/php/php.exe`). The suite uses the actual template downloader and PHP workbook reader, disposable Excel files, and an isolated localhost upload API fixture. It checks both layouts, optional/empty categories, exact headers, invalid rows, archive/XML restrictions, size limits, multipart-only imports, CSRF/permissions, and existing-list saves without accessing company sessions or application storage. PHP requires its built-in Phar support plus DOM, Fileinfo, Mbstring and Zlib; a separate ZIP extension is not needed.

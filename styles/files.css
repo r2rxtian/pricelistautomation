@@ -927,6 +927,10 @@ col.col-pallet {
   padding: 0 3px;
   cursor: pointer;
   transition: color 0.15s;
+  /* (a button: no browser border or background) */
+  border: 0;
+  background: none;
+  line-height: inherit;
 }
 
 .formula-fx-label:hover {
@@ -4497,3 +4501,29 @@ html[data-initial-panel="usersPanel"] #workspacePanel { display: none !important
 @media (prefers-reduced-motion: reduce) {
   .presence-note.is-editing .presence-faces i:first-child { animation: none; }
 }
+
+/* ==========================================================================
+   Formula bar: a formula cell's formula from the uploaded file, like Excel (scripts/app.js ›
+   showFormulaInBar). Each cell reference in its own colour; those cells outlined in the same colour.
+   ========================================================================== */
+.formula-display {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid #e3d2d8;
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--text-heading);
+  font: 500 0.82rem/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.formula-display[hidden] { display: none; }
+.formula-ref { font-weight: 700; }
+.excel-cell.is-formula-ref { box-shadow: inset 0 0 0 2px var(--ref-color); }
+[data-theme="dark"] .formula-display { border-color: #3a3c45; background: #17181d; color: #f4eef0; }

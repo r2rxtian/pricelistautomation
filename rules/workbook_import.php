@@ -33,7 +33,7 @@ final class OfficialPriceWorkbook
     private const DOC_REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     private const MAX_PART_BYTES = 16777216;
     private const MAX_EXPANDED_BYTES = 50331648;
-    private const MAX_ENTRIES = 200;
+    private const MAX_ENTRIES = 1000; // the export price list carries a few hundred product photos
     private const MAX_ROWS = 20000;
     private const MAX_CELLS = 400000;
 
@@ -119,7 +119,9 @@ final class OfficialPriceWorkbook
                 if ($localHeader[$field] !== $part[$field] && (!(($part['flags'] & 8)) || $localHeader[$field] !== 0)) $this->fail('The workbook archive is inconsistent.');
             }
             if (!str_ends_with($name, '/')) {
-                if (!preg_match('~^(?:\[Content_Types\]\.xml|_rels/\.rels|docProps/(?:app|core|custom)\.xml|xl/(?:workbook\.xml|styles\.xml|metadata\.xml|sharedStrings\.xml|_rels/workbook\.xml\.rels|theme/theme[0-9]+\.xml|worksheets/sheet[0-9]+\.xml|worksheets/_rels/sheet[0-9]+\.xml\.rels|drawings/drawing[0-9]+\.xml|persons/person\.xml))$~D', $name)) {
+                // Pictures, their drawing links, printer settings and Excel's calculation order are listed
+                // here but never opened (only sheet XML is read), so they are safe to carry.
+                if (!preg_match('~^(?:\[Content_Types\]\.xml|_rels/\.rels|docProps/(?:app|core|custom)\.xml|docProps/thumbnail\.(?:jpe?g|png|wmf|emf)|xl/(?:workbook\.xml|styles\.xml|metadata\.xml|sharedStrings\.xml|calcChain\.xml|_rels/workbook\.xml\.rels|theme/theme[0-9]+\.xml|worksheets/sheet[0-9]+\.xml|worksheets/_rels/sheet[0-9]+\.xml\.rels|drawings/drawing[0-9]+\.xml|drawings/_rels/drawing[0-9]+\.xml\.rels|media/[A-Za-z0-9_]+\.(?i:png|jpe?g|gif|bmp|tiff?|emf|wmf|wdp)|printerSettings/printerSettings[0-9]+\.bin|persons/person\.xml))$~D', $name)) {
                     $this->fail("Workbook contains unsupported parts ({$name}). Macros, embedded objects, hyperlinks and external links are not accepted.");
                 }
                 $this->parts[$name] = $part['expanded'];
@@ -211,14 +213,6 @@ final class OfficialPriceWorkbook
         foreach (array_keys($this->parts) as $part) {
             if (str_starts_with($part, 'docProps/') || str_starts_with($part, 'xl/theme/') || in_array($part, ['xl/styles.xml', 'xl/metadata.xml'], true)) $this->xml($part);
         }
-        // Google Sheets adds an empty drawing to every sheet. Those are fine; a drawing with anything in
-        // it (a picture, shape or chart) is not.
-        foreach (array_keys($this->parts) as $part) {
-            if (!str_starts_with($part, 'xl/drawings/')) continue;
-            $drawing = $this->xml($part)->documentElement;
-            $empty = $drawing?->localName === 'wsDr' && !array_filter(iterator_to_array($drawing->childNodes), fn($node) => $node instanceof DOMElement);
-            if (!$empty) $this->fail('Workbook contains pictures, shapes or charts. Remove them and keep only the price list values.');
-        }
         if (isset($this->parts['xl/persons/person.xml'])) $this->xml('xl/persons/person.xml');
         if (isset($this->parts['xl/sharedStrings.xml'])) {
             $document = $this->xml('xl/sharedStrings.xml');
@@ -253,10 +247,28 @@ final class OfficialPriceWorkbook
         foreach (array_keys($this->parts) as $part) {
             if (str_starts_with($part, 'xl/worksheets/sheet') && !isset($usedParts[$part])) $this->fail('Workbook contains an unregistered worksheet.');
         }
+        $names = array_column($sheets, 'name');
+        // The company's export price list (the file the team keeps: product photos, a title row above each
+        // product group, formulas) is read as it is. Otherwise the strict template rules below apply.
+        if (!in_array($template['instructionsSheet'], $names, true) && $this->looksLikeExportList($sheets, $hidden)) {
+            return $this->readExportList($sheets, $hidden, $country, $priceLevel);
+        }
+        // Google Sheets adds an empty drawing to every sheet. Those are fine; in the template, a drawing
+        // with anything in it (a picture, shape or chart) is not.
+        foreach (array_keys($this->parts) as $part) {
+            if (!preg_match('~^xl/drawings/drawing[0-9]+\.xml$~', $part)) continue;
+            $drawing = $this->xml($part)->documentElement;
+            $empty = $drawing?->localName === 'wsDr' && !array_filter(iterator_to_array($drawing->childNodes), fn($node) => $node instanceof DOMElement);
+            if (!$empty) $this->fail('Workbook contains pictures, shapes or charts. Remove them and keep only the price list values.');
+        }
+        foreach (array_keys($this->parts) as $part) {
+            if (str_starts_with($part, 'xl/media/') || str_starts_with($part, 'xl/printerSettings/') || str_starts_with($part, 'xl/drawings/_rels/')) {
+                $this->fail('Workbook contains pictures, shapes or charts. Remove them and keep only the price list values.');
+            }
+        }
         // 2. Each sheet is recognised by its header rows, not its name: any sheet whose headers match an
         //    approved layout is a category (the sheet name becomes the category), so new categories can
         //    be added by copying a category sheet and renaming it.
-        $names = array_column($sheets, 'name');
         $instructions = $template['instructionsSheet'];
         $hasInstructions = in_array($instructions, $names, true);
         $quote = fn(array $list) => implode(', ', array_map(fn($name) => '"' . $name . '"', $list));
@@ -314,6 +326,250 @@ final class OfficialPriceWorkbook
         }
         // layouts: category (sheet name) => 'standard' | 'presentation', for the price masterlist.
         return ['headers' => $template['normalizedHeaders'], 'rows' => $products, 'priceColumns' => [8, 9], 'templateVersion' => $template['version'], 'layouts' => $detected];
+    }
+
+    // -----------------------------------------------------------------------------------------------
+    // The export price list: the workbook the team keeps ("LRN Export PL …"). Each category sheet holds
+    // blocks of products: a title row (the product group) in column A, a header block ("Code No …",
+    // then the 40ft / 20ft and pallet-size rows), then its products. Presentation Stands has one header
+    // row ("LRN code …") with section title rows as groups. Columns are found by their header text, not
+    // their position. Pictures are ignored; formula cells are read as Excel's saved result, and the
+    // formula is kept with the product.
+    // -----------------------------------------------------------------------------------------------
+
+    /** Simplified header text for matching ("Price/box in USD " → "price/box in usd"). */
+    private static function headerKey(mixed $text): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', mb_strtolower((string) $text)));
+    }
+
+    /** Which normalized column a header belongs to, or null (see normalizedHeaders in the template). */
+    private static function exportColumn(string $key, string $layout): ?int
+    {
+        if ($key === '') return null;
+        if ($layout === 'presentation') {
+            return match (true) {
+                in_array($key, ['lrn code', 'code no', 'code'], true) => 1,
+                str_starts_with($key, 'item name') || $key === 'description' => 2,
+                str_contains($key, 'per box') => 6,
+                str_starts_with($key, 'price/pc') => 8,
+                str_starts_with($key, 'price/box') => 9,
+                str_starts_with($key, 'nw') => 13,
+                str_starts_with($key, 'gw') => 14,
+                $key === 'box size' => 7,
+                $key === 'moq' => 15,
+                str_contains($key, 'total price') => 17,
+                default => null,
+            };
+        }
+        return match (true) {
+            str_starts_with($key, 'code') => 1,
+            str_starts_with($key, 'description') => 2,
+            str_starts_with($key, 'expiry') => 4,
+            str_starts_with($key, 'weight') => 5,
+            str_starts_with($key, 'pcs') => 6,
+            $key === 'box size' => 7,
+            str_starts_with($key, 'price/pc') => 8,
+            str_starts_with($key, 'price/box') => 9,
+            str_contains($key, '16 pallets') => 10,
+            str_contains($key, '(2 pallets)') => 11,
+            str_contains($key, '(8 pallets)') => 12,
+            default => null,
+        };
+    }
+
+    /**
+     * True when a visible sheet has the export price list's header row ("Code No" or "LRN code") and no
+     * sheet follows the system's own template (a template workbook, even an incomplete one, gets the
+     * template's strict checks).
+     */
+    private function looksLikeExportList(array $sheets, array $hidden): bool
+    {
+        $found = false;
+        foreach ($sheets as $sheet) {
+            if (in_array($sheet['name'], $hidden, true)) continue;
+            $match = $this->detectLayout($sheet['part'], price_list_template()['layouts']);
+            if (isset($match['layout']) || ($match['close'] ?? null)) return false;
+            foreach ($this->headerCells($sheet['part'], 60) as $row) {
+                foreach ($row as $value) if (in_array(self::headerKey($value), ['code no', 'lrn code'], true)) $found = true;
+            }
+        }
+        return $found;
+    }
+
+    /** A copy of a shared formula, moved from its first cell to another (relative references follow). */
+    private function shiftFormula(string $formula, int $fromRow, int $fromColumn, int $toRow, int $toColumn): string
+    {
+        return (string) preg_replace_callback('/(?<![A-Za-z0-9_.!])(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})(?![A-Za-z0-9_(])/', function (array $m) use ($fromRow, $fromColumn, $toRow, $toColumn) {
+            $column = 0;
+            foreach (str_split($m[2]) as $letter) $column = $column * 26 + ord($letter) - 64;
+            $column--;
+            $newColumn = $m[1] === '$' ? $column : $column + ($toColumn - $fromColumn);
+            $newRow = $m[3] === '$' ? (int) $m[4] : (int) $m[4] + ($toRow - $fromRow);
+            return $newColumn < 0 || $newRow < 1 ? $m[0] : $m[1] . $this->letter($newColumn) . $m[3] . $newRow;
+        }, $formula);
+    }
+
+    /** Every cell of a sheet: [row => [column => ['v' => value, 'f' => '=formula' or null, 'noValue' => bool]]]. */
+    private function sheetCells(string $name, string $part): array
+    {
+        $document = $this->xml($part);
+        $xpath = $this->xpath($document);
+        if ($document->documentElement->localName !== 'worksheet') $this->fail("{$name}: invalid worksheet.");
+        $cells = [];
+        $shared = [];
+        $previousRow = 0;
+        foreach ($xpath->query('/m:worksheet/m:sheetData/m:row') as $row) {
+            $rowNumber = filter_var($row->getAttribute('r'), FILTER_VALIDATE_INT);
+            if (!$rowNumber || $rowNumber <= $previousRow || $rowNumber > self::MAX_ROWS) $this->fail("{$name}: invalid or oversized row numbering.");
+            $previousRow = $rowNumber;
+            foreach ($xpath->query('./m:c', $row) as $cell) {
+                if (++$this->cellCount > self::MAX_CELLS) $this->fail('Workbook contains too many cells.');
+                [$cellRow, $column] = $this->coordinate($cell->getAttribute('r'));
+                if ($cellRow !== $rowNumber) $this->fail("{$name}: invalid cell at {$cell->getAttribute('r')}.");
+                if ($column >= 60) continue; // far to the right of any price list column
+                $formula = null;
+                $f = $xpath->query('./m:f', $cell)->item(0);
+                if ($f instanceof DOMElement) {
+                    $text = $f->textContent;
+                    if ($f->getAttribute('t') === 'shared') {
+                        $si = $f->getAttribute('si');
+                        if ($text !== '') $shared[$si] = [$text, $cellRow, $column];
+                        elseif (isset($shared[$si])) $text = $this->shiftFormula($shared[$si][0], $shared[$si][1], $shared[$si][2], $cellRow, $column);
+                    }
+                    if ($text !== '') $formula = '=' . $text;
+                }
+                $hasValue = $xpath->query('./m:v | ./m:is', $cell)->length > 0;
+                $value = $this->value($xpath, $cell, $name);
+                $cells[$cellRow][$column] = ['v' => is_string($value) ? trim($value) : $value, 'f' => $formula, 'noValue' => $formula !== null && !$hasValue];
+            }
+        }
+        return $cells;
+    }
+
+    private function readExportList(array $sheets, array $hidden, string $country, string $priceLevel): array
+    {
+        $template = price_list_template();
+        $width = count($template['normalizedHeaders']);
+        $products = [];
+        $formulas = [];  // product index => [column => ['excel' => '=ROUND(J6/G6,3)', 'cell' => 'I6', 'expr' => 'ROUND({9}/{6},3)' or null]]
+        $layouts = [];
+        $skipped = [];
+        $problems = [];
+        $seenCodes = [];
+        $names = ['1' => 'Code', '2' => 'Description', '6' => 'Pieces per box', '8' => 'Price/pc', '9' => 'Price/box'];
+        foreach ($sheets as $sheet) {
+            $name = $sheet['name'];
+            if (in_array($name, $hidden, true)) { $skipped[] = "{$name} (hidden)"; continue; }
+            $cells = $this->sheetCells($name, $sheet['part']);
+            ksort($cells);
+            $map = null;
+            $layout = null;
+            $codeColumn = null;
+            $headerEnd = 0;
+            $group = '';
+            foreach ($cells as $r => $row) {
+                ksort($row);
+                $keys = array_map(fn($cell) => self::headerKey($cell['v']), $row);
+                $headerLayout = in_array('lrn code', $keys, true) ? 'presentation' : (in_array('code no', $keys, true) ? 'standard' : null);
+                if ($headerLayout) {
+                    // A header block: which column holds what, for the products below it.
+                    $layout = $headerLayout;
+                    $map = [];
+                    foreach ($keys as $c => $key) {
+                        $target = self::exportColumn($key, $layout);
+                        if ($target !== null && !in_array($target, $map, true)) $map[$c] = $target;
+                    }
+                    if ($layout === 'standard') {
+                        foreach ([1, 2] as $below) foreach ($cells[$r + $below] ?? [] as $c => $cell) {
+                            $target = self::exportColumn(self::headerKey($cell['v']), 'standard');
+                            if (in_array($target, [10, 11, 12], true) && !in_array($target, $map, true)) $map[$c] = $target;
+                        }
+                        $headerEnd = $r + 2;
+                    } else {
+                        // Columns without a header of their own: the second description line, the MOQ number.
+                        foreach ([2 => 3, 15 => 16] as $beside => $target) {
+                            $c = array_search($beside, $map, true);
+                            if ($c !== false && !isset($map[$c + 1]) && self::headerKey($row[$c + 1]['v'] ?? '') === '') $map[$c + 1] = $target;
+                        }
+                        $headerEnd = $r;
+                    }
+                    $found = array_search(1, $map, true);
+                    $codeColumn = $found === false ? null : $found;
+                    $layouts[$name] = $layout;
+                    continue;
+                }
+                if ($r <= $headerEnd) continue;
+                $code = $codeColumn !== null ? trim((string) ($row[$codeColumn]['v'] ?? '')) : '';
+                if ($code === '') {
+                    // A title row (text only, left of the codes): the group of the products below it.
+                    $texts = array_filter($row, fn($cell) => is_string($cell['v']) && $cell['v'] !== '');
+                    $first = array_key_first($texts);
+                    if ($texts && count($texts) <= 2 && $first !== null && $first < ($codeColumn ?? 2)) $group = (string) $texts[$first]['v'];
+                    continue;
+                }
+                if ($map === null) continue;
+                $product = array_fill(0, $width, '');
+                $product[0] = $name;
+                $product[18] = $group !== '' ? $group : $name;
+                $product[19] = $priceLevel;
+                $product[20] = $country;
+                $cellFormulas = [];
+                foreach ($map as $c => $target) {
+                    $cell = $row[$c] ?? null;
+                    if (!$cell) continue;
+                    $ref = $this->letter($c) . $r;
+                    if ($cell['noValue']) {
+                        $problems[] = "{$name}!{$ref}: this formula has no saved result. Open the file in Excel, let it calculate, and save it again.";
+                        continue;
+                    }
+                    $product[$target] = $cell['v'];
+                    if ($cell['f'] !== null) {
+                        // Same-row references to known columns become {column}: the system can recalculate those.
+                        $plain = true;
+                        $expr = preg_replace_callback('/(?<![A-Za-z0-9_.])(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})(?![A-Za-z0-9_(])/', function (array $m) use ($r, $map, &$plain) {
+                            $column = 0;
+                            foreach (str_split($m[2]) as $letter) $column = $column * 26 + ord($letter) - 64;
+                            if ((int) $m[4] !== $r || !isset($map[$column - 1])) { $plain = false; return $m[0]; }
+                            return '{' . $map[$column - 1] . '}';
+                        }, substr($cell['f'], 1));
+                        if (str_contains($cell['f'], '!')) $plain = false;
+                        $cellFormulas[$target] = ['excel' => $cell['f'], 'cell' => $ref, 'expr' => $plain ? $expr : null];
+                    }
+                }
+                $at = "{$name}!" . $this->letter($codeColumn) . $r;
+                if (mb_strlen($code) > 80 || preg_match('/[\x00-\x1F\x7F]/', $code)) { $problems[] = "{$at}: the code is too long or has invalid characters."; continue; }
+                if (trim((string) $product[2]) === '') $problems[] = "{$at}: {$code} has no description.";
+                foreach ([8, 9] as $column) {
+                    $value = $product[$column];
+                    if ($value === '' || $value === null) $problems[] = "{$at}: {$code} has no {$names[$column]}.";
+                    elseif (!is_numeric($value) || (float) $value < 0) $problems[] = "{$at}: {$code}'s {$names[$column]} is not a number (\"{$value}\").";
+                    else $product[$column] = (float) $value;
+                }
+                if (is_numeric($product[6]) && (float) $product[6] > 0) $product[6] = floor((float) $product[6]) === (float) $product[6] ? (int) $product[6] : (float) $product[6];
+                elseif ($product[6] !== '') $problems[] = "{$at}: {$code}'s {$names[6]} is not a number (\"{$product[6]}\").";
+                foreach ($product as $column => $value) {
+                    if (is_string($value) && (mb_strlen($value) > 500 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $value))) $problems[] = "{$at}: {$code} has text that is too long or has invalid characters.";
+                }
+                $key = mb_strtolower($code);
+                if (isset($seenCodes[$key])) { $problems[] = "{$at}: the code {$code} is also at {$seenCodes[$key]}. Each product code can appear once."; continue; }
+                $seenCodes[$key] = $at;
+                $products[] = $product;
+                if ($cellFormulas) $formulas[count($products) - 1] = $cellFormulas;
+                if (count($products) > $template['maxProducts']) $this->fail('Workbook exceeds 15,000 product rows.');
+            }
+            if ($layout === null) $skipped[] = $name; // no header row: not a product sheet (e.g. "Factory Picture")
+        }
+        if (!$products && !$problems) $problems[] = 'No products found: no sheet has a "Code No" or "LRN code" header row.';
+        if ($problems) {
+            $shown = array_slice($problems, 0, 40);
+            if (count($problems) > 40) $shown[] = 'and ' . (count($problems) - 40) . ' more';
+            $this->fail(count($problems) === 1 ? $problems[0] : count($problems) . ' things need fixing in this workbook:', count($problems) === 1 ? [] : $shown);
+        }
+        return [
+            'headers' => $template['normalizedHeaders'], 'rows' => $products, 'priceColumns' => [8, 9], 'templateVersion' => 'LRN-EXPORT-PL',
+            'layouts' => $layouts, 'formulas' => $formulas, 'skippedSheets' => $skipped,
+        ];
     }
 
     /** The values in a sheet's first rows (where the headers are), without the full checks. */

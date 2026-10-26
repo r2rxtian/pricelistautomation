@@ -1870,6 +1870,177 @@
     if (position >= 0) headerCells(headerBlock(td.closest('tr')).header, position).forEach(th => th.classList.add('is-guide-active'));
     td.closest('tr')?.querySelector('.col-row-num')?.classList.add('is-guide-active');
   }
+  // --- Formulas from the uploaded Excel file (the export price list): per product, column => {excel,
+  // expr}, where expr uses {n} for the row's column n (e.g. Price/pc = "ROUND({9}/{6},3)"). The editor
+  // recalculates them when a cell they use changes, exactly as Excel would (same rounding). Only plain
+  // arithmetic and a few functions are understood; anything else keeps the uploaded value. ---
+  const FORMULA_FUNCTIONS = {
+    ROUND: ([x, n = 0]) => excelRound(x, n),
+    ROUNDUP: ([x, n = 0]) => { const f = 10 ** n; return Math.sign(x) * Math.ceil(Number((Math.abs(x) * f).toPrecision(15))) / f; },
+    ROUNDDOWN: ([x, n = 0]) => { const f = 10 ** n; return Math.sign(x) * Math.floor(Number((Math.abs(x) * f).toPrecision(15))) / f; },
+    ABS: ([x]) => Math.abs(x),
+    MIN: args => Math.min(...args),
+    MAX: args => Math.max(...args),
+    SUM: args => args.reduce((a, b) => a + b, 0),
+  };
+  /** Excel's ROUND: halves away from zero, without binary leftovers (0.2695 → 0.27, like Excel). */
+  function excelRound(x, n = 0) {
+    const f = 10 ** n;
+    return Math.sign(x) * Math.round(Number((Math.abs(x) * f).toPrecision(15))) / f;
+  }
+  function evaluateFormula(expr, row) {
+    const source = String(expr || '').replace(/\s+/g, '');
+    const tokens = source.match(/\{\d+\}|\d+(?:\.\d+)?|[A-Za-z]+|[-+*/^(),]/g) || [];
+    if (tokens.join('') !== source) return null; // something we don't understand
+    let i = 0;
+    const peek = () => tokens[i];
+    const next = () => tokens[i++];
+    const fail = () => { throw new Error('formula'); };
+    const primary = () => {
+      const t = next();
+      if (t === undefined) fail();
+      if (t === '(') { const v = sum(); if (next() !== ')') fail(); return v; }
+      if (t === '-') return -primary();
+      if (t === '+') return primary();
+      if (t[0] === '{') { const v = row?.[Number(t.slice(1, -1))]; if (!isNumeric(v)) fail(); return numeric(v); }
+      if (/^\d/.test(t)) return Number(t);
+      const fn = FORMULA_FUNCTIONS[t.toUpperCase()];
+      if (!fn || next() !== '(') fail();
+      const args = [];
+      if (peek() !== ')') { args.push(sum()); while (peek() === ',') { next(); args.push(sum()); } }
+      if (next() !== ')') fail();
+      return fn(args);
+    };
+    const power = () => { let v = primary(); while (peek() === '^') { next(); v = v ** primary(); } return v; };
+    const product = () => { let v = power(); while (peek() === '*' || peek() === '/') { const op = next(); const r = power(); v = op === '*' ? v * r : v / r; } return v; };
+    const sum = () => { let v = product(); while (peek() === '+' || peek() === '-') { const op = next(); const r = product(); v = op === '+' ? v + r : v - r; } return v; };
+    try {
+      const value = sum();
+      return i === tokens.length && Number.isFinite(value) ? value : null;
+    } catch { return null; }
+  }
+  /** The uploaded file's formulas of a row's product, or null. */
+  const rowFormulas = row => (row ? state.active?.formulas?.[String(row[COL.code] ?? '')] || null : null);
+  const formulaAt = (rowIdx, colIdx) => rowFormulas(state.rows[rowIdx])?.[Number(colIdx)] || null;
+  /** A formula in words: "ROUND(Price/box ÷ Pcs/box, 3)". */
+  function readableFormula(expr) {
+    const name = col => String(state.headers[col] || `column ${col}`).replace(/\s+/g, ' ').replace(/\s*(USD|in USD)$/i, '').trim();
+    // The formula's own operators first, then the column names (which have "/" in them: "Price/box").
+    return String(expr || '').replace(/\*/g, ' × ').replace(/\//g, ' ÷ ').replace(/,/g, ', ').replace(/\{(\d+)\}/g, (m, col) => name(Number(col))).replace(/\s+/g, ' ');
+  }
+  /**
+   * After a cell of a row changes: its formulas worked out again (twice, so one that uses another's
+   * result settles). Returns the columns that changed.
+   */
+  function recalcRow(rowIdx) {
+    const row = state.rows[rowIdx];
+    const set = rowFormulas(row);
+    if (!set) return [];
+    const changed = [];
+    for (let pass = 0; pass < 2; pass++) {
+      Object.entries(set).forEach(([col, formula]) => {
+        if (!formula?.expr) return;
+        const value = evaluateFormula(formula.expr, row);
+        if (value === null) return;
+        const c = Number(col);
+        const rounded = Math.round(value * 1e8) / 1e8;
+        if (!isNumeric(row[c]) || Math.abs(numeric(row[c]) - rounded) > 1e-9) {
+          row[c] = rounded;
+          if (!changed.includes(c)) changed.push(c);
+        }
+      });
+    }
+    return changed;
+  }
+
+  /**
+   * The "fx" beside the formula bar: how the selected cell's value is worked out, in plain words. A
+   * formula from the uploaded file is shown with its result; the MOQ total follows the price; a price
+   * with a % on it is the uploaded price × the %; everything else is the value from the file as it is.
+   */
+  function explainCell(rowIdx, colIdx) {
+    const row = state.rows[rowIdx];
+    if (!row) return 'Select a cell first: fx shows how its value is worked out.';
+    const header = col => String(state.headers[col] || '').replace(/\s+/g, ' ').trim();
+    const cat = String(row[COL.category] ?? '').trim();
+    const formula = formulaAt(rowIdx, colIdx);
+    if (formula) {
+      const result = formula.expr ? evaluateFormula(formula.expr, row) : null;
+      return formula.expr
+        ? `fx  = ${readableFormula(formula.expr)}${result !== null ? ` = ${Number(result.toFixed(6))}` : ''}   ·   from the uploaded file: ${formula.excel}`
+        : `fx  ${formula.excel}   (from the uploaded file: kept as its value, ${row[colIdx]})`;
+    }
+    if (colIdx === 17) {
+      const qty = Number((String(row[15] ?? '').match(/\d+(?:\.\d+)?/) || [''])[0]);
+      const box = isNumeric(row[9]) ? adjusted(numeric(row[9]), cat) : null;
+      return qty > 0 && box !== null
+        ? `fx  = Price/box × MOQ quantity = ${money.format(box)} × ${qty} = ${money.format(moqTotal(row, box))}`
+        : 'fx  = Price/box × MOQ quantity (this row’s MOQ has no number, so the uploaded total moves with the price)';
+    }
+    if (state.priceColumns.includes(colIdx) && isNumeric(row[colIdx])) {
+      const rate = shownRate(cat);
+      if (rate) return `fx  = uploaded price × (1 ${rate > 0 ? '+' : '−'} ${Math.abs(Math.round(rate * 100) / 100)}%) = ${money.format(numeric(row[colIdx]))} × ${(1 + rate / 100).toFixed(4)} = ${money.format(adjusted(numeric(row[colIdx]), cat))}`;
+      return `${header(colIdx) || 'Price'}: ${money.format(numeric(row[colIdx]))}, the price as uploaded (no formula, no % change).`;
+    }
+    return `${header(colIdx) || 'This cell'}: a plain value from the uploaded file (no formula).`;
+  }
+  // --- The formula bar shows a formula cell's formula like Excel: each cell reference in its own colour,
+  // and those cells outlined in the same colour in the table. "fx" switches it to plain words. ---
+  const FORMULA_REF_COLORS = ['#2f6fde', '#d64545', '#8a4fd6', '#2f9e5b', '#d98a1c', '#1c9aa8', '#c43c8f'];
+  let formulaInWords = false;
+  function clearFormulaRefs() {
+    dom.table?.querySelectorAll('.excel-cell.is-formula-ref').forEach(cell => { cell.classList.remove('is-formula-ref'); cell.style.removeProperty('--ref-color'); });
+  }
+  /** The editor's own reference of a cell ("H5"), as shown in its column letters and row numbers. */
+  function gridReference(rowIdx, colIdx) {
+    const cell = dom.table?.querySelector(`.excel-cell[data-row="${rowIdx}"][data-col="${colIdx}"]`);
+    if (!cell) return null;
+    const { letter, rowNumber } = cellReference(cell, rowIdx, colIdx);
+    return { text: `${letter}${rowNumber}`, cell };
+  }
+  /** Shows the selected cell's formula in the bar (true), or nothing to show (false: the value stays). */
+  function showFormulaInBar(rowIdx, colIdx) {
+    const display = $('#formulaDisplay');
+    const input = dom.formulaInput;
+    clearFormulaRefs();
+    const formula = rowIdx === null || rowIdx === undefined ? null : formulaAt(rowIdx, colIdx);
+    if (!display || !formula) {
+      if (display) display.hidden = true;
+      if (input) input.hidden = false;
+      return false;
+    }
+    const row = state.rows[rowIdx];
+    if (formulaInWords && formula.expr) {
+      const result = evaluateFormula(formula.expr, row);
+      display.textContent = `= ${readableFormula(formula.expr)}${result !== null ? ` = ${Number(result.toFixed(6))}` : ''}`;
+      display.title = `In the uploaded file: ${formula.excel}`;
+    } else if (formula.expr) {
+      // References in the editor's columns, coloured in order of appearance; the cells outlined to match.
+      const colors = new Map();
+      const html = escapeHtml(formula.expr).replace(/\{(\d+)\}/g, (m, source) => {
+        const ref = gridReference(rowIdx, Number(source));
+        if (!colors.has(source)) colors.set(source, FORMULA_REF_COLORS[colors.size % FORMULA_REF_COLORS.length]);
+        const color = colors.get(source);
+        if (ref) { ref.cell.classList.add('is-formula-ref'); ref.cell.style.setProperty('--ref-color', color); }
+        return `<span class="formula-ref" style="color: ${color}">${escapeHtml(ref ? ref.text : String(state.headers[Number(source)] || source))}</span>`;
+      });
+      display.innerHTML = `=${html}`;
+      display.title = `${readableFormula(formula.expr)} · in the uploaded file: ${formula.excel} · click fx to read it in words`;
+    } else {
+      // A formula the system keeps as its value (it points outside the price list): shown as in the file.
+      display.textContent = formula.excel;
+      display.title = 'From the uploaded file. Kept as its value: it uses cells that aren’t part of the price list.';
+    }
+    display.hidden = false;
+    if (input) input.hidden = true;
+    return true;
+  }
+  $('#formulaFxBtn')?.addEventListener('click', () => {
+    const { rowIdx, colIdx } = state.activeCell;
+    if (!formulaAt(rowIdx, colIdx)?.expr) return;
+    formulaInWords = !formulaInWords;
+    showFormulaInBar(rowIdx, colIdx);
+  });
   function updateFormulaBar(force = false) {
     const ind = dom.formulaCellIndicator;
     const input = dom.formulaInput;
@@ -1879,9 +2050,10 @@
       ind.textContent = '–';
       input.value = '';
       input.disabled = true;
+      showFormulaInBar(null, null);
       return;
     }
-    input.disabled = !state.canEdit || cellLocked(state.activeCell.colIdx);
+    input.disabled = !state.canEdit || cellLocked(state.activeCell.colIdx, state.activeCell.rowIdx);
     const rowIdx = state.activeCell.rowIdx;
     const colIdx = state.activeCell.colIdx;
     const { letter, rowNumber } = cellReference(state.activeCell.td, rowIdx, colIdx);
@@ -1900,6 +2072,10 @@
     } else {
       input.value = String(raw);
     }
+    // A formula cell shows its formula instead (a new cell starts in the formula view, not in words).
+    const cellKey = `${rowIdx}|${colIdx}`;
+    if (updateFormulaBar.lastCell !== cellKey) { formulaInWords = false; updateFormulaBar.lastCell = cellKey; }
+    showFormulaInBar(rowIdx, colIdx);
   }
 
   /**
@@ -1907,21 +2083,28 @@
    * customer list the category and the code (they identify the product). Everything else can be
    * changed: in a level's view for all its customers, in a customer's view just for that customer.
    */
-  function cellLocked(colIdx) {
+  function cellLocked(colIdx, rowIdx = null) {
     const col = Number(colIdx);
     if (col === 17) return true;
+    // Worked out by a formula from the uploaded file: it follows the cells it uses.
+    if (rowIdx !== null && formulaAt(Number(rowIdx), col)?.expr) return true;
     if (!state.active?.priceOnly) return false;
     return [COL.category, COL.code, COL.priceLevel, COL.country].includes(col);
   }
-  function lockedCellMessage(colIdx) {
+  function lockedCellMessage(colIdx, rowIdx = null) {
+    const formula = rowIdx !== null ? formulaAt(Number(rowIdx), Number(colIdx)) : null;
+    if (formula?.expr) {
+      const inputs = [...new Set([...formula.expr.matchAll(/\{(\d+)\}/g)].map(m => String(state.headers[Number(m[1])] || '').replace(/\s+/g, ' ').trim()))].filter(Boolean);
+      return `This cell is worked out like in the uploaded Excel file: ${readableFormula(formula.expr)}. Change ${inputs.join(' or ') || 'the cells it uses'} instead.`;
+    }
     return Number(colIdx) === 17
       ? 'Total Price Based on MOQ is worked out: Price/box × MOQ. Change the price or the MOQ instead.'
       : 'The code and category identify the product, so they can’t be changed here. A new or renamed product comes in with an upload.';
   }
   function startCellEdit(td, initialChar = null, selectAll = false) {
     if (!state.canEdit || !td || state.isEditing) return;
-    if (cellLocked(td.dataset.col)) {
-      toast(lockedCellMessage(td.dataset.col));
+    if (cellLocked(td.dataset.col, td.dataset.row)) {
+      toast(lockedCellMessage(td.dataset.col, td.dataset.row));
       return;
     }
     state.isEditing = true;
@@ -2007,7 +2190,7 @@
     td.classList.remove('is-editing');
     const rowIdx = Number(td.dataset.row);
     const colIdx = Number(td.dataset.col);
-    if (!Number.isFinite(rowIdx) || !Number.isFinite(colIdx) || cellLocked(colIdx)) return;
+    if (!Number.isFinite(rowIdx) || !Number.isFinite(colIdx) || cellLocked(colIdx, rowIdx)) return;
 
     const input = td.querySelector('.excel-cell-editor');
     const finalVal = newValue !== null ? newValue : (input ? input.value : '');
@@ -2046,6 +2229,11 @@
       }
 
       if (valChanged && state.active) {
+        // Cells worked out from this one (the uploaded file's formulas) follow, and are shown again.
+        recalcRow(rowIdx).forEach(col => {
+          const cell = dom.table?.querySelector(`.excel-cell[data-row="${rowIdx}"][data-col="${col}"]`);
+          if (cell) cell.innerHTML = formatCellDisplay(rowIdx, col);
+        });
         const row = state.rows[rowIdx];
         const isPrice = state.priceColumns.includes(colIdx);
         const cat = String(row[COL.category] ?? '');
@@ -3100,9 +3288,9 @@
     }
     dash.drawn = true;
     renderDashboardHeading();
-    const uploadedLevels = data.levels.filter(level => level.uploaded > 0).length;
+    const filedCustomers = data.levels.reduce((sum, level) => sum + (level.customersWithFile || 0), 0);
     $('#dashSummary').textContent = data.levels.length
-      ? `${uploadedLevels} of ${data.levels.length} price levels uploaded · ${data.customers} customers · ${data.products.toLocaleString()} products`
+      ? `${filedCustomers} of ${data.customers} customers have a file · ${data.levels.length} price levels · ${data.products.toLocaleString()} products`
       : 'No price levels yet. Add them in Config › Customers & price levels.';
     renderDashStairs(data);
     renderDashLadder(data);
@@ -3124,7 +3312,7 @@
       const above = Number(level.aboveLowest);
       const lift = has && Number.isFinite(above) ? Math.round((above / max) * 100) : 0;
       const share = Math.min(1, level.uploaded / total);
-      const when = level.lastChange?.at ? `${formatRelativeTime(level.lastChange.at)}${level.lastChange.by ? ` · ${level.lastChange.by}` : ''}` : 'No file yet';
+      const when = level.lastChange?.at ? `${formatRelativeTime(level.lastChange.at)}${level.lastChange.by ? ` · ${level.lastChange.by}` : ''}` : 'No customer files yet';
       const customers = level.customers.length;
       let step = box.querySelector(`.dash-step[data-open="${CSS.escape(level.id)}"]`);
       if (!step) {
@@ -3154,9 +3342,9 @@
       // The ring fills to how many products the level's file has (after the frame, so it can glide).
       requestAnimationFrame(() => step.querySelector('.dash-ring-fill')?.style.setProperty('stroke-dasharray', `${(share * ring).toFixed(1)} ${ring.toFixed(1)}`));
       const figure = step.querySelector('.dash-step-figure');
-      const text = !has ? 'No file yet' : above === 0 ? 'Lowest' : Number.isFinite(above) && level.aboveLowest !== null ? `+${above}%` : '—';
+      const text = !has ? 'No files yet' : above === 0 ? 'Lowest' : Number.isFinite(above) && level.aboveLowest !== null ? `+${above}%` : '—';
       if (figure.dataset.text !== text) { figure.dataset.text = text; countTo(figure, text); }
-      step.querySelector('.dash-step-meta').textContent = has ? `${level.uploaded.toLocaleString()} product${level.uploaded === 1 ? '' : 's'}${level.customerPrices ? ` · ${level.customerPrices} customer price${level.customerPrices === 1 ? '' : 's'}` : ''}` : 'Upload its workbook';
+      step.querySelector('.dash-step-meta').textContent = has ? `${level.customersWithFile || 0} of ${customers} customer${customers === 1 ? '' : 's'} with a file · ${level.uploaded.toLocaleString()} product${level.uploaded === 1 ? '' : 's'}` : 'Upload a customer file';
       step.querySelector('.dash-step-when').textContent = when;
     });
   }
@@ -3234,11 +3422,11 @@
     if (approvals.length) items.push({ tone: 'rose', icon: '✓', text: `<strong>${approvals.length} price change${approvals.length === 1 ? '' : 's'}</strong> waiting for your approval`, action: 'files' });
     if (mine.length) items.push({ tone: 'amber', icon: '⏳', text: `Your change${mine.length === 1 ? ' is' : 's are'} waiting for approval (${mine.length})`, action: 'files' });
     if (unsaved) items.push({ tone: 'rose', icon: '✎', text: `<strong>Unsaved changes</strong> in the price list: ${escapeHtml(masterlistPendingSummary())}`, action: 'open' });
-    if (empty.length) items.push({ tone: 'muted', icon: '↑', text: `<strong>${empty.length} price level${empty.length === 1 ? ' has' : 's have'} no file yet:</strong> ${escapeHtml(empty.map(level => level.name).join(', '))}`, action: can('upload') ? 'upload' : '' , open: empty[0]?.id });
+    if (empty.length) items.push({ tone: 'muted', icon: '↑', text: `<strong>${empty.length} price level${empty.length === 1 ? ' has' : 's have'} no customer files yet:</strong> ${escapeHtml(empty.map(level => level.name).join(', '))}`, action: can('upload') ? 'upload' : '' , open: empty[0]?.id });
     if (data.customersWithoutLevel.length) items.push({ tone: 'amber', icon: '!', text: `<strong>${data.customersWithoutLevel.length} customer${data.customersWithoutLevel.length === 1 ? ' has' : 's have'} no price level:</strong> ${escapeHtml(data.customersWithoutLevel.slice(0, 5).join(', '))}`, action: can('manageImages') ? 'config' : '' });
     setHtml($('#dashAttention'), items.length
       ? items.map(item => `<li class="dash-attention-item is-${item.tone}"><span class="dash-attention-icon" aria-hidden="true">${item.icon}</span><span class="dash-attention-text">${item.text}</span>${item.action ? `<button type="button" class="dash-attention-go" data-dash-go="${item.action}"${item.open ? ` data-open-id="${escapeHtml(item.open)}"` : ''} aria-label="Go">›</button>` : ''}</li>`).join('')
-      : '<li class="dash-attention-clear"><span aria-hidden="true">✓</span>All clear. Every level has its file and nothing is waiting.</li>');
+      : '<li class="dash-attention-clear"><span aria-hidden="true">✓</span>All clear. Nothing is waiting.</li>');
   }
   /** 30 small columns, one per day: uploads, price changes and exports stacked. The columns stay; a
    *  day whose numbers changed grows or shrinks to its new height. */
@@ -3272,10 +3460,11 @@
     $('#dashRecent').hidden = !(data.activity.recent || []).length;
   }
   $('#dashStairs')?.addEventListener('click', event => {
+    // A price level is a group of customers: show its card on Files (filtered to it), to pick a customer.
     const step = event.target.closest('[data-open]');
     if (!step) return;
-    openOriginRect = step.getBoundingClientRect();
-    runListAction('open', step.dataset.open);
+    filesView.mfQuery = dash.data?.levels.find(level => level.id === step.dataset.open)?.name || '';
+    swapToPanel('filesPanel');
   });
   $('#dashLadderProduct')?.addEventListener('change', event => { dash.product = event.target.value; renderDashLadder(dash.data); });
   [['#dashLadderPrev', -1], ['#dashLadderNext', 1]].forEach(([selector, step]) => $(selector)?.addEventListener('click', () => {
@@ -3297,7 +3486,7 @@
     if (where === 'files') switchPanel('filesPanel', true);
     else if (where === 'config') { state.configTab = 'lists'; switchPanel('settingsPanel', true); }
     else if (where === 'upload') openMasterlistUpload({ target: go.dataset.openId || null });
-    else if (where === 'open') runListAction('open', state.active?.id || dash.data?.levels.find(level => level.uploaded)?.id || dash.data?.levels[0]?.id);
+    else if (where === 'open') { if (state.active?.id) runListAction('open', state.active.id); else switchPanel('filesPanel', true); }
   });
   $('#dashUploadBtn')?.addEventListener('click', () => openMasterlistUpload());
   $('#noResults')?.addEventListener('click', event => { if (event.target.closest('[data-no-file-upload]')) openMasterlistUpload(); });
@@ -3523,68 +3712,45 @@
     const waiting = (state.versions || []).some(version => version.status === 'pending' && ['batch', 'masterlist', 'list', 'rules'].includes(version.kind));
     const unsaved = masterlistUnsavedCount();
     const openId = inMasterlistFile(state.active) ? String(state.active.id) : '';
-    const uploaded = levels.filter(entry => entry.view.ownPriceCount).length;
+    const filedCustomers = levels.reduce((sum, entry) => sum + entry.customers.filter(customer => customer.ownPriceCount).length, 0);
     const customerCount = levels.reduce((sum, entry) => sum + entry.customers.length, 0);
     const fileIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h8M11 13v4"/></svg>';
     const status = unsaved ? `<p class="mf-status is-unsaved" title="${escapeHtml(masterlistPendingSummary())}">You have unsaved changes: ${escapeHtml(masterlistPendingSummary())}</p>`
       : waiting ? '<p class="mf-status is-waiting">A price change is waiting for approval (see above).</p>' : '';
+    // One card per price level: a group of its customers. Every customer has its own file; the card
+    // opens any of them (those with a file first) and uploads a file for one of them.
     const cards = levels.map((entry, index) => {
       const view = entry.view;
       const color = LEVEL_COLORS[index % LEVEL_COLORS.length];
-      const has = Boolean(view.ownPriceCount);
-      const record = latestUploadOf(entry.level);
-      const isOpen = openId && (openId === String(view.id) || entry.customers.some(customer => String(customer.id) === openId));
+      const withFile = entry.customers.filter(customer => customer.ownPriceCount);
+      const without = entry.customers.filter(customer => !customer.ownPriceCount);
+      const ordered = [...withFile, ...without];
+      const isOpen = openId && entry.customers.some(customer => String(customer.id) === openId);
       const changed = Object.values(masterlistPending().views).filter(item => item.kind === 'list' && sameText(item.priceLevel, entry.level)).length;
-      const ownCustomers = entry.customers.filter(customer => customer.ownPriceCount);
-      const searchText = [entry.level, record?.sourceFile || '', ...entry.customers.map(customer => customer.country)].join('\n').toLowerCase();
-      const upload = can('upload') ? `<button type="button" class="button ${has ? 'secondary' : 'primary'}" data-ml-upload="${escapeHtml(view.id)}">${has ? 'Upload new version' : `Upload ${escapeHtml(entry.level)} workbook`}</button>` : '';
-      if (!has) {
-        // No file for the level itself, but customers may have uploaded files of their own: list them,
-        // so a customer's upload is never hidden behind "No file yet".
-        const waitingCount = entry.customers.length - ownCustomers.length;
-        const customerFiles = ownCustomers.length ? `<div class="mf-customers">
-            <span class="mf-customers-label">Customer files:</span>${ownCustomers.map(customer => {
-              const file = latestUploadOf(entry.level, customer.country)?.sourceFile;
-              return `<button type="button" class="mf-chip" data-action="open" data-id="${escapeHtml(customer.id)}" title="${escapeHtml(`${file ? `${file} · ` : ''}${customer.ownPriceCount} product${customer.ownPriceCount === 1 ? '' : 's'} just for ${customer.country}`)}">${escapeHtml(customer.country)}</button>`;
-            }).join('')}
-          </div>` : '';
-        return `<article class="mf-card is-empty ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
-          <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
-          <div class="mf-body">
-            <h3>${escapeHtml(entry.level)}${isOpen ? ' <span class="mf-tag">Open</span>' : ''}</h3>
-            <p class="mf-file">No ${escapeHtml(entry.level)} file yet</p>
-            <p class="mf-meta">${ownCustomers.length ? `${ownCustomers.length} customer${ownCustomers.length === 1 ? ' has its' : 's have their'} own file${waitingCount ? ` · ${waitingCount} waiting for the level's prices` : ''}` : `${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} waiting for its prices`}</p>
-          </div>
-          <div class="mf-actions">${ownCustomers.length === 1
-            ? `<button type="button" class="button primary row-primary" data-action="open" data-id="${escapeHtml(ownCustomers[0].id)}">Open ${escapeHtml(ownCustomers[0].country)}</button>${upload.replace('button primary', 'button secondary')}`
-            : upload}</div>
-          ${customerFiles}
-        </article>`;
-      }
-      const when = view.savedAt ? `${formatRelativeTime(view.savedAt)}${view.savedBy ? ` by ${view.savedBy}` : ''}` : '';
-      return `<article class="mf-card ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
+      const uploads = withFile.map(customer => latestUploadOf(entry.level, customer.country)).filter(Boolean).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+      const latest = uploads[0];
+      // The search reads: level, file names, then the customers in the dropdown's order.
+      const searchText = [entry.level, uploads.map(record => record.sourceFile || '').join(' '), ...ordered.map(customer => customer.country)].join('\n').toLowerCase();
+      const option = customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.country)}${customer.ownPriceCount ? ` · ${customer.ownPriceCount} product${customer.ownPriceCount === 1 ? '' : 's'}` : ''}</option>`;
+      const pick = entry.customers.length ? `<span class="ml-select mf-customer-pick"><select data-ml-customer aria-label="Open a customer of ${escapeHtml(entry.level)}"><option value="">Open a customer…</option>${withFile.length ? `<optgroup label="Has a file">${withFile.map(option).join('')}</optgroup>` : ''}${without.length ? `<optgroup label="No file yet">${without.map(option).join('')}</optgroup>` : ''}</select><svg class="ml-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>` : '';
+      const upload = can('upload') && entry.customers.length ? `<button type="button" class="button secondary" data-ml-upload="${escapeHtml(view.id)}">Upload a customer file</button>` : '';
+      const when = latest ? `Last upload: ${latest.country} · ${formatRelativeTime(latest.savedAt)}${latest.savedBy ? ` by ${latest.savedBy}` : ''}` : '';
+      return `<article class="mf-card ${withFile.length ? '' : 'is-empty'} ${isOpen ? 'is-open' : ''}" data-key="${escapeHtml(view.id)}" data-search="${escapeHtml(searchText)}" style="--level: ${color}">
         <span class="mf-sheet" aria-hidden="true">${fileIcon}</span>
         <div class="mf-body">
           <h3>${escapeHtml(entry.level)}${isOpen ? ' <span class="mf-tag">Open</span>' : ''}${changed ? ` <span class="mf-tag is-unsaved">${changed} unsaved</span>` : ''}</h3>
-          <p class="mf-file" title="${escapeHtml(record?.sourceFile || '')}">${escapeHtml(record?.sourceFile || `${entry.level} workbook`)}</p>
-          <p class="mf-meta">${Number(view.ownPriceCount).toLocaleString()} product${view.ownPriceCount === 1 ? '' : 's'} · ${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'}</p>
-          ${when ? `<p class="mf-when" title="${escapeHtml(displayDate(view.savedAt))}">Updated ${escapeHtml(when)}</p>` : ''}
+          <p class="mf-file">${!entry.customers.length ? 'No customers on this price level yet' : withFile.length ? `${withFile.length} of ${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} have a file` : 'No customer files yet'}</p>
+          <p class="mf-meta">${entry.customers.length ? `${entry.customers.length} customer${entry.customers.length === 1 ? '' : 's'} on ${escapeHtml(entry.level)}` : 'Add customers in Config › Customers &amp; price levels'}</p>
+          ${when ? `<p class="mf-when" title="${escapeHtml(displayDate(latest.savedAt))}">${escapeHtml(when)}</p>` : ''}
         </div>
-        <div class="mf-actions">
-          <button type="button" class="button primary row-primary" data-action="open" data-id="${escapeHtml(view.id)}">Open</button>
-          ${upload}
-        </div>
-        ${entry.customers.length ? `<div class="mf-customers">
-          ${ownCustomers.length ? `<span class="mf-customers-label">Own prices:</span>${ownCustomers.map(customer => `<button type="button" class="mf-chip" data-action="open" data-id="${escapeHtml(customer.id)}" title="${escapeHtml(`${customer.ownPriceCount} price(s) just for ${customer.country}`)}">${escapeHtml(customer.country)}</button>`).join('')}` : ''}
-          <span class="ml-select mf-customer-pick"><select data-ml-customer aria-label="Open for a customer of ${escapeHtml(entry.level)}"><option value="">Open for a customer…</option>${entry.customers.map(customer => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.country)}</option>`).join('')}</select><svg class="ml-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
-        </div>` : ''}
+        <div class="mf-actions">${pick}${upload}</div>
       </article>`;
     }).join('');
     const markup = `<section class="ml-section mf-section">
       <header class="mf-head">
         <div>
           <h2>Price level files</h2>
-          <p>${uploaded} of ${levels.length} price levels uploaded · ${customerCount} customers · each price level has its own workbook</p>
+          <p>${filedCustomers} of ${customerCount} customers have a file · grouped by price level · each customer has its own workbook</p>
           ${status}
         </div>
         <div class="mf-head-tools">
@@ -3666,40 +3832,46 @@
     if (step === 'choose') { $('#mlUploadErrors').hidden = true; renderMlChoose(); }
     if (changed && mlDialog?.open) easeIn(step === 'choose' ? $('#mlUploadChoose') : $('#mlUploadPreview'));
   }
-  /** The upload's "These prices are for": price level first, then its customers (or all of them). */
   /**
-   * Prices come from uploads: every file is for a price level (all its customers) or one customer on
-   * it. The product list (codes, descriptions, sizes…) updates from the files in the background.
+   * The upload's "These prices are for": the price level, then the customer. Every file is one
+   * customer's price list (the price level only groups customers). The product list (codes,
+   * descriptions, sizes…) updates from the files in the background.
    */
+  const isCustomerListId = id => /^list-[1-9]\d*-\d+$/.test(String(id || ''));
   function renderMlTarget() {
     const levels = masterlistLevels();
     const view = versionSummaryById(mlUpload.target);
     const level = (view && levels.find(entry => sameText(entry.level, view.priceLevel))) || levels[0] || null;
+    // A level alone (or nothing) picked: the level stays chosen, the customer is still to be picked.
     if (level && !(view && sameText(view.priceLevel, level.level))) mlUpload.target = level.view.id;
     const option = (value, label, selected) => `<option value="${escapeHtml(value)}"${selected ? ' selected' : ''}>${escapeHtml(label)}</option>`;
     $('#mlTargetLevel').innerHTML = levels.map(entry => option(entry.view.id, entry.level, entry === level)).join('') || option('', 'No price levels in Config', true);
+    const withFile = level ? level.customers.filter(customer => customer.ownPriceCount) : [];
+    const without = level ? level.customers.filter(customer => !customer.ownPriceCount) : [];
+    const group = (label, list) => (list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(customer => option(customer.id, customer.country, customer.id === mlUpload.target)).join('')}</optgroup>` : '');
     $('#mlTargetCustomer').innerHTML = level
-      ? option(level.view.id, `All ${level.level} customers (${level.customers.length})`, mlUpload.target === level.view.id) + level.customers.map(customer => option(customer.id, customer.country, customer.id === mlUpload.target)).join('')
-      : option('', 'Every customer', true);
+      ? option(level.view.id, 'Choose the customer…', !isCustomerListId(mlUpload.target)) + group('Has a file (uploading replaces it)', withFile) + group('No file yet', without)
+      : option('', 'Choose the customer…', true);
     $('#mlTargetCustomer').disabled = !level;
     $('#mlTargetCustomerWrap').classList.toggle('is-off', !level);
-    const customer = level && view && !isLevelView(view) && view.id === mlUpload.target ? view.country : '';
+    const customer = level && view && isCustomerListId(view.id) && view.id === mlUpload.target ? view : null;
     $('#mlTargetHint').innerHTML = !level
       ? 'Add a price level in Config › Customers & price levels first.'
-      : customer ? `Prices <strong>just for ${escapeHtml(customer)}</strong>. The other ${escapeHtml(level.level)} customers keep the level’s prices.`
-        : `The <strong>${escapeHtml(level.level)}</strong> list becomes exactly this file: its products and prices, for its ${level.customers.length} customer${level.customers.length === 1 ? '' : 's'}.`;
-    return { level, customer };
+      : !customer ? `Choose which ${escapeHtml(level.level)} customer this file is for.`
+        : customer.ownPriceCount ? `This file <strong>replaces ${escapeHtml(customer.country)}’s</strong> price list. You’ll see exactly what changes first.`
+          : `This file becomes <strong>${escapeHtml(customer.country)}’s</strong> price list (a ${escapeHtml(level.level)} customer).`;
+    return { level, customer: customer ? customer.country : '' };
   }
   $('#mlTargetLevel')?.addEventListener('change', event => { mlUpload.target = event.target.value; renderMlChoose(); });
   $('#mlTargetCustomer')?.addEventListener('change', event => { mlUpload.target = event.target.value || mlUpload.target; renderMlChoose(); });
   function renderMlChoose() {
     const first = !Number(versionSummaryById(MASTERLIST_ID)?.productCount || 0);
     const { level, customer } = renderMlTarget();
-    $('#mlUploadKicker').textContent = level ? (customer ? `${level.level} · ${customer}` : `${level.level} · all customers`) : 'Price list';
-    $('#mlUploadTitle').textContent = level ? `Upload ${customer || level.level} prices` : 'Upload prices';
+    $('#mlUploadKicker').textContent = level ? (customer ? `${level.level} · ${customer}` : level.level) : 'Price list';
+    $('#mlUploadTitle').textContent = customer ? `Upload ${customer}’s prices` : 'Upload a customer’s prices';
     $('#mlUploadIntro').textContent = first
-      ? 'Each price level has its own workbook. Upload one to start; the others are added the same way.'
-      : 'Choose the price level first, then the customer. You’ll see exactly what changes before anything is saved.';
+      ? 'Each customer has its own workbook. Upload one to start; the others are added the same way.'
+      : 'Choose the price level, then the customer. You’ll see exactly what changes before anything is saved.';
     const fileName = mlUpload.file ? mlUpload.file.name : 'Drop the workbook here';
     if ($('#mlFileName').textContent !== fileName && mlUpload.file && !reducedMotion()) {
       $('#mlFileName').animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
@@ -3707,7 +3879,7 @@
     $('#mlFileName').textContent = fileName;
     $('#mlDropZone').classList.toggle('has-file', Boolean(mlUpload.file));
     const next = $('#mlUploadNext');
-    next.disabled = !mlUpload.file || mlUpload.busy || !String(mlUpload.target || '').startsWith('list-');
+    next.disabled = !mlUpload.file || mlUpload.busy || !isCustomerListId(mlUpload.target);
     next.textContent = mlUpload.busy ? 'Checking…' : 'Check file';
   }
   function setMlFile(file) {
@@ -3774,17 +3946,18 @@
         <ul class="review-edits">${items.map(item => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>${extra(item)}</li>`).join('')}</ul>${more(items.length, total)}</section>` : '';
     const head = stale ? '<p class="review-note is-rejected">Prices changed since this file was checked. This is what it would change now.</p>' : '';
     if (preview.mode === 'list') {
-      // A price level: its list becomes the file. A customer: the file's prices become its own.
-      const level = escapeHtml(preview.priceLevel);
+      // One customer's price list: it becomes exactly this file.
+      const level = escapeHtml(preview.customer ? `${preview.customer}’s` : preview.priceLevel);
       const details = Number(c.detailChanges || 0);
+      const whose = preview.customer ? `<strong>${escapeHtml(preview.customer)}</strong>’s price list (${escapeHtml(preview.priceLevel)})` : `The <strong>${level}</strong> list`;
       const intro = preview.replaces
-        ? (preview.first ? `The <strong>${level}</strong> list is empty: it becomes this file.` : `The <strong>${level}</strong> list becomes exactly this file.`)
+        ? (preview.first ? `${whose} is empty: it becomes this file.` : `${whose} becomes exactly this file.`)
         : `Prices just for <strong>${escapeHtml(preview.customer)}</strong> (${level}). Its other products keep the level’s prices.`;
       return head + `<p class="review-note">${preview.fileName ? `<strong>${escapeHtml(preview.fileName)}</strong> · ` : ''}${preview.products.toLocaleString()} products. ${intro}</p>`
         + `<div class="review-stats">${stat(c.priceChanges, plural(c.priceChanges, 'new price', 'new prices'))}${stat(c.added, plural(c.added, 'product added', 'products added'))}${preview.replaces ? stat(c.removed, plural(c.removed, 'product removed', 'products removed')) : stat(c.notInFile, 'keep the level’s price')}${stat(c.unchanged, 'the same')}</div>`
         + (preview.first ? '' : priceTable('New prices', `${c.priceChanges.toLocaleString()} product${c.priceChanges === 1 ? '' : 's'}`, preview.priceChanges, c.priceChanges)
-          + simpleList('Added', preview.replaces ? `new in ${level}` : 'just for this customer', preview.added, c.added, item => `<strong>${priceText(item.pricePc)}</strong>`)
-          + (preview.replaces ? simpleList('Removed', `not in this file, so they leave ${level} (and its customers)`, preview.notInFile, c.removed) : '')
+          + simpleList('Added', preview.replaces ? `new in ${level} list` : 'just for this customer', preview.added, c.added, item => `<strong>${priceText(item.pricePc)}</strong>`)
+          + (preview.replaces ? simpleList('Removed', `not in this file, so they leave ${level} list`, preview.notInFile, c.removed) : '')
           + (details ? `<section class="review-section"><h3>New details <small>${details.toLocaleString()} product${details === 1 ? '' : 's'}</small></h3><ul class="review-edits">${(preview.detailChanges || []).flatMap(item => item.fields.map(field => `<li><span class="review-edit-what"><strong>${escapeHtml(item.description || item.code)}</strong> · ${escapeHtml(field.name)}</span><span class="review-before">${escapeHtml(String(field.old ?? '') || '(empty)')}</span><span class="review-arrow" aria-hidden="true">→</span><strong>${escapeHtml(String(field.new ?? '') || '(empty)')}</strong></li>`)).join('')}</ul>${more((preview.detailChanges || []).length, details)}</section>` : '')
           + (c.reordered ? '<p class="review-note">Same products and prices, in a new order.</p>' : ''));
     }
@@ -3913,10 +4086,11 @@
       });
     }).join('') || '<p class="lsm-empty">No matches</p>');
     const chosen = levels.find(entry => sameText(entry.level, switcher.level));
-    $('#lsmLevels').innerHTML = chosen
-      ? item('list', chosen.view.id, 'All customers', { cls: 'lsm-all', meta: unsaved.some(view => isLevelView(view) && sameText(view.priceLevel, chosen.level)) ? '• unsaved' : 'the level’s prices', current: String(active.id) === String(chosen.view.id) })
-        + chosen.customers.map(view => item('list', view.id, view.country, {
-          meta: unsaved.some(entry => sameText(entry.country, view.country) && sameText(entry.priceLevel, view.priceLevel)) ? '• unsaved' : (view.ownPriceCount ? `${view.ownPriceCount} own price${view.ownPriceCount === 1 ? '' : 's'}` : ''),
+    // Every customer has its own file (the level only groups them): customers with a file first.
+    const customers = chosen ? [...chosen.customers.filter(view => view.ownPriceCount), ...chosen.customers.filter(view => !view.ownPriceCount)] : [];
+    $('#lsmLevels').innerHTML = customers.length
+      ? customers.map(view => item('list', view.id, view.country, {
+          meta: unsaved.some(entry => sameText(entry.country, view.country) && sameText(entry.priceLevel, view.priceLevel)) ? '• unsaved' : (view.ownPriceCount ? `${view.ownPriceCount} product${view.ownPriceCount === 1 ? '' : 's'}` : 'no file yet'),
           current: String(active.id) === String(view.id)
         })).join('')
       : '<p class="lsm-empty">—</p>';
@@ -5133,9 +5307,10 @@
         if (!groups.has(group)) groups.set(group, []);
         groups.get(group).push(row);
       });
+      const productRows = []; // [sheet row index, product row]: for writing the file's formulas back
       groups.forEach((groupRows, group) => {
         if (groups.size > 1 || group !== catName) { data.push([group]); across(data.length - 1); }
-        groupRows.forEach(row => data.push(isPresentation
+        groupRows.forEach(row => productRows.push([data.length, row]) && data.push(isPresentation
           ? [row[1], [row[2], row[3]].filter(Boolean).join(' '), row[6], price(row[8], catName), price(row[9], catName), row[13], row[14], row[7], [row[15], row[16]].filter(Boolean).join(' '), moqTotal(row, isNumeric(row[9]) ? adjustedWith(rateFor(catName), numeric(row[9])) : null)]
           : [row[1], row[2], row[4], row[5], row[6], row[7], price(row[8], catName), price(row[9], catName), formatPallet(row[10]), formatPallet(row[11]), formatPallet(row[12])]));
       });
@@ -5151,6 +5326,25 @@
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws['!merges'] = merges;
+      // The uploaded file's formulas, written back where every cell they use is in this sheet (the value
+      // stays as shown, so the workbook reads right before Excel recalculates).
+      const exportColumnOf = isPresentation
+        ? { 1: 0, 6: 2, 8: 3, 9: 4, 13: 5, 14: 6, 7: 7, 17: 9 }
+        : { 1: 0, 2: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7 };
+      productRows.forEach(([sheetRow, row]) => {
+        Object.entries(rowFormulas(row) || {}).forEach(([col, formula]) => {
+          const target = exportColumnOf[Number(col)];
+          if (target === undefined || !formula?.expr) return;
+          let complete = true;
+          const text = formula.expr.replace(/\{(\d+)\}/g, (m, source) => {
+            const c = exportColumnOf[Number(source)];
+            if (c === undefined) { complete = false; return m; }
+            return XLSX.utils.encode_cell({ r: sheetRow, c });
+          });
+          const address = XLSX.utils.encode_cell({ r: sheetRow, c: target });
+          if (complete && ws[address]) ws[address].f = text;
+        });
+      });
       ws['!cols'] = (isPresentation ? [16, 40, 14, 14, 14, 12, 12, 14, 12, 18] : [16, 44, 14, 16, 10, 14, 13, 14, 22, 22, 22]).map(wch => ({ wch }));
       const safeSheetName = catName.substring(0, 31).replace(/[\\/?*[\]]/g, '');
       XLSX.utils.book_append_sheet(wb, ws, safeSheetName || 'Sheet');

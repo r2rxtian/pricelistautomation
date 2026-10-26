@@ -2,9 +2,10 @@
 declare(strict_types=1);
 /**
  * The Dashboard (pages/dashboard.php): every price level at a glance, worked out in one pass.
- *   - levels:   per price level, its customers, how many of its prices were uploaded / set for it
- *               (the rest still follow the reference prices), how it compares with the cheapest
- *               level, and when it last changed and by whom;
+ * Every customer has its own uploaded file; a price level groups customers. A level's price for a
+ * product is the average of its customers' file prices (a level file, from before, counts first).
+ *   - levels:   per price level, its customers and how many have a file, how many products those files
+ *               cover, how it compares with the cheapest level, and when it last changed and by whom;
  *   - ladder:   every product with its Price/pc and Price/box in each level (the "price ladder");
  *   - activity: uploads, price changes and exports per day for the last 30 days.
  */
@@ -23,6 +24,8 @@ function dashboard_payload(array $user): array
     // Every price set for a level or a customer, once.
     $levelPrices = [];   // levelId => productId => row
     $customerOwn = [];   // levelId => count
+    $customerPrices = []; // levelId => productId => [[pc, box], …] (one per customer file)
+    $filed = [];         // levelId => customerId => true
     $lastChange = [];    // levelId => ['at', 'by']
     $touch = function (int $levelId, string $at, string $by) use (&$lastChange) {
         if ($at !== '' && ($lastChange[$levelId]['at'] ?? '') < $at) $lastChange[$levelId] = ['at' => $at, 'by' => $by];
@@ -39,6 +42,21 @@ function dashboard_payload(array $user): array
                 $levelPrices[$levelId][(int) $row['product_id']] = ['pc' => pricing_db_number($row['price_pc']), 'box' => pricing_db_number($row['price_box'])];
             } else {
                 $customerOwn[$levelId] = ($customerOwn[$levelId] ?? 0) + 1;
+                $filed[$levelId][(int) $row['country_id']] = true;
+                if ($row['price_pc'] !== null || $row['price_box'] !== null) {
+                    $customerPrices[$levelId][(int) $row['product_id']][] = ['pc' => pricing_db_number($row['price_pc']), 'box' => pricing_db_number($row['price_box'])];
+                }
+            }
+        }
+        // A level without a file of its own: its customers' files, averaged per product.
+        $average = fn(array $values) => $values ? round(array_sum($values) / count($values), 4) : null;
+        foreach ($customerPrices as $levelId => $byProduct) {
+            foreach ($byProduct as $productId => $sets) {
+                if (isset($levelPrices[$levelId][$productId])) continue;
+                $levelPrices[$levelId][$productId] = [
+                    'pc' => $average(array_values(array_filter(array_column($sets, 'pc'), fn($v) => $v !== null))),
+                    'box' => $average(array_values(array_filter(array_column($sets, 'box'), fn($v) => $v !== null))),
+                ];
             }
         }
         foreach ($rules as $rule) if ($rule['levelId'] !== null) $touch($rule['levelId'], $rule['updatedAt'], $rule['updatedBy']);
@@ -83,6 +101,7 @@ function dashboard_payload(array $user): array
             'customers' => $onLevel,
             'uploaded' => $uploaded[$level['id']] ?? 0,
             'customerPrices' => $customerOwn[$level['id']] ?? 0,
+            'customersWithFile' => count($filed[$level['id']] ?? []),
             'aboveLowest' => $ratios[$i] ? round((array_sum($ratios[$i]) / count($ratios[$i]) - 1) * 100, 1) : null,
             'lastChange' => $lastChange[$level['id']] ?? null,
         ];

@@ -6,10 +6,8 @@ declare(strict_types=1);
  *   2. with `confirm` = that preview's fingerprint: applies it (only while the preview is still the
  *      same, so nothing changed in between).
  * `target` says what the file is for (Requirements 17Oct2026: choose the price level, then the customer):
- *   - 'masterlist' (or empty): the standard prices: every product, its details and standard prices;
- *     every price level and customer follows them, except prices set by hand for one of them;
- *   - list-0-<levelId>: the prices of one price level, for all its customers;
- *   - list-<customerId>-<levelId>: the prices of one customer.
+ * list-<customerId>-<levelId>, one customer. Every file is one customer's price list; the price level
+ * only groups customers. The customer's list becomes exactly the file (products, details and prices).
  * Like file uploads, it is live at once (no approval).
  */
 require_once __DIR__ . '/../bootstrap.php';
@@ -23,8 +21,9 @@ if (count($_FILES) !== 1 || !isset($_FILES['workbook']) || !is_array($_FILES['wo
     json_response(['ok' => false, 'message' => 'Upload one official .xlsx workbook.'], 422);
 }
 $target = clean_text($_POST['target'] ?? '', 40);
-$pair = $target === '' || $target === STANDARD_PRICES_ID ? null : pricing_parse_list_id($target);
-if ($target !== '' && $target !== STANDARD_PRICES_ID && !$pair) json_response(['ok' => false, 'message' => 'Choose the price level and customer the file is for.'], 422);
+$pair = pricing_parse_list_id($target);
+// One customer only: a file for a whole price level (customer 0) or the standard prices is not taken.
+if (!$pair || $pair[0] === 0) json_response(['ok' => false, 'message' => 'Choose the price level, then the customer this file is for.'], 422);
 $list = $pair ? pricing_list_version($pair[0], $pair[1]) : null;
 if ($pair && !$list) json_response(['ok' => false, 'message' => 'That price level or customer is no longer in Config. Refresh and choose again.'], 409);
 

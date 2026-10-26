@@ -209,6 +209,9 @@ function ensure_database_schema(PDO $connection): void
         // details and order (customer rows leave them NULL and use the level's).
         "IF COL_LENGTH('dbo.PLA_PriceOverrides', 'row_json') IS NULL
          ALTER TABLE dbo.PLA_PriceOverrides ADD row_json nvarchar(max) NULL, sort_order int NULL",
+        // The Excel formulas a customer's uploaded file had for this product ({column: {excel, expr}}).
+        "IF COL_LENGTH('dbo.PLA_PriceOverrides', 'formulas_json') IS NULL
+         ALTER TABLE dbo.PLA_PriceOverrides ADD formulas_json nvarchar(max) NULL",
         "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PLA_PriceOverrides_list')
          CREATE INDEX IX_PLA_PriceOverrides_list ON dbo.PLA_PriceOverrides (price_level_id, country_id)",
         // What each save changed (one row per price or product), for history and the audit trail.

@@ -50,7 +50,7 @@ if ($required !== null && !user_can($user, $required)) {
     <!-- Shared styles first, then each page's (all pages live in this one shell). Order matters: see app.css. -->
     <link rel="stylesheet" href="../styles/app.css?v=250">
     <link rel="stylesheet" href="../styles/dashboard.css?v=1">
-    <link rel="stylesheet" href="../styles/files.css?v=1">
+    <link rel="stylesheet" href="../styles/files.css?v=3">
     <link rel="stylesheet" href="../styles/audit_logs.css?v=1">
     <link rel="stylesheet" href="../styles/users.css?v=1">
     <link rel="stylesheet" href="../styles/config.css?v=1">
@@ -315,8 +315,10 @@ if ($required !== null && !user_can($user, $required)) {
                     </div>
                     <div id="excelFormulaBar" class="excel-formula-bar edit-only">
                         <div class="formula-cell-indicator" id="formulaCellIndicator" title="Selected Cell">A1</div>
-                        <div class="formula-fx-label" aria-hidden="true">fx</div>
+                        <button type="button" class="formula-fx-label" id="formulaFxBtn" title="How this cell’s value is worked out" aria-label="How this cell’s value is worked out">fx</button>
                         <input type="text" id="formulaInput" class="formula-input" placeholder="Click any cell or press Enter to edit..." autocomplete="off" spellcheck="false" aria-label="Cell value editor">
+                        <!-- A formula cell: its formula, like Excel, each cell reference in its own colour (scripts/app.js › showFormulaInBar). -->
+                        <div id="formulaDisplay" class="formula-display" aria-live="polite" hidden></div>
                         <div class="formula-bar-actions">
                             <button type="button" id="formulaCancelBtn" class="formula-btn" title="Cancel (Esc)" aria-label="Cancel">✕</button>
                             <button type="button" id="formulaConfirmBtn" class="formula-btn formula-btn-confirm" title="Confirm (Enter)" aria-label="Confirm">✓</button>
@@ -1107,7 +1109,7 @@ if ($required !== null && !user_can($user, $required)) {
 <script src="../assets/vendor/jspdf.umd.min.js"></script>
 <script src="../assets/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="../scripts/theme.js?v=13"></script>
-<script src="../scripts/app.js?v=251"></script>
+<script src="../scripts/app.js?v=256"></script>
 <script src="../assets/vendor/gsap.min.js"></script>
 <script src="../scripts/motion.js?v=22"></script>
 <script src="../scripts/select-dropdown.js?v=4"></script>

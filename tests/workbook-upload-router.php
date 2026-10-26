@@ -49,7 +49,7 @@ function approvers_for(string $username): array { return ['fixture-reviewer']; }
 function is_auto_approver(string $username): bool { return false; }
 function user_display_name(string $username): string { return $username; }
 set_exception_handler(function(Throwable $error): void { json_response(['ok'=>false,'message'=>$error->getMessage()], 500); });
-$code = file_get_contents(__DIR__ . '/../api/files/save.php');
+$code = str_replace("\r\n", "\n", file_get_contents(__DIR__ . '/../api/files/save.php')); // Git on Windows may check out \r\n
 $code = preg_replace('~^<\?php\s*declare\(strict_types=1\);~', '', $code);
 $code = preg_replace('~^require_once __DIR__ .*;$~m', '', $code);
 eval($code);

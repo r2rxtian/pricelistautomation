@@ -12,7 +12,8 @@ const { inflateRawSync, deflateRawSync } = require('node:zlib');
 const root = path.resolve(__dirname, '..');
 const XLSX = require(path.join(root, 'assets/vendor/xlsx.full.min.js'));
 const template = JSON.parse(fs.readFileSync(path.join(root, 'rules/price_list_template.json'), 'utf8'));
-const source = fs.readFileSync(path.join(root, 'scripts/app.js'), 'utf8');
+// Line endings normalized: on Windows, Git may check the file out with \r\n.
+const source = fs.readFileSync(path.join(root, 'scripts/app.js'), 'utf8').replace(/\r\n/g, '\n');
 const downloader = source.slice(source.indexOf('  function downloadExcelTemplate() {'), source.indexOf('  /** Send the original workbook'));
 // The export, plus the MOQ total (Price/box × MOQ) it uses, both from the same file.
 const moqStart = source.indexOf('  function moqTotal(');
@@ -21,7 +22,8 @@ const exporter = source.slice(source.indexOf('  /** Pallet cells read'), source.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-workbook-tests-'));
 const php = process.env.PLA_TEST_PHP || 'C:/xampp/php/php.exe';
 let captured;
-const context = { state: { importTemplate: template }, window: { XLSX }, XLSX: { ...XLSX, writeFile(wb) { captured = wb; } }, toast() {} };
+// rowFormulas: an uploaded file's formulas per product (none in the template).
+const context = { state: { importTemplate: template }, window: { XLSX }, XLSX: { ...XLSX, writeFile(wb) { captured = wb; } }, toast() {}, rowFormulas: () => null };
 vm.runInNewContext(downloader + '\ndownloadExcelTemplate();', context);
 const original = Buffer.from(XLSX.write(captured, { type: 'buffer', bookType: 'xlsx', compression: true }));
 let checks = 0;
